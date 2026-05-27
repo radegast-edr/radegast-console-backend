@@ -1,0 +1,283 @@
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.database import get_db
+from app.dependencies import get_current_device, get_current_user
+from app.models.device import Device
+from app.models.device_group import DeviceGroup
+from app.models.pack import Pack
+from app.models.pack_enabled import PackEnabled
+from app.models.pack_version import PackVersion
+from app.models.team import Team
+from app.models.user import User, UserRole
+from app.schemas.pack import (
+    PackCreate,
+    PackEnabledCreate,
+    PackEnabledResponse,
+    PackResponse,
+    PackVersionResponse,
+)
+from app.services.packs import get_upload_path, save_upload
+
+router = APIRouter(prefix="/packs", tags=["packs"])
+
+
+@router.get("/", response_model=list[PackResponse])
+async def list_packs(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Pack))
+    return result.scalars().all()
+
+
+@router.post("/", response_model=PackResponse)
+async def create_pack(
+    data: PackCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if user.role not in (UserRole.maintainer, UserRole.admin):
+        raise HTTPException(status_code=403, detail="Maintainer or admin role required")
+
+    existing = await db.execute(select(Pack).where(Pack.name == data.name))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Pack with this name already exists")
+
+    pack = Pack(name=data.name, description=data.description)
+    db.add(pack)
+    await db.commit()
+    await db.refresh(pack)
+    return pack
+
+
+@router.get("/{pack_id}", response_model=PackResponse)
+async def get_pack(pack_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Pack).where(Pack.id == pack_id))
+    pack = result.scalar_one_or_none()
+    if not pack:
+        raise HTTPException(status_code=404, detail="Pack not found")
+    return pack
+
+
+@router.get("/{pack_id}/versions", response_model=list[PackVersionResponse])
+async def list_versions(pack_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(PackVersion).where(PackVersion.pack_id == pack_id).order_by(PackVersion.released.desc())
+    )
+    return result.scalars().all()
+
+
+@router.post("/{pack_id}/versions", response_model=PackVersionResponse)
+async def upload_version(
+    pack_id: int,
+    version: str,
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if user.role not in (UserRole.maintainer, UserRole.admin):
+        raise HTTPException(status_code=403, detail="Maintainer or admin role required")
+
+    result = await db.execute(select(Pack).where(Pack.id == pack_id))
+    pack = result.scalar_one_or_none()
+    if not pack:
+        raise HTTPException(status_code=404, detail="Pack not found")
+
+    # Check version doesn't already exist
+    existing = await db.execute(
+        select(PackVersion).where(
+            PackVersion.pack_id == pack_id, PackVersion.version == version
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Version already exists")
+
+    content = await file.read()
+    filename = file.filename or f"{pack.name}-{version}.zip"
+    path = get_upload_path(pack_id, version, filename)
+    await save_upload(content, path)
+
+    pv = PackVersion(pack_id=pack_id, version=version, zip_path=path)
+    db.add(pv)
+    await db.commit()
+    await db.refresh(pv)
+    return pv
+
+
+# Enable pack for a device group
+@router.post("/groups/{group_id}/enable", response_model=PackEnabledResponse)
+async def enable_pack_for_group(
+    group_id: int,
+    data: PackEnabledCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # Check user has write permission on at least one team linked to this group
+    result = await db.execute(
+        select(DeviceGroup)
+        .options(selectinload(DeviceGroup.teams).selectinload(Team.users))
+        .where(DeviceGroup.id == group_id)
+    )
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Device group not found")
+
+    has_write = any(
+        user in team.users and team.permission_pack == "write"
+        for team in group.teams
+    )
+    if not has_write:
+        raise HTTPException(status_code=403, detail="No pack write permission for this group")
+
+    # Verify pack version exists
+    result = await db.execute(
+        select(PackVersion).options(selectinload(PackVersion.pack)).where(PackVersion.id == data.pack_version_id)
+    )
+    pv = result.scalar_one_or_none()
+    if not pv:
+        raise HTTPException(status_code=404, detail="Pack version not found")
+
+    pe = PackEnabled(
+        device_group_id=group_id,
+        pack_version_id=data.pack_version_id,
+        autoupdate=data.autoupdate,
+    )
+    db.add(pe)
+    await db.commit()
+    await db.refresh(pe)
+
+    return PackEnabledResponse(
+        id=pe.id,
+        pack_version_id=pe.pack_version_id,
+        autoupdate=pe.autoupdate,
+        pack_name=pv.pack.name,
+        version=pv.version,
+    )
+
+
+@router.get("/groups/{group_id}/enabled", response_model=list[PackEnabledResponse])
+async def list_enabled_packs(
+    group_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # Check user has at least read permission
+    result = await db.execute(
+        select(DeviceGroup)
+        .options(selectinload(DeviceGroup.teams).selectinload(Team.users))
+        .where(DeviceGroup.id == group_id)
+    )
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Device group not found")
+
+    has_read = any(
+        user in team.users and team.permission_pack is not None
+        for team in group.teams
+    )
+    if not has_read:
+        raise HTTPException(status_code=403, detail="No pack permission for this group")
+
+    result = await db.execute(
+        select(PackEnabled)
+        .options(selectinload(PackEnabled.pack_version).selectinload(PackVersion.pack))
+        .where(PackEnabled.device_group_id == group_id)
+    )
+    enabled = result.scalars().all()
+
+    return [
+        PackEnabledResponse(
+            id=pe.id,
+            pack_version_id=pe.pack_version_id,
+            autoupdate=pe.autoupdate,
+            pack_name=pe.pack_version.pack.name,
+            version=pe.pack_version.version,
+        )
+        for pe in enabled
+    ]
+
+
+@router.delete("/groups/{group_id}/enabled/{enabled_id}")
+async def disable_pack(
+    group_id: int,
+    enabled_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # Check write permission
+    result = await db.execute(
+        select(DeviceGroup)
+        .options(selectinload(DeviceGroup.teams).selectinload(Team.users))
+        .where(DeviceGroup.id == group_id)
+    )
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Device group not found")
+
+    has_write = any(
+        user in team.users and team.permission_pack == "write"
+        for team in group.teams
+    )
+    if not has_write:
+        raise HTTPException(status_code=403, detail="No pack write permission")
+
+    result = await db.execute(
+        select(PackEnabled).where(PackEnabled.id == enabled_id, PackEnabled.device_group_id == group_id)
+    )
+    pe = result.scalar_one_or_none()
+    if not pe:
+        raise HTTPException(status_code=404, detail="Enabled pack not found")
+
+    await db.delete(pe)
+    await db.commit()
+    return {"message": "Pack disabled for group"}
+
+
+# Device wrapper endpoints
+@router.get("/device/available")
+async def device_available_packs(
+    device: Device = Depends(get_current_device),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Device)
+        .options(
+            selectinload(Device.groups)
+            .selectinload(DeviceGroup.packs)
+            .selectinload(PackEnabled.pack_version)
+            .selectinload(PackVersion.pack)
+        )
+        .where(Device.id == device.id)
+    )
+    device = result.scalar_one()
+
+    packs = []
+    for group in device.groups:
+        for pe in group.packs:
+            packs.append({
+                "enabled_id": pe.id,
+                "pack_name": pe.pack_version.pack.name,
+                "version": pe.pack_version.version,
+                "pack_version_id": pe.pack_version_id,
+                "autoupdate": pe.autoupdate,
+            })
+
+    return packs
+
+
+@router.get("/device/download/{version_id}")
+async def download_pack(
+    version_id: int,
+    device: Device = Depends(get_current_device),
+    db: AsyncSession = Depends(get_db),
+):
+    from fastapi.responses import FileResponse
+
+    result = await db.execute(
+        select(PackVersion).where(PackVersion.id == version_id)
+    )
+    pv = result.scalar_one_or_none()
+    if not pv:
+        raise HTTPException(status_code=404, detail="Pack version not found")
+
+    return FileResponse(pv.zip_path, media_type="application/zip")

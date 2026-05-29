@@ -50,3 +50,16 @@ async def init_db():
                 )
             except Exception:
                 pass  # column already exists
+
+    _public_key_cols = [
+        ("name", "TEXT"),
+        ("last_used_at", "DATETIME"),
+    ]
+    async with engine.begin() as conn:
+        for col_name, col_def in _public_key_cols:
+            try:
+                await conn.execute(
+                    text(f"ALTER TABLE public_keys ADD COLUMN {col_name} {col_def}")
+                )
+            except Exception:
+                pass  # column already exists

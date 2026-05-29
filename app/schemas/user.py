@@ -11,6 +11,7 @@ class UserRegister(BaseModel):
 class UserLogin(BaseModel):
     email: str
     password: str
+    public_key: str | None = None
 
 
 class UserResponse(BaseModel):
@@ -35,7 +36,9 @@ class UserDetailResponse(BaseModel):
 
 class KeySetupRequest(BaseModel):
     public_key: str
-    encrypted_private_key: str  # main private key AGE-encrypted with recovery public key
+    recovery_public_key: str
+    recovery_encrypted_private_key: str
+    name: str | None = None
 
 
 class KeySetupResponse(BaseModel):
@@ -44,7 +47,26 @@ class KeySetupResponse(BaseModel):
 
 class KeyRecoverResponse(BaseModel):
     public_key: str
-    encrypted_private_key: str  # client decrypts with their AGE recovery private key
+    encrypted_private_key: str
+
+
+class PublicKeyResponse(BaseModel):
+    id: int
+    public_key: str
+    key_type: str
+    has_private_key: bool
+    name: str | None = None
+    last_used_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class PublicKeyAddRequest(BaseModel):
+    public_key: str
+    encrypted_private_key: str | None = None
+    key_type: str = "regular"
+    name: str | None = None
+
 
 
 # Key transfer schemas

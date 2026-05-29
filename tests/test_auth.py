@@ -1,4 +1,5 @@
 import pytest
+import secrets
 from httpx import AsyncClient
 
 
@@ -101,30 +102,66 @@ class TestMe:
         assert resp.status_code == 401
 
 
+def helper_aes_encrypt(plaintext: str, key_hex: str) -> str:
+    import os
+    import json
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    key = bytes.fromhex(key_hex)
+    aesgcm = AESGCM(key)
+    iv = os.urandom(12)
+    ciphertext = aesgcm.encrypt(iv, plaintext.encode(), None)
+    return json.dumps({
+        "iv": iv.hex(),
+        "ciphertext": ciphertext.hex()
+    })
+
+def helper_aes_decrypt(encrypted_json: str, key_hex: str) -> str:
+    import json
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    data = json.loads(encrypted_json)
+    key = bytes.fromhex(key_hex)
+    aesgcm = AESGCM(key)
+    iv = bytes.fromhex(data["iv"])
+    ciphertext = bytes.fromhex(data["ciphertext"])
+    return aesgcm.decrypt(iv, ciphertext, None).decode()
+
+
 @pytest.mark.asyncio
 class TestKeySetup:
     async def test_setup_keys(self, auth_client: AsyncClient):
-        from app.services.crypto import generate_age_keypair, age_encrypt
+        from app.services.crypto import generate_age_keypair
+        import secrets
         main_pub, main_priv = generate_age_keypair()
-        rec_pub, _ = generate_age_keypair()
-        encrypted_priv = age_encrypt(main_priv, rec_pub)
+        rec_pub, rec_priv = generate_age_keypair()
+        recovery_key_hex = secrets.token_bytes(32).hex()
+        encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
 
         resp = await auth_client.post(
             "/auth/keys/setup",
-            json={"public_key": main_pub, "encrypted_private_key": encrypted_priv},
+            json={
+                "public_key": main_pub,
+                "recovery_public_key": rec_pub,
+                "recovery_encrypted_private_key": encrypted_priv,
+            },
         )
         assert resp.status_code == 200
         assert resp.json()["message"] == "Keys set up successfully"
 
     async def test_setup_keys_unauthenticated(self, client: AsyncClient):
-        from app.services.crypto import generate_age_keypair, age_encrypt
+        from app.services.crypto import generate_age_keypair
+        import secrets
         main_pub, main_priv = generate_age_keypair()
-        rec_pub, _ = generate_age_keypair()
-        encrypted_priv = age_encrypt(main_priv, rec_pub)
+        rec_pub, rec_priv = generate_age_keypair()
+        recovery_key_hex = secrets.token_bytes(32).hex()
+        encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
 
         resp = await client.post(
             "/auth/keys/setup",
-            json={"public_key": main_pub, "encrypted_private_key": encrypted_priv},
+            json={
+                "public_key": main_pub,
+                "recovery_public_key": rec_pub,
+                "recovery_encrypted_private_key": encrypted_priv,
+            },
         )
         assert resp.status_code == 401
 
@@ -133,11 +170,17 @@ class TestKeySetup:
         assert resp.status_code == 422
 
     async def test_setup_keys_duplicate_fails(self, auth_client: AsyncClient):
-        from app.services.crypto import generate_age_keypair, age_encrypt
+        from app.services.crypto import generate_age_keypair
+        import secrets
         main_pub, main_priv = generate_age_keypair()
-        rec_pub, _ = generate_age_keypair()
-        encrypted_priv = age_encrypt(main_priv, rec_pub)
-        payload = {"public_key": main_pub, "encrypted_private_key": encrypted_priv}
+        rec_pub, rec_priv = generate_age_keypair()
+        recovery_key_hex = secrets.token_bytes(32).hex()
+        encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
+        payload = {
+            "public_key": main_pub,
+            "recovery_public_key": rec_pub,
+            "recovery_encrypted_private_key": encrypted_priv,
+        }
 
         await auth_client.post("/auth/keys/setup", json=payload)
         resp = await auth_client.post("/auth/keys/setup", json=payload)
@@ -149,13 +192,19 @@ class TestKeySetup:
         assert resp.json()["has_keys"] is False
 
     async def test_me_has_keys_true(self, auth_client: AsyncClient):
-        from app.services.crypto import generate_age_keypair, age_encrypt
+        from app.services.crypto import generate_age_keypair
+        import secrets
         main_pub, main_priv = generate_age_keypair()
-        rec_pub, _ = generate_age_keypair()
-        encrypted_priv = age_encrypt(main_priv, rec_pub)
+        rec_pub, rec_priv = generate_age_keypair()
+        recovery_key_hex = secrets.token_bytes(32).hex()
+        encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
         await auth_client.post(
             "/auth/keys/setup",
-            json={"public_key": main_pub, "encrypted_private_key": encrypted_priv},
+            json={
+                "public_key": main_pub,
+                "recovery_public_key": rec_pub,
+                "recovery_encrypted_private_key": encrypted_priv,
+            },
         )
         resp = await auth_client.get("/auth/me")
         assert resp.json()["has_keys"] is True
@@ -168,34 +217,49 @@ class TestKeyRecover:
         assert resp.status_code == 404
 
     async def test_recover_keys_success(self, auth_client: AsyncClient):
-        from app.services.crypto import generate_age_keypair, age_encrypt, age_decrypt
+        from app.services.crypto import generate_age_keypair
+        import secrets
         main_pub, main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
-        encrypted_priv = age_encrypt(main_priv, rec_pub)
+        recovery_key_hex = secrets.token_bytes(32).hex()
+        encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
 
         await auth_client.post(
             "/auth/keys/setup",
-            json={"public_key": main_pub, "encrypted_private_key": encrypted_priv},
+            json={
+                "public_key": main_pub,
+                "recovery_public_key": rec_pub,
+                "recovery_encrypted_private_key": encrypted_priv,
+            },
         )
 
         resp = await auth_client.get("/auth/keys/recover")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["public_key"] == main_pub
+        assert isinstance(data, list)
+        assert len(data) == 1
+        assert data[0]["public_key"] == rec_pub
         # Client-side: decrypt with recovery private key
-        recovered = age_decrypt(data["encrypted_private_key"], rec_priv)
-        assert recovered == main_priv
+        recovered = helper_aes_decrypt(data[0]["encrypted_private_key"], recovery_key_hex)
+        assert recovered == rec_priv
 
 
 @pytest.mark.asyncio
 class TestKeyTransfer:
     async def _setup_keys(self, client):
-        from app.services.crypto import generate_age_keypair, age_encrypt
+        from app.services.crypto import generate_age_keypair
+        import secrets
         main_pub, main_priv = generate_age_keypair()
-        rec_pub, _ = generate_age_keypair()
+        rec_pub, rec_priv = generate_age_keypair()
+        recovery_key_hex = secrets.token_bytes(32).hex()
+        encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
         await client.post(
             "/auth/keys/setup",
-            json={"public_key": main_pub, "encrypted_private_key": age_encrypt(main_priv, rec_pub)},
+            json={
+                "public_key": main_pub,
+                "recovery_public_key": rec_pub,
+                "recovery_encrypted_private_key": encrypted_priv,
+            },
         )
         return main_pub, main_priv
 
@@ -288,58 +352,74 @@ class TestKeyTransfer:
 
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
 class TestKeySecondary:
     async def _setup_main_key(self, client):
-        from app.services.crypto import generate_age_keypair, age_encrypt
+        from app.services.crypto import generate_age_keypair
+        import secrets
         main_pub, main_priv = generate_age_keypair()
-        rec_pub, _ = generate_age_keypair()
+        rec_pub, rec_priv = generate_age_keypair()
+        recovery_key_hex = secrets.token_bytes(32).hex()
+        encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
         await client.post(
             "/auth/keys/setup",
-            json={"public_key": main_pub, "encrypted_private_key": age_encrypt(main_priv, rec_pub)},
+            json={
+                "public_key": main_pub,
+                "recovery_public_key": rec_pub,
+                "recovery_encrypted_private_key": encrypted_priv,
+            },
         )
         return main_pub
 
     async def test_setup_secondary_key(self, auth_client: AsyncClient):
-        from app.services.crypto import generate_age_keypair, age_encrypt
+        from app.services.crypto import generate_age_keypair
         await self._setup_main_key(auth_client)
 
         sec_pub, sec_priv = generate_age_keypair()
-        rec_pub, _ = generate_age_keypair()
+        rec_pub, rec_priv = generate_age_keypair()
+        recovery_key_hex = secrets.token_bytes(32).hex()
+        encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
         resp = await auth_client.post(
             "/auth/keys/secondary",
-            json={"public_key": sec_pub, "encrypted_private_key": age_encrypt(sec_priv, rec_pub)},
+            json={"public_key": sec_pub, "encrypted_private_key": encrypted_priv},
         )
         assert resp.status_code == 200
         assert resp.json()["message"] == "Secondary key added successfully"
 
     async def test_setup_secondary_without_main_fails(self, auth_client: AsyncClient):
-        from app.services.crypto import generate_age_keypair, age_encrypt
+        from app.services.crypto import generate_age_keypair
         sec_pub, sec_priv = generate_age_keypair()
-        rec_pub, _ = generate_age_keypair()
+        rec_pub, rec_priv = generate_age_keypair()
+        recovery_key_hex = secrets.token_bytes(32).hex()
+        encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
         resp = await auth_client.post(
             "/auth/keys/secondary",
-            json={"public_key": sec_pub, "encrypted_private_key": age_encrypt(sec_priv, rec_pub)},
+            json={"public_key": sec_pub, "encrypted_private_key": encrypted_priv},
         )
         assert resp.status_code == 400
 
     async def test_setup_secondary_duplicate_fails(self, auth_client: AsyncClient):
-        from app.services.crypto import generate_age_keypair, age_encrypt
+        from app.services.crypto import generate_age_keypair
         await self._setup_main_key(auth_client)
 
         sec_pub, sec_priv = generate_age_keypair()
-        rec_pub, _ = generate_age_keypair()
-        payload = {"public_key": sec_pub, "encrypted_private_key": age_encrypt(sec_priv, rec_pub)}
+        rec_pub, rec_priv = generate_age_keypair()
+        recovery_key_hex = secrets.token_bytes(32).hex()
+        encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
+        payload = {"public_key": sec_pub, "encrypted_private_key": encrypted_priv}
         await auth_client.post("/auth/keys/secondary", json=payload)
         resp = await auth_client.post("/auth/keys/secondary", json=payload)
         assert resp.status_code == 400
 
     async def test_secondary_key_unauthenticated(self, client: AsyncClient):
-        from app.services.crypto import generate_age_keypair, age_encrypt
+        from app.services.crypto import generate_age_keypair
         sec_pub, sec_priv = generate_age_keypair()
-        rec_pub, _ = generate_age_keypair()
+        rec_pub, rec_priv = generate_age_keypair()
+        recovery_key_hex = secrets.token_bytes(32).hex()
+        encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
         resp = await client.post(
             "/auth/keys/secondary",
-            json={"public_key": sec_pub, "encrypted_private_key": age_encrypt(sec_priv, rec_pub)},
+            json={"public_key": sec_pub, "encrypted_private_key": encrypted_priv},
         )
         assert resp.status_code == 401
 
@@ -347,41 +427,51 @@ class TestKeySecondary:
 @pytest.mark.asyncio
 class TestDeleteKeys:
     async def _setup_main_key(self, client):
-        from app.services.crypto import generate_age_keypair, age_encrypt
+        from app.services.crypto import generate_age_keypair
+        import secrets
         main_pub, main_priv = generate_age_keypair()
-        rec_pub, _ = generate_age_keypair()
+        rec_pub, rec_priv = generate_age_keypair()
+        recovery_key_hex = secrets.token_bytes(32).hex()
+        encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
         await client.post(
             "/auth/keys/setup",
-            json={"public_key": main_pub, "encrypted_private_key": age_encrypt(main_priv, rec_pub)},
+            json={
+                "public_key": main_pub,
+                "recovery_public_key": rec_pub,
+                "recovery_encrypted_private_key": encrypted_priv,
+            },
         )
 
-    async def test_delete_keys(self, auth_client: AsyncClient):
+    async def test_delete_regular_key_succeeds(self, auth_client: AsyncClient):
         await self._setup_main_key(auth_client)
-        resp = await auth_client.get("/auth/me")
-        assert resp.json()["has_keys"] is True
+        resp = await auth_client.get("/auth/keys")
+        keys = resp.json()
+        regular_key = next(k for k in keys if k["key_type"] == "regular")
 
+        # Delete the regular key (should succeed)
+        del_resp = await auth_client.delete(f"/auth/keys/{regular_key['id']}")
+        assert del_resp.status_code == 200
+
+    async def test_delete_last_recovery_key_fails(self, auth_client: AsyncClient):
+        await self._setup_main_key(auth_client)
+        resp = await auth_client.get("/auth/keys")
+        keys = resp.json()
+        recovery_key = next(k for k in keys if k["key_type"] == "recovery")
+
+        # Delete the last recovery key (should fail)
+        del_resp = await auth_client.delete(f"/auth/keys/{recovery_key['id']}")
+        assert del_resp.status_code == 400
+        assert "At least one recovery key must always exist" in del_resp.json()["detail"]
+
+    async def test_delete_all_keys_fails_when_keys_exist(self, auth_client: AsyncClient):
+        await self._setup_main_key(auth_client)
         resp = await auth_client.delete("/auth/keys")
-        assert resp.status_code == 200
-
-        resp = await auth_client.get("/auth/me")
-        assert resp.json()["has_keys"] is False
+        assert resp.status_code == 400
+        assert "At least one recovery key must always exist" in resp.json()["detail"]
 
     async def test_delete_keys_empty(self, auth_client: AsyncClient):
         # Deleting when no keys should succeed (no-op)
         resp = await auth_client.delete("/auth/keys")
-        assert resp.status_code == 200
-
-    async def test_delete_then_reregister(self, auth_client: AsyncClient):
-        from app.services.crypto import generate_age_keypair, age_encrypt
-        await self._setup_main_key(auth_client)
-        await auth_client.delete("/auth/keys")
-
-        main_pub, main_priv = generate_age_keypair()
-        rec_pub, _ = generate_age_keypair()
-        resp = await auth_client.post(
-            "/auth/keys/setup",
-            json={"public_key": main_pub, "encrypted_private_key": age_encrypt(main_priv, rec_pub)},
-        )
         assert resp.status_code == 200
 
     async def test_delete_keys_unauthenticated(self, client: AsyncClient):

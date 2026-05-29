@@ -26,6 +26,8 @@ from app.schemas.user import (
     KeyTransferInitiateResponse,
     KeyTransferStatusResponse,
     NotificationSettings,
+    PublicKeyResponse,
+    PublicKeyAddRequest,
     UserLogin,
     UserRegister,
     UserResponse,
@@ -142,6 +144,17 @@ async def login(
     if not user.verified:
         raise HTTPException(status_code=403, detail="Email not verified")
 
+    if data.public_key:
+        pk_res = await db.execute(
+            select(PublicKey).where(
+                PublicKey.user_id == user.id, PublicKey.public_key == data.public_key
+            )
+        )
+        pk_obj = pk_res.scalar_one_or_none()
+        if pk_obj:
+            pk_obj.last_used_at = datetime.utcnow()
+            # We will commit below or now. Committing now is fine.
+
     cookie = create_session_cookie("user", user.id)
     response.set_cookie(
         key=settings.session_cookie_name,
@@ -154,6 +167,7 @@ async def login(
     if user.notify_login:
         background_tasks.add_task(send_login_notification, user.email, _client_ip(request))
 
+    await db.commit()
     return {"message": "Login successful", "user_id": user.id}
 
 
@@ -177,13 +191,27 @@ async def setup_keys(
     if result.scalars().first():
         raise HTTPException(status_code=400, detail="Keys already set up")
 
+    # Regular key (no private key on backend)
     key = PublicKey(
         public_key=data.public_key,
-        private_key=data.encrypted_private_key,
+        private_key=None,
         key_type="regular",
+        name=data.name or "Primary Key",
         user_id=user.id,
     )
     db.add(key)
+
+    # Recovery key (private key encrypted on backend)
+    rec_name = (data.name + " (Recovery)") if data.name else "Recovery Key"
+    rec_key = PublicKey(
+        public_key=data.recovery_public_key,
+        private_key=data.recovery_encrypted_private_key,
+        key_type="recovery",
+        name=rec_name,
+        user_id=user.id,
+    )
+    db.add(rec_key)
+
     await db.commit()
 
     if user.notify_new_keys:
@@ -209,7 +237,6 @@ async def setup_secondary_key(
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="No primary key found; use /keys/setup first")
 
-    # Prevent duplicate secondary keys (one per user for now)
     dup = await db.execute(
         select(PublicKey).where(
             PublicKey.user_id == user.id, PublicKey.key_type == "secondary"
@@ -241,13 +268,103 @@ async def delete_all_keys(
     """Delete all keys for the current user (fresh-start before re-setup)."""
     result = await db.execute(select(PublicKey).where(PublicKey.user_id == user.id))
     keys = result.scalars().all()
+    recovery_keys = [k for k in keys if k.private_key is not None]
+    if len(recovery_keys) > 0:
+        raise HTTPException(status_code=400, detail="Cannot delete keys. At least one recovery key must always exist.")
     for key in keys:
         await db.delete(key)
     await db.commit()
     return {"message": "All keys deleted"}
 
 
-@router.get("/keys/recover", response_model=KeyRecoverResponse)
+@router.get("/keys", response_model=list[PublicKeyResponse])
+async def list_user_keys(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all public keys for the current user."""
+    result = await db.execute(
+        select(PublicKey).where(PublicKey.user_id == user.id)
+    )
+    keys = result.scalars().all()
+    return [
+        PublicKeyResponse(
+            id=k.id,
+            public_key=k.public_key,
+            key_type="recovery" if k.private_key is not None else k.key_type,
+            has_private_key=k.private_key is not None,
+            name=k.name,
+            last_used_at=k.last_used_at,
+        )
+        for k in keys
+    ]
+
+
+@router.post("/keys", response_model=KeySetupResponse)
+async def add_user_key(
+    data: PublicKeyAddRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Add a new public key for the current user."""
+    # Check duplicate
+    dup = await db.execute(
+        select(PublicKey).where(
+            PublicKey.user_id == user.id, PublicKey.public_key == data.public_key
+        )
+    )
+    if dup.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Public key already exists")
+
+    key_type = "recovery" if data.encrypted_private_key is not None else data.key_type
+
+    key = PublicKey(
+        public_key=data.public_key,
+        private_key=data.encrypted_private_key,
+        key_type=key_type,
+        name=data.name,
+        user_id=user.id,
+    )
+    db.add(key)
+    await db.commit()
+
+    if user.notify_new_keys:
+        background_tasks.add_task(send_new_keys_notification, user.email, key_type, _client_ip(request))
+
+    return KeySetupResponse(message="Key added successfully")
+
+
+@router.delete("/keys/{key_id}")
+async def delete_user_key(
+    key_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a specific public key belonging to the user."""
+    result = await db.execute(
+        select(PublicKey).where(PublicKey.user_id == user.id)
+    )
+    keys = result.scalars().all()
+    key_to_delete = next((k for k in keys if k.id == key_id), None)
+    if not key_to_delete:
+        raise HTTPException(status_code=404, detail="Key not found")
+
+    if key_to_delete.private_key is not None:
+        recovery_keys = [k for k in keys if k.private_key is not None]
+        if len(recovery_keys) <= 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete the last recovery key. At least one recovery key must always exist.",
+            )
+
+    await db.delete(key_to_delete)
+    await db.commit()
+    return {"message": "Key deleted successfully"}
+
+
+@router.get("/keys/recover", response_model=list[KeyRecoverResponse])
 async def recover_keys(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -256,20 +373,23 @@ async def recover_keys(
 ):
     result = await db.execute(
         select(PublicKey).where(
-            PublicKey.user_id == user.id, PublicKey.key_type == "regular"
+            PublicKey.user_id == user.id, PublicKey.private_key.isnot(None)
         )
     )
-    key = result.scalar_one_or_none()
-    if not key or not key.private_key:
-        raise HTTPException(status_code=404, detail="No keys found")
+    keys = result.scalars().all()
+    if not keys:
+        raise HTTPException(status_code=404, detail="No recovery keys found")
 
     if user.notify_recovery_used:
         background_tasks.add_task(send_recovery_used_notification, user.email, _client_ip(request))
 
-    return KeyRecoverResponse(
-        public_key=key.public_key,
-        encrypted_private_key=key.private_key,
-    )
+    return [
+        KeyRecoverResponse(
+            public_key=k.public_key,
+            encrypted_private_key=k.private_key,
+        )
+        for k in keys
+    ]
 
 
 @router.get("/me", response_model=UserResponse)

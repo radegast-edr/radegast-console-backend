@@ -40,7 +40,11 @@ async def _setup_keys(client: AsyncClient):
     """Submit a minimal key-setup payload (no real AGE crypto needed for notification tests)."""
     return await client.post(
         "/auth/keys/setup",
-        json={"public_key": "age1pub", "encrypted_private_key": "enc-priv"},
+        json={
+            "public_key": "age1pub",
+            "recovery_public_key": "age1rec",
+            "recovery_encrypted_private_key": "enc-priv"
+        },
     )
 
 

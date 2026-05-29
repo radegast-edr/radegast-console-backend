@@ -23,6 +23,7 @@ async def init_db():
         DeviceGroup,
         KeyTransfer,
         Log,
+        LogSeen,
         Pack,
         PackEnabled,
         PackVersion,

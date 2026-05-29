@@ -7,7 +7,7 @@ from app.models.device import Device
 from app.models.pack import Pack
 from app.models.pack_version import PackVersion
 from app.models.pack_enabled import PackEnabled
-from app.models.log import Log
+from app.models.log import Log, LogSeen
 from app.models.associations import team_users, team_device_groups, device_group_devices
 
 __all__ = [
@@ -21,6 +21,7 @@ __all__ = [
     "PackVersion",
     "PackEnabled",
     "Log",
+    "LogSeen",
     "team_users",
     "team_device_groups",
     "device_group_devices",

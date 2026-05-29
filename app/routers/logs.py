@@ -1,5 +1,5 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -8,7 +8,7 @@ from app.dependencies import get_current_device, get_current_user
 from app.models.associations import device_group_devices, team_device_groups, team_users
 from app.models.device import Device
 from app.models.device_group import DeviceGroup
-from app.models.log import Log
+from app.models.log import Log, LogSeen
 from app.models.public_key import PublicKey
 from app.models.team import Team
 from app.models.user import User
@@ -58,9 +58,112 @@ async def submit_log(
     return log
 
 
+@router.get("/unread-count")
+async def get_unread_logs_count(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # Get all teams user is in with log read permission
+    result = await db.execute(
+        select(Team)
+        .options(selectinload(Team.groups).selectinload(DeviceGroup.devices))
+        .where(Team.users.any(User.id == user.id), Team.permission_logs == "read")
+    )
+    teams = result.scalars().all()
+
+    visible_device_ids = set()
+    for team in teams:
+        for group in team.groups:
+            for device in group.devices:
+                visible_device_ids.add(device.id)
+
+    if not visible_device_ids:
+        return {"unread_count": 0}
+
+    seen_subquery = select(LogSeen.log_id).where(LogSeen.user_id == user.id)
+    count_query = select(func.count(Log.id)).where(
+        Log.device_id.in_(visible_device_ids),
+        Log.id.not_in(seen_subquery)
+    )
+    unread_res = await db.execute(count_query)
+    count = unread_res.scalar_one()
+    return {"unread_count": count}
+
+
+@router.post("/seen/all")
+async def mark_all_logs_seen(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # Get all teams user is in with log read permission
+    result = await db.execute(
+        select(Team)
+        .options(selectinload(Team.groups).selectinload(DeviceGroup.devices))
+        .where(Team.users.any(User.id == user.id), Team.permission_logs == "read")
+    )
+    teams = result.scalars().all()
+
+    visible_device_ids = set()
+    for team in teams:
+        for group in team.groups:
+            for device in group.devices:
+                visible_device_ids.add(device.id)
+
+    if not visible_device_ids:
+        return {"message": "No logs to mark as seen"}
+
+    # Fetch all log IDs visible to this user
+    logs_res = await db.execute(
+        select(Log.id).where(Log.device_id.in_(visible_device_ids))
+    )
+    visible_log_ids = logs_res.scalars().all()
+
+    if visible_log_ids:
+        # Find which ones are already marked seen
+        existing_res = await db.execute(
+            select(LogSeen.log_id).where(
+                LogSeen.user_id == user.id, LogSeen.log_id.in_(visible_log_ids)
+            )
+        )
+        existing_seen_ids = set(existing_res.scalars().all())
+
+        to_add_ids = set(visible_log_ids) - existing_seen_ids
+        for log_id in to_add_ids:
+            db.add(LogSeen(user_id=user.id, log_id=log_id))
+
+        await db.commit()
+
+    return {"message": "All logs marked as seen"}
+
+
+@router.post("/{log_id}/seen")
+async def mark_log_seen(
+    log_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # Check if log exists
+    log_result = await db.execute(select(Log).where(Log.id == log_id))
+    log = log_result.scalar_one_or_none()
+    if not log:
+        raise HTTPException(status_code=404, detail="Log not found")
+
+    seen_result = await db.execute(
+        select(LogSeen).where(LogSeen.user_id == user.id, LogSeen.log_id == log_id)
+    )
+    if not seen_result.scalar_one_or_none():
+        log_seen = LogSeen(user_id=user.id, log_id=log_id)
+        db.add(log_seen)
+        await db.commit()
+
+    return {"message": "Log marked as seen"}
+
+
 @router.get("/", response_model=list[LogResponse])
 async def list_logs(
     device_id: int | None = None,
+    page: int = 1,
+    limit: int = 100,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -82,14 +185,35 @@ async def list_logs(
     if not visible_device_ids:
         return []
 
-    query = select(Log).where(Log.device_id.in_(visible_device_ids)).order_by(Log.time.desc()).limit(100)
+    offset = (page - 1) * limit
+    query = select(Log).where(Log.device_id.in_(visible_device_ids)).order_by(Log.time.desc()).offset(offset).limit(limit)
     if device_id:
         if device_id not in visible_device_ids:
             raise HTTPException(status_code=403, detail="No log permission for this device")
-        query = select(Log).where(Log.device_id == device_id).order_by(Log.time.desc()).limit(100)
+        query = select(Log).where(Log.device_id == device_id).order_by(Log.time.desc()).offset(offset).limit(limit)
 
     result = await db.execute(query)
-    return result.scalars().all()
+    logs = result.scalars().all()
+
+    seen_log_ids = set()
+    if logs:
+        log_ids = [l.id for l in logs]
+        seen_res = await db.execute(
+            select(LogSeen.log_id).where(LogSeen.user_id == user.id, LogSeen.log_id.in_(log_ids))
+        )
+        seen_log_ids = set(seen_res.scalars().all())
+
+    return [
+        LogResponse(
+            id=log.id,
+            device_id=log.device_id,
+            time=log.time,
+            content=log.content,
+            signature=log.signature,
+            seen=log.id in seen_log_ids
+        )
+        for log in logs
+    ]
 
 
 @router.get("/encryption-keys")

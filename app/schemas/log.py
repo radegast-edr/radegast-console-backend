@@ -15,5 +15,6 @@ class LogResponse(BaseModel):
     time: datetime
     content: str
     signature: str | None
+    seen: bool = False
 
     model_config = {"from_attributes": True}

@@ -18,3 +18,18 @@ class Log(Base):
     signature: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     device = relationship("Device", back_populates="logs")
+
+
+class LogSeen(Base):
+    __tablename__ = "logs_seen"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    log_id: Mapped[int] = mapped_column(
+        ForeignKey("logs.id", ondelete="CASCADE"), primary_key=True
+    )
+    seen_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship("User")
+    log = relationship("Log")

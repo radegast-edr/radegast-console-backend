@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.models.associations import team_device_groups, team_users
 from app.models.device_group import DeviceGroup
 from app.models.team import Team
 from app.models.user import User
@@ -49,7 +50,7 @@ async def create_team(
     )
     db.add(team)
     await db.flush()
-    team.users.append(user)
+    await db.execute(insert(team_users).values(team_id=team.id, user_id=user.id))
     await db.commit()
     await db.refresh(team)
     return team
@@ -189,13 +190,19 @@ async def link_group_to_team(
     if team.permission_admin is None:
         raise HTTPException(status_code=403, detail="No admin permission on this team")
 
-    result = await db.execute(select(DeviceGroup).where(DeviceGroup.id == group_id))
+    result = await db.execute(
+        select(DeviceGroup)
+        .options(selectinload(DeviceGroup.teams))
+        .where(DeviceGroup.id == group_id)
+    )
     group = result.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="Device group not found")
 
     if group not in team.groups:
-        team.groups.append(group)
+        await db.execute(
+            insert(team_device_groups).values(team_id=team.id, device_group_id=group.id)
+        )
         await db.commit()
 
     return {"message": "Group linked to team"}

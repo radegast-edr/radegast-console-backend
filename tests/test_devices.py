@@ -17,6 +17,14 @@ class TestDeviceCreation:
         resp = await auth_client.get("/devices/")
         assert resp.status_code == 200
 
+    async def test_create_device_unauthenticated(self, client: AsyncClient):
+        resp = await client.post("/devices/", json={"name": "Ghost"})
+        assert resp.status_code == 401
+
+    async def test_list_devices_unauthenticated(self, client: AsyncClient):
+        resp = await client.get("/devices/")
+        assert resp.status_code == 401
+
 
 @pytest.mark.asyncio
 class TestDeviceLogin:
@@ -50,6 +58,13 @@ class TestDeviceSigningKey:
         )
         assert resp.status_code == 200
 
+    async def test_set_signing_key_requires_device_session(self, auth_client: AsyncClient):
+        resp = await auth_client.post(
+            "/devices/signing-key",
+            json={"signature_public_key": "test-key"},
+        )
+        assert resp.status_code == 403
+
 
 @pytest.mark.asyncio
 class TestDeviceGroupAssignment:
@@ -68,6 +83,20 @@ class TestDeviceGroupAssignment:
         resp = await auth_client.post(f"/devices/{device_id}/groups/{group_id}")
         assert resp.status_code == 200
 
+    async def test_add_device_to_nonexistent_group(self, auth_client: AsyncClient):
+        resp = await auth_client.post("/devices/", json={"name": "Agent-04"})
+        device_id = resp.json()["id"]
+        resp = await auth_client.post(f"/devices/{device_id}/groups/99999")
+        assert resp.status_code == 404
+
+    async def test_add_nonexistent_device_to_group(self, auth_client: AsyncClient):
+        resp = await auth_client.get("/teams/")
+        team_id = resp.json()[0]["id"]
+        resp = await auth_client.get(f"/teams/{team_id}/groups")
+        group_id = resp.json()[0]["id"]
+        resp = await auth_client.post(f"/devices/99999/groups/{group_id}")
+        assert resp.status_code == 404
+
 
 @pytest.mark.asyncio
 class TestDeviceDeletion:
@@ -76,3 +105,7 @@ class TestDeviceDeletion:
         device_id = resp.json()["id"]
         resp = await auth_client.delete(f"/devices/{device_id}")
         assert resp.status_code == 200
+
+    async def test_delete_nonexistent_device(self, auth_client: AsyncClient):
+        resp = await auth_client.delete("/devices/99999")
+        assert resp.status_code == 404

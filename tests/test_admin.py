@@ -41,6 +41,11 @@ class TestAdminUsers:
         resp = await admin_client.delete(f"/admin/users/{admin_id}")
         assert resp.status_code == 400
 
+    @pytest.mark.asyncio
+    async def test_delete_nonexistent_user(self, admin_client: AsyncClient):
+        resp = await admin_client.delete("/admin/users/99999")
+        assert resp.status_code == 404
+
 
 class TestAdminDevices:
     @pytest.mark.asyncio
@@ -61,6 +66,11 @@ class TestAdminDevices:
     async def test_list_devices_as_regular_user(self, auth_client: AsyncClient):
         resp = await auth_client.get("/admin/devices")
         assert resp.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_delete_nonexistent_device(self, admin_client: AsyncClient):
+        resp = await admin_client.delete("/admin/devices/99999")
+        assert resp.status_code == 404
 
 
 class TestAdminPacks:
@@ -86,3 +96,8 @@ class TestAdminPacks:
     async def test_delete_pack_as_regular_user(self, auth_client: AsyncClient):
         resp = await auth_client.delete("/admin/packs/1")
         assert resp.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_delete_nonexistent_pack(self, admin_client: AsyncClient):
+        resp = await admin_client.delete("/admin/packs/99999")
+        assert resp.status_code == 404

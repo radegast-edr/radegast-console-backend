@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone as tz
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import insert, select
@@ -13,7 +13,7 @@ from app.models.team import Team
 from app.models.user import User
 from app.models.public_key import PublicKey
 from app.models.device import Device
-from app.models.associations import team_device_groups
+from app.models.associations import team_device_groups, team_users
 from app.schemas.user import (
     KeyRecoverRequest,
     KeyRecoverResponse,
@@ -45,8 +45,15 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", response_model=UserResponse)
 async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
-    existing = await db.execute(select(User).where(User.email == data.email))
-    if existing.scalar_one_or_none():
+    existing: User | None = (await db.execute(select(User).where(User.email == data.email))).scalar_one_or_none()
+    if existing:
+        if not existing.verified:
+            if datetime.now(tz=tz.utc) - existing.registered_on > timedelta(hours=24):
+                await send_verification_email(data.email)
+                raise HTTPException(status_code=400, detail="Email not verified. A new verification email has been sent.")
+            else:
+                raise HTTPException(status_code=400, detail="Email not verified. Please check your inbox.")
+
         raise HTTPException(status_code=400, detail="Email already registered")
 
     user = User(

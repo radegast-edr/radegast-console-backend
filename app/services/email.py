@@ -36,7 +36,7 @@ async def send_email(to: str, subject: str, html_body: str):
     if not settings.smtp_host or settings.smtp_host == "localhost":
         # In development, just log the email
         print(f"[EMAIL] To: {to}, Subject: {subject}")
-        print(f"[EMAIL] Body: {html_body[:200]}...")
+        print(f"[EMAIL] Body: {html_body}")
         return
 
     await aiosmtplib.send(

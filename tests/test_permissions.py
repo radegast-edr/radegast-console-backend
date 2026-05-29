@@ -31,7 +31,11 @@ class TestRolePermissions:
 class TestTeamPermissions:
     @pytest.mark.asyncio
     async def test_non_member_cannot_access_team(self, client: AsyncClient, auth_client: AsyncClient):
-        # Register a second user
+        # Get the first user's team ID while still authenticated as first user
+        teams_resp = await auth_client.get("/teams/")
+        team_id = teams_resp.json()[0]["id"]
+
+        # Register and log in as a second user (overwrites session on shared client)
         await client.post("/auth/register", json={
             "email": "other@example.com",
             "password": "password123",
@@ -43,10 +47,6 @@ class TestTeamPermissions:
             "email": "other@example.com",
             "password": "password123",
         })
-
-        # Get team from first user
-        teams_resp = await auth_client.get("/teams/")
-        team_id = teams_resp.json()[0]["id"]
 
         # Second user tries to access first user's team
         resp = await client.get(f"/teams/{team_id}")

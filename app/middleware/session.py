@@ -1,4 +1,4 @@
-import json
+import time
 from datetime import datetime
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -21,7 +21,7 @@ def create_session_cookie(scope: str, id: int) -> str:
     data = {
         "scope": scope,
         "id": id,
-        "issued_at": datetime.utcnow().timestamp(),
+        "issued_at": time.time(),  # UTC Unix timestamp, not affected by local timezone
     }
     return _serializer.dumps(data, salt="session")
 

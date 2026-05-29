@@ -16,6 +16,7 @@ from app.models.public_key import PublicKey
 from app.models.device import Device
 from app.models.associations import team_device_groups, team_users
 from app.schemas.user import (
+    ChangePasswordRequest,
     KeyRecoverResponse,
     KeySecondarySetupRequest,
     KeySetupRequest,
@@ -24,6 +25,7 @@ from app.schemas.user import (
     KeyTransferInitiateRequest,
     KeyTransferInitiateResponse,
     KeyTransferStatusResponse,
+    NotificationSettings,
     UserLogin,
     UserRegister,
     UserResponse,
@@ -245,6 +247,42 @@ async def me(user: User = Depends(get_current_user), db: AsyncSession = Depends(
         verified=user.verified,
         has_keys=key_count > 0,
     )
+
+
+@router.post("/change-password")
+async def change_password(
+    data: ChangePasswordRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not verify_password(data.old_password, user.password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if len(data.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+    user.password = hash_password(data.new_password)
+    user.password_change = datetime.now(tz=tz.utc)
+    await db.commit()
+    return {"message": "Password changed successfully"}
+
+
+@router.get("/notifications", response_model=NotificationSettings)
+async def get_notifications(user: User = Depends(get_current_user)):
+    return NotificationSettings.model_validate(user)
+
+
+@router.put("/notifications", response_model=NotificationSettings)
+async def update_notifications(
+    data: NotificationSettings,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user.notify_login = data.notify_login
+    user.notify_new_keys = data.notify_new_keys
+    user.notify_recovery_used = data.notify_recovery_used
+    user.notify_keys_transferred = data.notify_keys_transferred
+    user.notify_device_log = data.notify_device_log
+    await db.commit()
+    return NotificationSettings.model_validate(user)
 
 
 @router.post("/keys/transfer/initiate", response_model=KeyTransferInitiateResponse)

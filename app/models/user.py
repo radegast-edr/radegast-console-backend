@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime, timezone as tz
 
-from sqlalchemy import DateTime, Enum, Integer, String
+from sqlalchemy import Boolean, DateTime, Enum, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -30,6 +30,13 @@ class User(Base):
         DateTime, default=datetime.now(tz=tz.utc), nullable=False
     )
     verified: Mapped[bool] = mapped_column(default=False, nullable=False)
+
+    # Email notification preferences
+    notify_login: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    notify_new_keys: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    notify_recovery_used: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    notify_keys_transferred: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    notify_device_log: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     public_keys = relationship("PublicKey", back_populates="user", cascade="all, delete-orphan")
     teams = relationship("Team", secondary=team_users, back_populates="users")

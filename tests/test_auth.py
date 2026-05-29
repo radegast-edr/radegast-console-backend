@@ -447,3 +447,97 @@ class TestSessionInvalidation:
         # Session should now be invalid
         resp = await client.get("/auth/me")
         assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+class TestChangePassword:
+    async def _setup(self, client: AsyncClient):
+        from app.services.auth import create_signed_token
+        email = "pwchange@example.com"
+        password = "OldPass123!"
+        await client.post("/auth/register", json={"email": email, "password": password})
+        token = create_signed_token({"email": email}, salt="email-verify")
+        await client.get(f"/auth/verify?token={token}")
+        await client.post("/auth/login", json={"email": email, "password": password})
+        return email, password
+
+    async def test_change_password_success(self, client: AsyncClient):
+        _, old_pw = await self._setup(client)
+        resp = await client.post(
+            "/auth/change-password",
+            json={"old_password": old_pw, "new_password": "NewPass456!"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["message"] == "Password changed successfully"
+
+    async def test_change_password_wrong_old(self, client: AsyncClient):
+        await self._setup(client)
+        resp = await client.post(
+            "/auth/change-password",
+            json={"old_password": "WrongOld!", "new_password": "NewPass456!"},
+        )
+        assert resp.status_code == 400
+
+    async def test_change_password_too_short(self, client: AsyncClient):
+        _, old_pw = await self._setup(client)
+        resp = await client.post(
+            "/auth/change-password",
+            json={"old_password": old_pw, "new_password": "short"},
+        )
+        assert resp.status_code == 400
+
+    async def test_change_password_requires_auth(self, client: AsyncClient):
+        # log out first by using a fresh client
+        resp = await client.post(
+            "/auth/change-password",
+            json={"old_password": "x", "new_password": "NewPass456!"},
+            cookies={},  # no session
+        )
+        # Should fail (401 or 403)
+        assert resp.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
+class TestNotificationSettings:
+    async def _setup(self, client: AsyncClient):
+        from app.services.auth import create_signed_token
+        email = "notif@example.com"
+        password = "Password123!"
+        await client.post("/auth/register", json={"email": email, "password": password})
+        token = create_signed_token({"email": email}, salt="email-verify")
+        await client.get(f"/auth/verify?token={token}")
+        await client.post("/auth/login", json={"email": email, "password": password})
+
+    async def test_get_notifications(self, client: AsyncClient):
+        await self._setup(client)
+        resp = await client.get("/auth/notifications")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "notify_login" in data
+        assert "notify_new_keys" in data
+        assert data["notify_login"] is True
+        assert data["notify_device_log"] is False
+
+    async def test_update_notifications(self, client: AsyncClient):
+        await self._setup(client)
+        payload = {
+            "notify_login": False,
+            "notify_new_keys": True,
+            "notify_recovery_used": False,
+            "notify_keys_transferred": True,
+            "notify_device_log": True,
+        }
+        resp = await client.put("/auth/notifications", json=payload)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["notify_login"] is False
+        assert data["notify_device_log"] is True
+
+        # Verify persisted
+        resp2 = await client.get("/auth/notifications")
+        assert resp2.json()["notify_login"] is False
+        assert resp2.json()["notify_device_log"] is True
+
+    async def test_notifications_requires_auth(self, client: AsyncClient):
+        resp = await client.get("/auth/notifications", cookies={})
+        assert resp.status_code in (401, 403)

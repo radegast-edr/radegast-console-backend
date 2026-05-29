@@ -71,3 +71,18 @@ class KeySecondarySetupRequest(BaseModel):
     """Add a secondary (recovery) keypair alongside the existing main keypair."""
     public_key: str
     encrypted_private_key: str  # private key AGE-encrypted with the matching recovery key
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+
+class NotificationSettings(BaseModel):
+    notify_login: bool
+    notify_new_keys: bool
+    notify_recovery_used: bool
+    notify_keys_transferred: bool
+    notify_device_log: bool
+
+    model_config = {"from_attributes": True}

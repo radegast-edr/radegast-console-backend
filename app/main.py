@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import init_db
-from app.routers import auth, teams, devices, packs, logs, admin
+from app.routers import auth, teams, devices, packs, logs, admin, groups
 
 
 @asynccontextmanager
@@ -39,6 +39,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(teams.router)
 app.include_router(devices.router)
+app.include_router(groups.router)
 app.include_router(packs.router)
 app.include_router(logs.router)
 app.include_router(admin.router)

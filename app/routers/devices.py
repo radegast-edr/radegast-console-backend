@@ -13,6 +13,8 @@ from app.models.user import User
 from app.schemas.device import (
     DeviceCreate,
     DeviceCreateResponse,
+    DeviceDetailResponse,
+    DeviceRename,
     DeviceResponse,
     DeviceSetSigningKey,
 )
@@ -87,6 +89,72 @@ async def list_devices(
     ]
 
 
+@router.get("/{device_id}", response_model=DeviceDetailResponse)
+async def get_device(
+    device_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Device)
+        .options(selectinload(Device.groups).selectinload(DeviceGroup.teams).selectinload(Team.users))
+        .where(Device.id == device_id)
+    )
+    device = result.scalar_one_or_none()
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    # Verify user can see this device (member of at least one team owning any of its groups)
+    visible = any(
+        user in team.users
+        for group in device.groups
+        for team in group.teams
+    )
+    if not visible:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    return DeviceDetailResponse(
+        id=device.id,
+        name=device.name,
+        signature_public_key=device.signature_public_key,
+        groups=[{"id": g.id, "name": g.name} for g in device.groups],
+    )
+
+
+@router.delete("/{device_id}/groups/{group_id}")
+async def remove_device_from_group(
+    device_id: int,
+    group_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(DeviceGroup)
+        .options(selectinload(DeviceGroup.teams).selectinload(Team.users), selectinload(DeviceGroup.devices))
+        .where(DeviceGroup.id == group_id)
+    )
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    has_access = any(user in team.users and team.permission_admin is not None for team in group.teams)
+    if not has_access:
+        raise HTTPException(status_code=403, detail="No admin permission on any team for this group")
+
+    result = await db.execute(
+        select(Device).options(selectinload(Device.groups)).where(Device.id == device_id)
+    )
+    device = result.scalar_one_or_none()
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    if device in group.devices:
+        group.devices.remove(device)
+        await db.commit()
+
+    return {"message": "Device removed from group"}
+
+
 @router.post("/{device_id}/groups/{group_id}")
 async def add_device_to_group(
     device_id: int,
@@ -121,6 +189,35 @@ async def add_device_to_group(
         await db.commit()
 
     return {"message": "Device added to group"}
+
+
+@router.patch("/{device_id}", response_model=DeviceResponse)
+async def rename_device(
+    device_id: int,
+    data: DeviceRename,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Device)
+        .options(selectinload(Device.groups).selectinload(DeviceGroup.teams).selectinload(Team.users))
+        .where(Device.id == device_id)
+    )
+    device = result.scalar_one_or_none()
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    has_access = any(
+        user in team.users and team.permission_admin is not None
+        for group in device.groups
+        for team in group.teams
+    )
+    if not has_access:
+        raise HTTPException(status_code=403, detail="No admin permission")
+
+    device.name = data.name
+    await db.commit()
+    return DeviceResponse(id=device.id, name=device.name, signature_public_key=device.signature_public_key)
 
 
 @router.post("/signing-key")

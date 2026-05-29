@@ -208,6 +208,29 @@ async def link_group_to_team(
     return {"message": "Group linked to team"}
 
 
+@router.get("/{team_id}/devices")
+async def list_team_devices(
+    team_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.device import Device
+    from app.schemas.device import DeviceResponse
+
+    team = await _get_user_team(team_id, user, db)
+    result = await db.execute(
+        select(DeviceGroup)
+        .options(selectinload(DeviceGroup.devices))
+        .where(DeviceGroup.id.in_([g.id for g in team.groups]))
+    )
+    groups = result.scalars().all()
+    seen: dict[int, Device] = {}
+    for g in groups:
+        for d in g.devices:
+            seen[d.id] = d
+    return [DeviceResponse(id=d.id, name=d.name, signature_public_key=d.signature_public_key) for d in seen.values()]
+
+
 async def _get_user_team(team_id: int, user: User, db: AsyncSession) -> Team:
     result = await db.execute(
         select(Team)

@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from app.schemas.team import DeviceGroupResponse
 
 
 class DeviceCreate(BaseModel):
@@ -14,6 +15,15 @@ class DeviceResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class DeviceDetailResponse(BaseModel):
+    id: int
+    name: str
+    signature_public_key: str | None
+    groups: list[DeviceGroupResponse]
+
+    model_config = {"from_attributes": True}
+
+
 class DeviceCreateResponse(BaseModel):
     id: int
     name: str
@@ -22,6 +32,10 @@ class DeviceCreateResponse(BaseModel):
 
 class DeviceLogin(BaseModel):
     token: str
+
+
+class DeviceRename(BaseModel):
+    name: str
 
 
 class DeviceSetSigningKey(BaseModel):

@@ -20,6 +20,7 @@ async def init_db():
     from app.models import (  # noqa: F401
         Device,
         DeviceGroup,
+        KeyTransfer,
         Log,
         Pack,
         PackEnabled,

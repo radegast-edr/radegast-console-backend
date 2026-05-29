@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.dependencies import get_current_device, get_current_user
+from app.models.associations import device_group_devices
 from app.models.device import Device
 from app.models.device_group import DeviceGroup
 from app.models.team import Team
@@ -26,12 +27,32 @@ async def create_device(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    result = await db.execute(
+        select(DeviceGroup)
+        .options(selectinload(DeviceGroup.teams).selectinload(Team.users))
+        .where(DeviceGroup.id == data.group_id)
+    )
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    has_access = any(
+        user in team.users and team.permission_admin is not None
+        for team in group.teams
+    )
+    if not has_access:
+        raise HTTPException(status_code=403, detail="No admin permission on any team for this group")
+
     raw_token = generate_token()
     device = Device(
         name=data.name,
         token=hash_token(raw_token),
     )
     db.add(device)
+    await db.flush()
+    await db.execute(
+        insert(device_group_devices).values(device_group_id=group.id, device_id=device.id)
+    )
     await db.commit()
     await db.refresh(device)
 

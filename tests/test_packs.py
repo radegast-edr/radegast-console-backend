@@ -243,17 +243,16 @@ class TestDevicePacks:
         )
         version_id = resp.json()["id"]
 
-        # maintainer creates device and enables pack in their own group
-        resp = await maintainer_client.post("/devices/", json={"name": "DevPackAgent"})
-        device_id = resp.json()["id"]
-        device_token = resp.json()["token"]
-
+        # Get maintainer's default group
         resp = await maintainer_client.get("/teams/")
         team_id = resp.json()[0]["id"]
         resp = await maintainer_client.get(f"/teams/{team_id}/groups")
         group_id = resp.json()[0]["id"]
 
-        await maintainer_client.post(f"/devices/{device_id}/groups/{group_id}")
+        # Create device (automatically added to group on creation)
+        resp = await maintainer_client.post("/devices/", json={"name": "DevPackAgent", "group_id": group_id})
+        device_token = resp.json()["token"]
+
         await maintainer_client.post(
             f"/packs/groups/{group_id}/enable",
             json={"pack_version_id": version_id},
@@ -275,7 +274,12 @@ class TestDevicePacks:
     async def test_device_download_pack_not_found(
         self, auth_client: AsyncClient, client: AsyncClient
     ):
-        resp = await auth_client.post("/devices/", json={"name": "DLAgent"})
+        resp = await auth_client.get("/teams/")
+        team_id = resp.json()[0]["id"]
+        resp = await auth_client.get(f"/teams/{team_id}/groups")
+        group_id = resp.json()[0]["id"]
+
+        resp = await auth_client.post("/devices/", json={"name": "DLAgent", "group_id": group_id})
         token = resp.json()["token"]
         await client.post("/auth/device/login", json={"token": token})
 

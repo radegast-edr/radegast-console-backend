@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 
 class UserRegister(BaseModel):
@@ -18,6 +18,7 @@ class UserResponse(BaseModel):
     email: str
     role: str
     verified: bool
+    has_keys: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -32,15 +33,41 @@ class UserDetailResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class KeySetupResponse(BaseModel):
+class KeySetupRequest(BaseModel):
     public_key: str
-    recovery_key: str
+    encrypted_private_key: str  # main private key AGE-encrypted with recovery public key
 
 
-class KeyRecoverRequest(BaseModel):
-    recovery_key: str
+class KeySetupResponse(BaseModel):
+    message: str
 
 
 class KeyRecoverResponse(BaseModel):
-    private_key: str
     public_key: str
+    encrypted_private_key: str  # client decrypts with their AGE recovery private key
+
+
+# Key transfer schemas
+class KeyTransferInitiateRequest(BaseModel):
+    receiver_age_public_key: str  # receiver's ephemeral AGE public key
+
+
+class KeyTransferInitiateResponse(BaseModel):
+    transfer_id: str
+
+
+class KeyTransferStatusResponse(BaseModel):
+    transfer_id: str
+    status: str
+    receiver_age_public_key: str
+    encrypted_private_key: str | None = None
+
+
+class KeyTransferCompleteRequest(BaseModel):
+    encrypted_private_key: str  # main private key AGE-encrypted for receiver's ephemeral key
+
+
+class KeySecondarySetupRequest(BaseModel):
+    """Add a secondary (recovery) keypair alongside the existing main keypair."""
+    public_key: str
+    encrypted_private_key: str  # private key AGE-encrypted with the matching recovery key

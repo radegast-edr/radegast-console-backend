@@ -129,9 +129,9 @@ async def remove_member(
     if team.permission_admin is None:
         raise HTTPException(status_code=403, detail="No admin permission on this team")
 
-    # Ensure at least one user remains
+    # For teams with admin=write, ensure at least one admin always remains
     if len(team.users) <= 1:
-        raise HTTPException(status_code=400, detail="Cannot remove last member")
+        raise HTTPException(status_code=400, detail="Cannot remove last admin from team")
 
     target = next((u for u in team.users if u.id == user_id), None)
     if not target:

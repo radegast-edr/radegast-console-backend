@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 class DeviceCreate(BaseModel):
     name: str
+    group_id: int
 
 
 class DeviceResponse(BaseModel):

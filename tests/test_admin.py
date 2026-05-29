@@ -55,8 +55,13 @@ class TestAdminDevices:
 
     @pytest.mark.asyncio
     async def test_delete_device_as_admin(self, admin_client: AsyncClient):
-        # Create device
-        create_resp = await admin_client.post("/devices/", json={"name": "Admin Delete Device"})
+        # Get admin's default group
+        resp = await admin_client.get("/teams/")
+        team_id = resp.json()[0]["id"]
+        resp = await admin_client.get(f"/teams/{team_id}/groups")
+        group_id = resp.json()[0]["id"]
+
+        create_resp = await admin_client.post("/devices/", json={"name": "Admin Delete Device", "group_id": group_id})
         device_id = create_resp.json()["id"]
 
         resp = await admin_client.delete(f"/admin/devices/{device_id}")

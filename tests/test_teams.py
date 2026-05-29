@@ -110,6 +110,17 @@ class TestTeamMembers:
         resp = await auth_client.delete(f"/teams/{team_id}/members/{user_id}")
         assert resp.status_code == 400
 
+    async def test_cannot_remove_last_admin(self, auth_client: AsyncClient):
+        # Default team has permission_admin="write"; removing the only member must be blocked
+        resp = await auth_client.get("/teams/")
+        admin_team = next(t for t in resp.json() if t["permission_admin"] == "write")
+        team_id = admin_team["id"]
+        members = (await auth_client.get(f"/teams/{team_id}/members")).json()
+        user_id = members[0]["id"]
+        resp = await auth_client.delete(f"/teams/{team_id}/members/{user_id}")
+        assert resp.status_code == 400
+        assert "admin" in resp.json()["detail"].lower()
+
     async def test_remove_member_success(self, client: AsyncClient, auth_client: AsyncClient):
         from app.services.auth import create_signed_token
 

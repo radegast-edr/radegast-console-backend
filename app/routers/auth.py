@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone as tz
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import insert, select
+from sqlalchemy import func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -9,15 +9,21 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.middleware.session import create_session_cookie
 from app.models.device_group import DeviceGroup
+from app.models.key_transfer import KeyTransfer
 from app.models.team import Team
 from app.models.user import User
 from app.models.public_key import PublicKey
 from app.models.device import Device
 from app.models.associations import team_device_groups, team_users
 from app.schemas.user import (
-    KeyRecoverRequest,
     KeyRecoverResponse,
+    KeySecondarySetupRequest,
+    KeySetupRequest,
     KeySetupResponse,
+    KeyTransferCompleteRequest,
+    KeyTransferInitiateRequest,
+    KeyTransferInitiateResponse,
+    KeyTransferStatusResponse,
     UserLogin,
     UserRegister,
     UserResponse,
@@ -31,12 +37,6 @@ from app.services.auth import (
     verify_password,
     verify_signed_token,
 )
-from app.services.crypto import (
-    decrypt_aes_gcm,
-    encrypt_aes_gcm,
-    generate_aes_key,
-    generate_age_keypair,
-)
 from app.services.email import send_verification_email
 from app.config import settings
 
@@ -48,8 +48,10 @@ async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
     existing: User | None = (await db.execute(select(User).where(User.email == data.email))).scalar_one_or_none()
     if existing:
         if not existing.verified:
-            if datetime.now(tz=tz.utc) - existing.registered_on > timedelta(hours=24):
+            if datetime.utcnow() - existing.password_change > timedelta(hours=24):
                 await send_verification_email(data.email)
+                existing.password_change = datetime.utcnow()
+                await db.commit()
                 raise HTTPException(status_code=400, detail="Email not verified. A new verification email has been sent.")
             else:
                 raise HTTPException(status_code=400, detail="Email not verified. Please check your inbox.")
@@ -59,7 +61,6 @@ async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
     user = User(
         email=data.email,
         password=hash_password(data.password),
-        password_change=datetime.utcnow(),
         verified=False,
     )
     db.add(user)
@@ -138,73 +139,179 @@ async def logout(response: Response):
 
 
 @router.post("/keys/setup", response_model=KeySetupResponse)
-async def setup_keys(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    # Check if user already has keys
+async def setup_keys(
+    data: KeySetupRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(
         select(PublicKey).where(PublicKey.user_id == user.id)
     )
-    existing = result.scalars().all()
-    if existing:
+    if result.scalars().first():
         raise HTTPException(status_code=400, detail="Keys already set up")
 
-    # Generate regular keypair
-    pub_key, priv_key = generate_age_keypair()
-    regular_key = PublicKey(
-        public_key=pub_key,
-        private_key=None,  # Client stores private key
+    key = PublicKey(
+        public_key=data.public_key,
+        private_key=data.encrypted_private_key,
         key_type="regular",
         user_id=user.id,
     )
-    db.add(regular_key)
-
-    # Generate recovery keypair
-    rec_pub_key, rec_priv_key = generate_age_keypair()
-    recovery_aes_key = generate_aes_key()
-    encrypted_priv = encrypt_aes_gcm(rec_priv_key, recovery_aes_key)
-    recovery_key = PublicKey(
-        public_key=rec_pub_key,
-        private_key=encrypted_priv,  # Encrypted with AES
-        key_type="recovery",
-        user_id=user.id,
-    )
-    db.add(recovery_key)
-
+    db.add(key)
     await db.commit()
 
-    return KeySetupResponse(
-        public_key=pub_key,
-        recovery_key=recovery_aes_key,
+    return KeySetupResponse(message="Keys set up successfully")
+
+
+@router.post("/keys/secondary", response_model=KeySetupResponse)
+async def setup_secondary_key(
+    data: KeySecondarySetupRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Add a secondary key alongside the user's existing main keypair (e.g. on a new device)."""
+    result = await db.execute(
+        select(PublicKey).where(
+            PublicKey.user_id == user.id, PublicKey.key_type == "regular"
+        )
     )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="No primary key found; use /keys/setup first")
+
+    # Prevent duplicate secondary keys (one per user for now)
+    dup = await db.execute(
+        select(PublicKey).where(
+            PublicKey.user_id == user.id, PublicKey.key_type == "secondary"
+        )
+    )
+    if dup.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Secondary key already exists")
+
+    key = PublicKey(
+        public_key=data.public_key,
+        private_key=data.encrypted_private_key,
+        key_type="secondary",
+        user_id=user.id,
+    )
+    db.add(key)
+    await db.commit()
+    return KeySetupResponse(message="Secondary key added successfully")
 
 
-@router.post("/keys/recover", response_model=KeyRecoverResponse)
+@router.delete("/keys")
+async def delete_all_keys(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete all keys for the current user (fresh-start before re-setup)."""
+    result = await db.execute(select(PublicKey).where(PublicKey.user_id == user.id))
+    keys = result.scalars().all()
+    for key in keys:
+        await db.delete(key)
+    await db.commit()
+    return {"message": "All keys deleted"}
+
+
+@router.get("/keys/recover", response_model=KeyRecoverResponse)
 async def recover_keys(
-    data: KeyRecoverRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
         select(PublicKey).where(
-            PublicKey.user_id == user.id, PublicKey.key_type == "recovery"
+            PublicKey.user_id == user.id, PublicKey.key_type == "regular"
         )
     )
-    recovery_key = result.scalar_one_or_none()
-    if not recovery_key or not recovery_key.private_key:
-        raise HTTPException(status_code=404, detail="No recovery key found")
-
-    decrypted = decrypt_aes_gcm(recovery_key.private_key, data.recovery_key)
-    if not decrypted:
-        raise HTTPException(status_code=400, detail="Invalid recovery key")
+    key = result.scalar_one_or_none()
+    if not key or not key.private_key:
+        raise HTTPException(status_code=404, detail="No keys found")
 
     return KeyRecoverResponse(
-        private_key=decrypted,
-        public_key=recovery_key.public_key,
+        public_key=key.public_key,
+        encrypted_private_key=key.private_key,
     )
 
 
 @router.get("/me", response_model=UserResponse)
-async def me(user: User = Depends(get_current_user)):
-    return user
+async def me(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    key_count = (
+        await db.execute(
+            select(func.count()).select_from(PublicKey).where(PublicKey.user_id == user.id)
+        )
+    ).scalar()
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        role=user.role,
+        verified=user.verified,
+        has_keys=key_count > 0,
+    )
+
+
+@router.post("/keys/transfer/initiate", response_model=KeyTransferInitiateResponse)
+async def initiate_key_transfer(
+    data: KeyTransferInitiateRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    transfer = KeyTransfer(
+        user_id=user.id,
+        receiver_age_public_key=data.receiver_age_public_key,
+        expires_at=datetime.utcnow() + timedelta(minutes=10),
+    )
+    db.add(transfer)
+    await db.commit()
+    return KeyTransferInitiateResponse(transfer_id=transfer.id)
+
+
+@router.get("/keys/transfer/{transfer_id}", response_model=KeyTransferStatusResponse)
+async def get_key_transfer(
+    transfer_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(KeyTransfer).where(KeyTransfer.id == transfer_id)
+    )
+    transfer = result.scalar_one_or_none()
+    if not transfer:
+        raise HTTPException(status_code=404, detail="Transfer not found")
+    if transfer.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if datetime.utcnow() > transfer.expires_at:
+        raise HTTPException(status_code=410, detail="Transfer expired")
+
+    return KeyTransferStatusResponse(
+        transfer_id=transfer.id,
+        status=transfer.status,
+        receiver_age_public_key=transfer.receiver_age_public_key,
+        encrypted_private_key=transfer.encrypted_private_key,
+    )
+
+
+@router.post("/keys/transfer/{transfer_id}/complete")
+async def complete_key_transfer(
+    transfer_id: str,
+    data: KeyTransferCompleteRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(KeyTransfer).where(KeyTransfer.id == transfer_id)
+    )
+    transfer = result.scalar_one_or_none()
+    if not transfer:
+        raise HTTPException(status_code=404, detail="Transfer not found")
+    if transfer.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if datetime.utcnow() > transfer.expires_at:
+        raise HTTPException(status_code=410, detail="Transfer expired")
+    if transfer.status == "completed":
+        raise HTTPException(status_code=400, detail="Transfer already completed")
+
+    transfer.encrypted_private_key = data.encrypted_private_key
+    transfer.status = "completed"
+    await db.commit()
+    return {"message": "Transfer completed"}
 
 
 # Device auth

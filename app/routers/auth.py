@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone as tz
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from sqlalchemy import func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -39,10 +39,24 @@ from app.services.auth import (
     verify_password,
     verify_signed_token,
 )
-from app.services.email import send_verification_email
+from app.services.email import (
+    send_keys_transferred_notification,
+    send_login_notification,
+    send_new_keys_notification,
+    send_recovery_used_notification,
+    send_verification_email,
+)
 from app.config import settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _client_ip(request: Request) -> str:
+    """Return the real client IP, checking X-Forwarded-For first."""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
 
 
 @router.post("/register", response_model=UserResponse)
@@ -114,7 +128,13 @@ async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/login")
-async def login(data: UserLogin, response: Response, db: AsyncSession = Depends(get_db)):
+async def login(
+    data: UserLogin,
+    request: Request,
+    response: Response,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
     if not user or not verify_password(data.password, user.password):
@@ -131,6 +151,9 @@ async def login(data: UserLogin, response: Response, db: AsyncSession = Depends(
         max_age=settings.session_max_age,
     )
 
+    if user.notify_login:
+        background_tasks.add_task(send_login_notification, user.email, _client_ip(request))
+
     return {"message": "Login successful", "user_id": user.id}
 
 
@@ -143,6 +166,8 @@ async def logout(response: Response):
 @router.post("/keys/setup", response_model=KeySetupResponse)
 async def setup_keys(
     data: KeySetupRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -161,12 +186,17 @@ async def setup_keys(
     db.add(key)
     await db.commit()
 
+    if user.notify_new_keys:
+        background_tasks.add_task(send_new_keys_notification, user.email, "primary", _client_ip(request))
+
     return KeySetupResponse(message="Keys set up successfully")
 
 
 @router.post("/keys/secondary", response_model=KeySetupResponse)
 async def setup_secondary_key(
     data: KeySecondarySetupRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -196,6 +226,10 @@ async def setup_secondary_key(
     )
     db.add(key)
     await db.commit()
+
+    if user.notify_new_keys:
+        background_tasks.add_task(send_new_keys_notification, user.email, "secondary", _client_ip(request))
+
     return KeySetupResponse(message="Secondary key added successfully")
 
 
@@ -215,6 +249,8 @@ async def delete_all_keys(
 
 @router.get("/keys/recover", response_model=KeyRecoverResponse)
 async def recover_keys(
+    request: Request,
+    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -226,6 +262,9 @@ async def recover_keys(
     key = result.scalar_one_or_none()
     if not key or not key.private_key:
         raise HTTPException(status_code=404, detail="No keys found")
+
+    if user.notify_recovery_used:
+        background_tasks.add_task(send_recovery_used_notification, user.email, _client_ip(request))
 
     return KeyRecoverResponse(
         public_key=key.public_key,
@@ -330,6 +369,8 @@ async def get_key_transfer(
 async def complete_key_transfer(
     transfer_id: str,
     data: KeyTransferCompleteRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -349,6 +390,10 @@ async def complete_key_transfer(
     transfer.encrypted_private_key = data.encrypted_private_key
     transfer.status = "completed"
     await db.commit()
+
+    if user.notify_keys_transferred:
+        background_tasks.add_task(send_keys_transferred_notification, user.email, _client_ip(request))
+
     return {"message": "Transfer completed"}
 
 

@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.dependencies import get_current_device, get_current_user
+from app.models.associations import device_group_devices, team_device_groups, team_users
 from app.models.device import Device
 from app.models.device_group import DeviceGroup
 from app.models.log import Log
@@ -12,6 +13,7 @@ from app.models.public_key import PublicKey
 from app.models.team import Team
 from app.models.user import User
 from app.schemas.log import LogCreate, LogResponse
+from app.services.email import send_device_log_notification
 
 router = APIRouter(prefix="/logs", tags=["logs"])
 
@@ -19,6 +21,7 @@ router = APIRouter(prefix="/logs", tags=["logs"])
 @router.post("/", response_model=LogResponse)
 async def submit_log(
     data: LogCreate,
+    background_tasks: BackgroundTasks,
     device: Device = Depends(get_current_device),
     db: AsyncSession = Depends(get_db),
 ):
@@ -31,6 +34,27 @@ async def submit_log(
     db.add(log)
     await db.commit()
     await db.refresh(log)
+
+    # Notify users with log-read permission on this device who opted in
+    notif_result = await db.execute(
+        select(User)
+        .join(team_users, User.id == team_users.c.user_id)
+        .join(Team, Team.id == team_users.c.team_id)
+        .join(team_device_groups, team_device_groups.c.team_id == Team.id)
+        .join(
+            device_group_devices,
+            device_group_devices.c.device_group_id == team_device_groups.c.device_group_id,
+        )
+        .where(
+            device_group_devices.c.device_id == device.id,
+            Team.permission_logs == "read",
+            User.notify_device_log.is_(True),
+        )
+        .distinct()
+    )
+    for u in notif_result.scalars().all():
+        background_tasks.add_task(send_device_log_notification, u.email, device.name, device.id)
+
     return log
 
 

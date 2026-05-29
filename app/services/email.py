@@ -1,4 +1,5 @@
 import aiosmtplib
+from datetime import datetime
 from email.mime.text import MIMEText
 from jinja2 import Template
 
@@ -22,6 +23,65 @@ INVITE_EMAIL_TEMPLATE = Template("""
 <h2>Team Invitation</h2>
 <p>You have been invited to join the team <strong>{{ team_name }}</strong> on Radegast EDR.</p>
 <p><a href="{{ url }}">Accept Invitation</a></p>
+</body>
+</html>
+""")
+
+LOGIN_ALERT_TEMPLATE = Template("""
+<html>
+<body>
+<h2>New Login — Radegast EDR</h2>
+<p>A new login to your account was detected.</p>
+<p><strong>Time:</strong> {{ time }} UTC</p>
+<p><strong>IP address:</strong> {{ ip }}</p>
+<p>If this was not you, please change your password immediately.</p>
+</body>
+</html>
+""")
+
+NEW_KEYS_TEMPLATE = Template("""
+<html>
+<body>
+<h2>New Encryption Keys Added — Radegast EDR</h2>
+<p>A new <strong>{{ key_type }}</strong> encryption key was added to your account.</p>
+<p><strong>Time:</strong> {{ time }} UTC</p>
+<p><strong>IP address:</strong> {{ ip }}</p>
+<p>If this was not you, please contact your administrator immediately.</p>
+</body>
+</html>
+""")
+
+RECOVERY_USED_TEMPLATE = Template("""
+<html>
+<body>
+<h2>Recovery Key Used — Radegast EDR</h2>
+<p>Your account's encrypted private key was retrieved using the recovery endpoint.</p>
+<p><strong>Time:</strong> {{ time }} UTC</p>
+<p><strong>IP address:</strong> {{ ip }}</p>
+<p>If this was not you, your recovery key may be compromised. Please re-generate your keys.</p>
+</body>
+</html>
+""")
+
+KEYS_TRANSFERRED_TEMPLATE = Template("""
+<html>
+<body>
+<h2>Encryption Keys Transferred — Radegast EDR</h2>
+<p>Your private key was transferred to another device or browser session.</p>
+<p><strong>Time:</strong> {{ time }} UTC</p>
+<p><strong>IP address:</strong> {{ ip }}</p>
+<p>If this was not you, please revoke your keys immediately.</p>
+</body>
+</html>
+""")
+
+DEVICE_LOG_TEMPLATE = Template("""
+<html>
+<body>
+<h2>New Device Log Entry — Radegast EDR</h2>
+<p>A new log entry was submitted by device <strong>{{ device_name }}</strong> (ID: {{ device_id }}).</p>
+<p><strong>Time:</strong> {{ time }} UTC</p>
+<p><a href="{{ base_url }}/logs">View Logs</a></p>
 </body>
 </html>
 """)
@@ -61,3 +121,46 @@ async def send_invite_email(email: str, team_id: int, team_name: str):
     url = f"{settings.base_url}/auth/invite/accept?token={token}"
     html = INVITE_EMAIL_TEMPLATE.render(url=url, team_name=team_name)
     await send_email(email, f"Invitation to join {team_name}", html)
+
+
+async def send_login_notification(email: str, ip: str):
+    html = LOGIN_ALERT_TEMPLATE.render(
+        time=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        ip=ip,
+    )
+    await send_email(email, "New Login Alert — Radegast EDR", html)
+
+
+async def send_new_keys_notification(email: str, key_type: str = "primary", ip: str = "unknown"):
+    html = NEW_KEYS_TEMPLATE.render(
+        key_type=key_type,
+        time=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        ip=ip,
+    )
+    await send_email(email, "New Encryption Keys Added — Radegast EDR", html)
+
+
+async def send_recovery_used_notification(email: str, ip: str):
+    html = RECOVERY_USED_TEMPLATE.render(
+        time=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        ip=ip,
+    )
+    await send_email(email, "Recovery Key Used — Radegast EDR", html)
+
+
+async def send_keys_transferred_notification(email: str, ip: str):
+    html = KEYS_TRANSFERRED_TEMPLATE.render(
+        time=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        ip=ip,
+    )
+    await send_email(email, "Encryption Keys Transferred — Radegast EDR", html)
+
+
+async def send_device_log_notification(email: str, device_name: str, device_id: int):
+    html = DEVICE_LOG_TEMPLATE.render(
+        device_name=device_name,
+        device_id=device_id,
+        time=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        base_url=settings.base_url,
+    )
+    await send_email(email, f"New Log Entry from {device_name} — Radegast EDR", html)

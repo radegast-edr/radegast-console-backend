@@ -3,10 +3,6 @@ name: CI — Tests
 on:
   pull_request:
     branches: ["**"]
-  # Also run on push to main so the badge stays green and the CI/CD workflow
-  # can depend on this one passing (see ci-cd.yml).
-  push:
-    branches: [main]
 
 jobs:
   test:

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -20,7 +20,7 @@ from app.schemas.pack import (
     PackResponse,
     PackVersionResponse,
 )
-from app.services.packs import get_upload_path, save_upload
+from app.services.packs import get_upload_path, save_upload, delete_pack_files
 
 router = APIRouter(prefix="/packs", tags=["packs"])
 
@@ -103,6 +103,7 @@ async def upload_version(
     pack_id: int,
     version: str,
     file: UploadFile = File(...),
+    release_notes: str | None = Form(None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -142,7 +143,7 @@ async def upload_version(
     path = get_upload_path(pack_id, version, filename)
     await save_upload(content, path)
 
-    pv = PackVersion(pack_id=pack_id, version=version, zip_path=path)
+    pv = PackVersion(pack_id=pack_id, version=version, zip_path=path, release_notes=release_notes)
     db.add(pv)
     await db.commit()
     await db.refresh(pv)
@@ -276,6 +277,26 @@ async def disable_pack(
     await db.delete(pe)
     await db.commit()
     return {"message": "Pack disabled for group"}
+
+
+@router.delete("/{pack_id}")
+async def delete_pack(
+    pack_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if user.role not in (UserRole.maintainer, UserRole.admin):
+        raise HTTPException(status_code=403, detail="Maintainer or admin role required")
+
+    result = await db.execute(select(Pack).where(Pack.id == pack_id))
+    pack = result.scalar_one_or_none()
+    if not pack:
+        raise HTTPException(status_code=404, detail="Pack not found")
+
+    delete_pack_files(pack_id)
+    await db.delete(pack)
+    await db.commit()
+    return {"message": "Pack deleted"}
 
 
 # Device wrapper endpoints

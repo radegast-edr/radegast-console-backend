@@ -14,5 +14,6 @@ class PackVersion(Base):
     version: Mapped[str] = mapped_column(String(50), nullable=False)
     zip_path: Mapped[str] = mapped_column(String(512), nullable=False)
     released: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    release_notes: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
     pack = relationship("Pack", back_populates="versions")

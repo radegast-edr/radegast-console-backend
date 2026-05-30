@@ -26,6 +26,7 @@ class PackVersionResponse(BaseModel):
     pack_id: int
     version: str
     released: datetime
+    release_notes: str | None = None
 
     model_config = {"from_attributes": True}
 

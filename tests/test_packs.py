@@ -72,14 +72,25 @@ class TestPackVersions:
         )
         pack_id = resp.json()["id"]
 
-        # Upload version
+        # Upload version with release notes
         zip_content = b"PK\x03\x04" + b"\x00" * 100  # Minimal zip-like content
         resp = await maintainer_client.post(
             f"/packs/{pack_id}/versions?version=1.0.0",
             files={"file": ("pack-1.0.0.zip", zip_content, "application/zip")},
+            data={"release_notes": "Initial release notes"},
         )
         assert resp.status_code == 200
         assert resp.json()["version"] == "1.0.0"
+        assert resp.json()["release_notes"] == "Initial release notes"
+
+        # Upload another higher version without release notes
+        resp = await maintainer_client.post(
+            f"/packs/{pack_id}/versions?version=1.1.0",
+            files={"file": ("pack-1.1.0.zip", zip_content, "application/zip")},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["version"] == "1.1.0"
+        assert resp.json()["release_notes"] is None
 
     async def test_upload_version_nonexistent_pack(self, maintainer_client: AsyncClient):
         zip_content = b"PK\x03\x04" + b"\x00" * 100

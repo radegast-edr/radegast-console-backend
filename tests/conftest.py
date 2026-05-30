@@ -37,7 +37,25 @@ async def client(db_engine):
 
     app.dependency_overrides[get_db] = override_get_db
 
-    transport = ASGITransport(app=app)
+    class TestAPIPrefixMiddleware:
+        def __init__(self, app):
+            self.app = app
+
+        async def __call__(self, scope, receive, send):
+            if scope["type"] == "http":
+                path = scope.get("path", "")
+                if not (
+                    path.startswith("/api/v1")
+                    or path in ("/health", "/favicon.ico", "/.well-known/security.txt")
+                    or path.startswith("/ui")
+                ):
+                    scope["path"] = f"/api/v1{path}"
+                    raw_path = scope.get("raw_path", b"")
+                    if raw_path:
+                        scope["raw_path"] = b"/api/v1" + raw_path
+            await self.app(scope, receive, send)
+
+    transport = ASGITransport(app=TestAPIPrefixMiddleware(app))
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 

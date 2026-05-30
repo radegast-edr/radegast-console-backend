@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    database_url: str = "sqlite+aiosqlite:///./radegast_pack.db"
+    database_url: str = "sqlite+aiosqlite:///./radegast.db"
     secret_key: str = "change-me-in-production"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8000,http://127.0.0.1:8000"
     smtp_host: str = "localhost"

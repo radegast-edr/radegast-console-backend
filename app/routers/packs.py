@@ -14,6 +14,7 @@ from app.models.team import Team
 from app.models.user import User, UserRole
 from app.schemas.pack import (
     PackCreate,
+    PackUpdate,
     PackEnabledCreate,
     PackEnabledResponse,
     PackResponse,
@@ -59,6 +60,36 @@ async def get_pack(pack_id: int, db: AsyncSession = Depends(get_db)):
     return pack
 
 
+@router.patch("/{pack_id}", response_model=PackResponse)
+async def update_pack(
+    pack_id: int,
+    data: PackUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if user.role not in (UserRole.maintainer, UserRole.admin):
+        raise HTTPException(status_code=403, detail="Maintainer or admin role required")
+
+    result = await db.execute(select(Pack).where(Pack.id == pack_id))
+    pack = result.scalar_one_or_none()
+    if not pack:
+        raise HTTPException(status_code=404, detail="Pack not found")
+
+    if data.name is not None:
+        if data.name != pack.name:
+            existing = await db.execute(select(Pack).where(Pack.name == data.name))
+            if existing.scalar_one_or_none():
+                raise HTTPException(status_code=400, detail="Pack with this name already exists")
+        pack.name = data.name
+
+    if data.description is not None:
+        pack.description = data.description
+
+    await db.commit()
+    await db.refresh(pack)
+    return pack
+
+
 @router.get("/{pack_id}/versions", response_model=list[PackVersionResponse])
 async def list_versions(pack_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -75,22 +106,36 @@ async def upload_version(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    import re
     if user.role not in (UserRole.maintainer, UserRole.admin):
         raise HTTPException(status_code=403, detail="Maintainer or admin role required")
+
+    # Validate semantic versioning format major.minor.patch
+    if not re.match(r"^\d+\.\d+\.\d+$", version):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid version format. Version must be in major.minor.patch format (e.g., 1.0.0)"
+        )
+    new_ver = tuple(map(int, version.split(".")))
 
     result = await db.execute(select(Pack).where(Pack.id == pack_id))
     pack = result.scalar_one_or_none()
     if not pack:
         raise HTTPException(status_code=404, detail="Pack not found")
 
-    # Check version doesn't already exist
-    existing = await db.execute(
-        select(PackVersion).where(
-            PackVersion.pack_id == pack_id, PackVersion.version == version
-        )
+    # Check version doesn't already exist and is strictly higher than all existing versions
+    existing_versions = await db.execute(
+        select(PackVersion).where(PackVersion.pack_id == pack_id)
     )
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Version already exists")
+    for pv in existing_versions.scalars().all():
+        if not re.match(r"^\d+\.\d+\.\d+$", pv.version):
+            continue  # skip validation if existing version in database doesn't follow semver (e.g. legacy)
+        exist_ver = tuple(map(int, pv.version.split(".")))
+        if new_ver <= exist_ver:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Uploaded version {version} must be higher than existing version {pv.version}"
+            )
 
     content = await file.read()
     filename = file.filename or f"{pack.name}-{version}.zip"

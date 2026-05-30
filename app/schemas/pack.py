@@ -8,6 +8,11 @@ class PackCreate(BaseModel):
     description: str = ""
 
 
+class PackUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
 class PackResponse(BaseModel):
     id: int
     name: str

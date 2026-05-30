@@ -55,10 +55,11 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def _client_ip(request: Request) -> str:
-    """Return the real client IP, checking X-Forwarded-For first."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    """Return the real client IP, checking CF-Connecting-IP, X-Real-IP, and X-Forwarded-For first."""
+    for header in ("cf-connecting-ip", "x-real-ip", "x-forwarded-for"):
+        val = request.headers.get(header)
+        if val:
+            return val.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
 
 

@@ -180,10 +180,23 @@ async def add_device_to_group(
     if not has_access:
         raise HTTPException(status_code=403, detail="No admin permission on any team for this group")
 
-    result = await db.execute(select(Device).where(Device.id == device_id))
+    result = await db.execute(
+        select(Device)
+        .options(selectinload(Device.groups).selectinload(DeviceGroup.teams).selectinload(Team.users))
+        .where(Device.id == device_id)
+    )
     device = result.scalar_one_or_none()
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
+
+    if device.groups:
+        device_admin = any(
+            user in team.users and team.permission_admin is not None
+            for g in device.groups
+            for team in g.teams
+        )
+        if not device_admin:
+            raise HTTPException(status_code=403, detail="No admin permission on this device")
 
     if device not in group.devices:
         group.devices.append(device)

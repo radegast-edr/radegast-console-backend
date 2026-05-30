@@ -77,15 +77,15 @@ async def update_team(
     if team.permission_admin is None:
         raise HTTPException(status_code=403, detail="No admin permission on this team")
 
-    if data.name is not None:
+    if "name" in data.model_fields_set:
         team.name = data.name
-    if data.permission_pack is not None:
+    if "permission_pack" in data.model_fields_set:
         team.permission_pack = data.permission_pack
-    if data.permission_invite is not None:
+    if "permission_invite" in data.model_fields_set:
         team.permission_invite = data.permission_invite
-    if data.permission_admin is not None:
+    if "permission_admin" in data.model_fields_set:
         team.permission_admin = data.permission_admin
-    if data.permission_logs is not None:
+    if "permission_logs" in data.model_fields_set:
         team.permission_logs = data.permission_logs
 
     await db.commit()
@@ -192,12 +192,20 @@ async def link_group_to_team(
 
     result = await db.execute(
         select(DeviceGroup)
-        .options(selectinload(DeviceGroup.teams))
+        .options(selectinload(DeviceGroup.teams).selectinload(Team.users))
         .where(DeviceGroup.id == group_id)
     )
     group = result.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="Device group not found")
+
+    # Verify user has admin access to this group (i.e. has admin permission on at least one team this group currently belongs to)
+    group_admin = any(
+        user in t.users and t.permission_admin is not None
+        for t in group.teams
+    )
+    if not group_admin:
+        raise HTTPException(status_code=403, detail="No admin permission on this device group")
 
     if group not in team.groups:
         await db.execute(

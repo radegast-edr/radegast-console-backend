@@ -709,3 +709,58 @@ class TestNotificationSettings:
     async def test_notifications_requires_auth(self, client: AsyncClient):
         resp = await client.get("/auth/notifications", cookies={})
         assert resp.status_code in (401, 403)
+
+
+def test_client_ip_headers():
+    from fastapi import Request
+    from app.routers.auth import _client_ip
+
+    # 1. CF-Connecting-IP has priority
+    req1 = Request(scope={
+        "type": "http",
+        "headers": [
+            (b"cf-connecting-ip", b"203.0.113.1"),
+            (b"x-real-ip", b"198.51.100.2"),
+            (b"x-forwarded-for", b"192.0.2.3, 192.0.2.4")
+        ],
+        "client": ("127.0.0.1", 12345)
+    })
+    assert _client_ip(req1) == "203.0.113.1"
+
+    # 2. X-Real-IP has priority over X-Forwarded-For
+    req2 = Request(scope={
+        "type": "http",
+        "headers": [
+            (b"x-real-ip", b"198.51.100.2"),
+            (b"x-forwarded-for", b"192.0.2.3, 192.0.2.4")
+        ],
+        "client": ("127.0.0.1", 12345)
+    })
+    assert _client_ip(req2) == "198.51.100.2"
+
+    # 3. X-Forwarded-For gets first IP
+    req3 = Request(scope={
+        "type": "http",
+        "headers": [
+            (b"x-forwarded-for", b"192.0.2.3, 192.0.2.4")
+        ],
+        "client": ("127.0.0.1", 12345)
+    })
+    assert _client_ip(req3) == "192.0.2.3"
+
+    # 4. Fallback to request client host
+    req4 = Request(scope={
+        "type": "http",
+        "headers": [],
+        "client": ("127.0.0.1", 12345)
+    })
+    assert _client_ip(req4) == "127.0.0.1"
+
+    # 5. Fallback to unknown when client is None
+    req5 = Request(scope={
+        "type": "http",
+        "headers": [],
+        "client": None
+    })
+    assert _client_ip(req5) == "unknown"
+

@@ -28,6 +28,7 @@ COPY --from=frontend-builder /web/build ./web/build
 
 # Copy the rest of the backend files
 COPY app ./app
+COPY agent/config ./agent/config
 
 # Install the project itself
 RUN uv sync --frozen --no-dev
@@ -36,4 +37,4 @@ RUN uv sync --frozen --no-dev
 EXPOSE 8000
 
 # Run backend using uvicorn through uv
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--workers", "4"]
+CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*", "--workers", "4"]

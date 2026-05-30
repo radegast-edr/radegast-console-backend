@@ -210,3 +210,86 @@ class TestDeviceGroups:
         resp = await auth_client.post(f"/teams/{second_team_id}/groups/{group_id}/link")
         assert resp.status_code == 200
         assert "linked" in resp.json()["message"]
+
+    async def test_clear_team_permissions(self, auth_client: AsyncClient):
+        resp = await auth_client.get("/teams/")
+        teams = resp.json()
+        team_id = teams[0]["id"]
+
+        # Clear permission_pack
+        resp = await auth_client.put(
+            f"/teams/{team_id}",
+            json={"permission_pack": None},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["permission_pack"] is None
+
+    async def test_link_group_to_team_no_admin_on_group_fails(self, client: AsyncClient):
+        # User 1 registers and gets a default team and group.
+        user1_email = "user1@example.com"
+        await client.post("/auth/register", json={"email": user1_email, "password": "User1Pass123!"})
+        from app.services.auth import create_signed_token
+        token = create_signed_token({"email": user1_email}, salt="email-verify")
+        await client.get(f"/auth/verify?token={token}")
+
+        # Log in User 1 to get their group ID
+        await client.post("/auth/login", json={"email": user1_email, "password": "User1Pass123!"})
+        resp = await client.get("/teams/")
+        user1_team_id = resp.json()[0]["id"]
+        resp = await client.get(f"/teams/{user1_team_id}/groups")
+        user1_group_id = resp.json()[0]["id"]
+        await client.post("/auth/logout")
+
+        # User 2 registers and gets their own default team and group.
+        user2_email = "user2@example.com"
+        await client.post("/auth/register", json={"email": user2_email, "password": "User2Pass123!"})
+        token = create_signed_token({"email": user2_email}, salt="email-verify")
+        await client.get(f"/auth/verify?token={token}")
+
+        # Log in User 2
+        await client.post("/auth/login", json={"email": user2_email, "password": "User2Pass123!"})
+        resp = await client.get("/teams/")
+        user2_team_id = resp.json()[0]["id"]
+
+        # User 2 tries to link User 1's group to User 2's team. This should fail.
+        resp = await client.post(f"/teams/{user2_team_id}/groups/{user1_group_id}/link")
+        assert resp.status_code == 403
+
+    async def test_add_device_to_group_no_admin_on_device_fails(self, client: AsyncClient):
+        # User 1 registers and gets a default team and group.
+        user1_email = "user1_dev@example.com"
+        await client.post("/auth/register", json={"email": user1_email, "password": "User1Pass123!"})
+        from app.services.auth import create_signed_token
+        token = create_signed_token({"email": user1_email}, salt="email-verify")
+        await client.get(f"/auth/verify?token={token}")
+
+        # Log in User 1 to create a device in their group
+        await client.post("/auth/login", json={"email": user1_email, "password": "User1Pass123!"})
+        resp = await client.get("/teams/")
+        user1_team_id = resp.json()[0]["id"]
+        resp = await client.get(f"/teams/{user1_team_id}/groups")
+        user1_group_id = resp.json()[0]["id"]
+
+        # Create a device in User 1's group
+        resp = await client.post("/devices/", json={"name": "User1Device", "group_id": user1_group_id})
+        assert resp.status_code == 200
+        device_id = resp.json()["id"]
+        await client.post("/auth/logout")
+
+        # User 2 registers and gets their own default team and group.
+        user2_email = "user2_dev@example.com"
+        await client.post("/auth/register", json={"email": user2_email, "password": "User2Pass123!"})
+        token = create_signed_token({"email": user2_email}, salt="email-verify")
+        await client.get(f"/auth/verify?token={token}")
+
+        # Log in User 2
+        await client.post("/auth/login", json={"email": user2_email, "password": "User2Pass123!"})
+        resp = await client.get("/teams/")
+        user2_team_id = resp.json()[0]["id"]
+        resp = await client.get(f"/teams/{user2_team_id}/groups")
+        user2_group_id = resp.json()[0]["id"]
+
+        # User 2 tries to add User 1's device to User 2's group. This should fail.
+        resp = await client.post(f"/devices/{device_id}/groups/{user2_group_id}")
+        assert resp.status_code == 403
+

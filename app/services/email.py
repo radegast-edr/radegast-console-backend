@@ -78,10 +78,26 @@ KEYS_TRANSFERRED_TEMPLATE = Template("""
 DEVICE_LOG_TEMPLATE = Template("""
 <html>
 <body>
-<h2>New Device Log Entry — Radegast EDR</h2>
-<p>A new log entry was submitted by device <strong>{{ device_name }}</strong> (ID: {{ device_id }}).</p>
+<h2>New Alert — Radegast EDR</h2>
+<p>A new alert was submitted by device <strong>{{ device_name }}</strong> (ID: {{ device_id }}).</p>
 <p><strong>Time:</strong> {{ time }} UTC</p>
 <p><a href="{{ base_url }}/logs">View Logs</a></p>
+</body>
+</html>
+""")
+
+NOTIFICATION_DISABLED_TEMPLATE = Template("""
+<html>
+<body>
+<h2>Notification Disabled — Radegast EDR</h2>
+<p>One or more email notifications were disabled in your user settings:</p>
+<ul>
+    {% for feature in features %}
+    <li>{{ feature }}</li>
+    {% endfor %}
+</ul>
+<p><strong>Time:</strong> {{ time }} UTC</p>
+<p>If you did not make this change, please review your account settings immediately.</p>
 </body>
 </html>
 """)
@@ -163,4 +179,12 @@ async def send_device_log_notification(email: str, device_name: str, device_id: 
         time=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
         base_url=settings.base_url,
     )
-    await send_email(email, f"New Log Entry from {device_name} — Radegast EDR", html)
+    await send_email(email, f"New Alert from {device_name} — Radegast EDR", html)
+
+
+async def send_notification_disabled_alert(email: str, disabled_features: list[str]):
+    html = NOTIFICATION_DISABLED_TEMPLATE.render(
+        features=disabled_features,
+        time=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+    )
+    await send_email(email, "Notification Settings Disabled — Radegast EDR", html)

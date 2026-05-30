@@ -47,6 +47,7 @@ from app.services.email import (
     send_new_keys_notification,
     send_recovery_used_notification,
     send_verification_email,
+    send_notification_disabled_alert,
 )
 from app.config import settings
 
@@ -435,12 +436,28 @@ async def update_notifications(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    disabled_features = []
+    if user.notify_login and not data.notify_login:
+        disabled_features.append("New login alert")
+    if user.notify_new_keys and not data.notify_new_keys:
+        disabled_features.append("New keys added")
+    if user.notify_recovery_used and not data.notify_recovery_used:
+        disabled_features.append("Recovery key used")
+    if user.notify_keys_transferred and not data.notify_keys_transferred:
+        disabled_features.append("Keys transferred to another device")
+    if user.notify_device_log and not data.notify_device_log:
+        disabled_features.append("New alert notification")
+
     user.notify_login = data.notify_login
     user.notify_new_keys = data.notify_new_keys
     user.notify_recovery_used = data.notify_recovery_used
     user.notify_keys_transferred = data.notify_keys_transferred
     user.notify_device_log = data.notify_device_log
     await db.commit()
+
+    if disabled_features:
+        await send_notification_disabled_alert(user.email, disabled_features)
+
     return NotificationSettings.model_validate(user)
 
 

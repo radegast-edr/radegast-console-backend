@@ -309,7 +309,7 @@ class TestDeviceLogNotification:
             )
 
         subjects = [call.args[1] for call in mock_send.call_args_list]
-        assert any("New Log Entry" in s for s in subjects)
+        assert any("New Alert" in s for s in subjects)
 
     async def test_device_log_skips_notification_when_disabled(
         self, client: AsyncClient, db_engine
@@ -324,4 +324,47 @@ class TestDeviceLogNotification:
             )
 
         subjects = [call.args[1] for call in mock_send.call_args_list]
-        assert not any("New Log Entry" in s for s in subjects)
+        assert not any("New Alert" in s for s in subjects)
+
+
+@pytest.mark.asyncio
+class TestNotificationDisabledAlert:
+    async def test_notification_disabled_sends_email(self, client: AsyncClient):
+        email = "notif_disabled_test@example.com"
+        password = "Password123!"
+        await _register_and_verify(client, email, password)
+        await _login(client, email, password)
+
+        payload = {
+            "notify_login": False,
+            "notify_new_keys": True,
+            "notify_recovery_used": True,
+            "notify_keys_transferred": True,
+            "notify_device_log": True,
+        }
+        with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
+            resp = await client.put("/auth/notifications", json=payload)
+            assert resp.status_code == 200
+
+        subjects = [call.args[1] for call in mock_send.call_args_list]
+        assert any("Notification Settings Disabled" in s for s in subjects)
+
+    async def test_notification_no_change_skips_email(self, client: AsyncClient):
+        email = "notif_disabled_no_change@example.com"
+        password = "Password123!"
+        await _register_and_verify(client, email, password)
+        await _login(client, email, password)
+
+        payload = {
+            "notify_login": True,
+            "notify_new_keys": True,
+            "notify_recovery_used": True,
+            "notify_keys_transferred": True,
+            "notify_device_log": True,
+        }
+        with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
+            resp = await client.put("/auth/notifications", json=payload)
+            assert resp.status_code == 200
+
+        subjects = [call.args[1] for call in mock_send.call_args_list]
+        assert not any("Notification Settings Disabled" in s for s in subjects)

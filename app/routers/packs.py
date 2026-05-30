@@ -140,7 +140,7 @@ async def upload_version(
             )
 
     content = await file.read()
-    filename = file.filename or f"{pack.name}-{version}.zip"
+    filename = "pack.zip"
     path = get_upload_path(pack_id, version, filename)
     await save_upload(content, path)
 
@@ -332,6 +332,24 @@ async def device_available_packs(
             })
 
     return packs
+
+
+@router.get("/download/{version_id}")
+async def download_pack_for_user(
+    version_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from fastapi.responses import FileResponse
+
+    result = await db.execute(
+        select(PackVersion).where(PackVersion.id == version_id)
+    )
+    pv = result.scalar_one_or_none()
+    if not pv:
+        raise HTTPException(status_code=404, detail="Pack version not found")
+
+    return FileResponse(pv.zip_path, media_type="application/zip")
 
 
 @router.get("/device/download/{version_id}")

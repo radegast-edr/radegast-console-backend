@@ -359,3 +359,28 @@ class TestDevicePacks:
     ):
         resp = await auth_client.get("/packs/device/available")
         assert resp.status_code == 403
+
+    async def test_user_download_pack(self, maintainer_client: AsyncClient):
+        resp = await maintainer_client.post(
+            "/packs/", json={"name": "User Download Pack", "description": "Test"}
+        )
+        pack_id = resp.json()["id"]
+
+        zip_content = b"PK\x03\x04" + b"\x00" * 100
+        resp = await maintainer_client.post(
+            f"/packs/{pack_id}/versions?version=1.0.0",
+            files={"file": ("pack.zip", zip_content, "application/zip")},
+        )
+        version_id = resp.json()["id"]
+
+        resp = await maintainer_client.get(f"/packs/download/{version_id}")
+        assert resp.status_code == 200
+        assert resp.content == zip_content
+
+    async def test_user_download_pack_not_found(self, maintainer_client: AsyncClient):
+        resp = await maintainer_client.get("/packs/download/99999")
+        assert resp.status_code == 404
+
+    async def test_user_download_pack_requires_login(self, client: AsyncClient):
+        resp = await client.get("/packs/download/1")
+        assert resp.status_code == 401

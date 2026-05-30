@@ -6,6 +6,22 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.database import Base, get_db
 from app.main import app
 
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_uploads():
+    import tempfile
+    import shutil
+    from pathlib import Path
+    from app.config import settings
+
+    old_upload_dir = settings.upload_dir
+    test_dir = tempfile.mkdtemp()
+    settings.upload_dir = test_dir
+    Path(test_dir).mkdir(parents=True, exist_ok=True)
+    yield
+    settings.upload_dir = old_upload_dir
+    shutil.rmtree(test_dir, ignore_errors=True)
+
+
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
 

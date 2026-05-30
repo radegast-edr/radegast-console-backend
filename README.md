@@ -118,3 +118,5 @@ All settings are controlled via environment variables prefixed with `RADEGAST_` 
 | `RADEGAST_SMTP_FROM` | `noreply@radegast.local` | Sender address for outgoing emails |
 | `RADEGAST_SESSION_COOKIE_NAME` | `radegast_session` | Name of the session cookie |
 | `RADEGAST_SESSION_MAX_AGE` | `604800` | Session lifetime in seconds (default: 7 days) |
+| `RADEGAST_TURNSTILE_SITE_KEY` | _(empty)_ | Cloudflare Turnstile Site Key for optional registration-protection |
+| `RADEGAST_TURNSTILE_SECRET_KEY` | _(empty)_ | Cloudflare Turnstile Secret Key for verifying Turnstile responses |

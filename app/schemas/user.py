@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class UserRegister(BaseModel):
     email: str
     password: str
+    turnstile_token: str | None = None
 
 
 class UserLogin(BaseModel):

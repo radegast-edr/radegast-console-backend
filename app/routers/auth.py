@@ -62,8 +62,37 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+async def _verify_turnstile(token: str | None, remote_ip: str) -> None:
+    if not settings.turnstile_secret_key or not settings.turnstile_site_key:
+        return
+    if not token:
+        raise HTTPException(status_code=400, detail="Turnstile verification token is required")
+
+    import httpx
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+                data={
+                    "secret": settings.turnstile_secret_key,
+                    "response": token,
+                    "remoteip": remote_ip,
+                },
+                timeout=5.0,
+            )
+            if resp.status_code != 200:
+                raise HTTPException(status_code=400, detail="Failed to verify Turnstile token with Cloudflare")
+            result = resp.json()
+            if not result.get("success"):
+                raise HTTPException(status_code=400, detail="Turnstile verification failed")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=500, detail=f"Turnstile verification request failed: {str(e)}")
+
+
 @router.post("/register", response_model=UserResponse)
-async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
+async def register(data: UserRegister, request: Request, db: AsyncSession = Depends(get_db)):
+    ip = _client_ip(request)
+    await _verify_turnstile(data.turnstile_token, ip)
     existing: User | None = (await db.execute(select(User).where(User.email == data.email))).scalar_one_or_none()
     if existing:
         if not existing.verified:
@@ -586,3 +615,10 @@ async def accept_invite(token: str, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     return {"message": f"Successfully joined team '{team.name}'"}
+
+
+@router.get("/config")
+async def get_auth_config():
+    return {
+        "turnstile_site_key": settings.turnstile_site_key,
+    }

@@ -26,6 +26,78 @@ class TestRegistration:
         )
         assert resp.status_code == 400
 
+    async def test_register_with_turnstile_enabled_missing_token_fails(self, client: AsyncClient):
+        from app.config import settings
+        old_site = settings.turnstile_site_key
+        old_secret = settings.turnstile_secret_key
+        settings.turnstile_site_key = "dummy-site-key"
+        settings.turnstile_secret_key = "dummy-secret-key"
+        try:
+            resp = await client.post(
+                "/auth/register",
+                json={"email": "turnstile_missing@example.com", "password": "Password123!"},
+            )
+            assert resp.status_code == 400
+            assert "Turnstile verification token is required" in resp.json()["detail"]
+        finally:
+            settings.turnstile_site_key = old_site
+            settings.turnstile_secret_key = old_secret
+
+    async def test_register_with_turnstile_enabled_invalid_token_fails(self, client: AsyncClient):
+        from app.config import settings
+        import httpx
+        from unittest.mock import patch
+        old_site = settings.turnstile_site_key
+        old_secret = settings.turnstile_secret_key
+        settings.turnstile_site_key = "dummy-site-key"
+        settings.turnstile_secret_key = "dummy-secret-key"
+        
+        original_post = httpx.AsyncClient.post
+        async def mock_post(self_client, url, *args, **kwargs):
+            if "siteverify" in str(url):
+                return httpx.Response(200, json={"success": False})
+            return await original_post(self_client, url, *args, **kwargs)
+
+        try:
+            with patch("httpx.AsyncClient.post", mock_post):
+                resp = await client.post(
+                    "/auth/register",
+                    json={"email": "turnstile_invalid@example.com", "password": "Password123!", "turnstile_token": "bad-token"},
+                )
+                assert resp.status_code == 400
+                assert "Turnstile verification failed" in resp.json()["detail"]
+        finally:
+            settings.turnstile_site_key = old_site
+            settings.turnstile_secret_key = old_secret
+
+    async def test_register_with_turnstile_enabled_success(self, client: AsyncClient):
+        from app.config import settings
+        import httpx
+        from unittest.mock import patch
+        old_site = settings.turnstile_site_key
+        old_secret = settings.turnstile_secret_key
+        settings.turnstile_site_key = "dummy-site-key"
+        settings.turnstile_secret_key = "dummy-secret-key"
+
+        original_post = httpx.AsyncClient.post
+        async def mock_post(self_client, url, *args, **kwargs):
+            if "siteverify" in str(url):
+                return httpx.Response(200, json={"success": True})
+            return await original_post(self_client, url, *args, **kwargs)
+
+        try:
+            with patch("httpx.AsyncClient.post", mock_post):
+                resp = await client.post(
+                    "/auth/register",
+                    json={"email": "turnstile_success@example.com", "password": "Password123!", "turnstile_token": "good-token"},
+                )
+                assert resp.status_code == 200
+                assert resp.json()["email"] == "turnstile_success@example.com"
+        finally:
+            settings.turnstile_site_key = old_site
+            settings.turnstile_secret_key = old_secret
+
+
 
 @pytest.mark.asyncio
 class TestVerification:

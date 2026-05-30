@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     releases_dir: str = "agent/releases"
     session_cookie_name: str = "radegast_session"
     session_max_age: int = 86400 * 7  # 7 days
+    turnstile_site_key: str | None = None
+    turnstile_secret_key: str | None = None
 
     model_config = {"env_prefix": "radegast_"}
 

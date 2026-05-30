@@ -22,6 +22,41 @@ def setup_test_uploads():
     shutil.rmtree(test_dir, ignore_errors=True)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_releases():
+    """Create a temporary releases directory with a stub zip so the agent
+    download endpoint returns 200 without requiring real release binaries."""
+    import io
+    import zipfile
+    import tempfile
+    import shutil
+    from pathlib import Path
+    from app.config import settings
+    import app.routers.install as install_router
+
+    old_releases_dir = settings.releases_dir
+    old_releases_path = install_router.RELEASES_DIR
+
+    test_dir = Path(tempfile.mkdtemp())
+    settings.releases_dir = str(test_dir)
+    install_router.RELEASES_DIR = test_dir
+
+    # Create a minimal zip at the expected path: <version>/<os>/<arch>/rustinel.zip
+    stub_version = "0.0.1"
+    stub_zip_path = test_dir / stub_version / "linux" / "amd64" / "rustinel.zip"
+    stub_zip_path.parent.mkdir(parents=True, exist_ok=True)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("rustinel", b"stub")
+    stub_zip_path.write_bytes(buf.getvalue())
+
+    yield
+
+    settings.releases_dir = old_releases_dir
+    install_router.RELEASES_DIR = old_releases_path
+    shutil.rmtree(test_dir, ignore_errors=True)
+
+
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
 

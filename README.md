@@ -1,21 +1,70 @@
-# Radegast EDR - Backend
+# Radegast EDR — Backend
 
-Radegast EDR Backend is the management and orchestration server for the Radegast Endpoint Detection and Response (EDR) platform. Built with FastAPI and SQLAlchemy, it handles device authorization, user configuration packs, age-encrypted log storage, alert status tracking, and key/session management.
+Radegast EDR Backend is the management and orchestration server for the Radegast Endpoint Detection and Response (EDR) platform. Built with FastAPI and SQLAlchemy, it handles device authorisation, user configuration packs, age-encrypted log storage, alert status tracking, and key/session management.
 
 ## Features
 
-1. **Device Management**: Creating and enrolling EDR agent devices, assigning them to Groups, and generating secure authorization tokens.
+1. **Device Management**: Creating and enrolling EDR agent devices, assigning them to Groups, and generating secure authorisation tokens.
 2. **Configuration Packs**: Storing and distributing YAML/binary endpoint detection policies and versions.
 3. **Encrypted Log Storage**: Accepting EDR agent telemetry/logs encrypted using `age`, verifying signatures, and managing user "seen" states for logged alerts.
 4. **Team Collaboration**: Creating teams, managing device group permissions, and sending email notifications on critical events.
+5. **Agent Distribution**: Serving the Rustinel eBPF sensor and its installation script to enrolled devices.
 
 ---
 
-## Getting Started
+## Deployment (Podman / Docker)
+
+The recommended way to run Radegast EDR in production is via the published container image.
+
+### Quick start
+
+```bash
+# Pull and start with podman-compose (reads podman-compose.yaml)
+podman-compose up -d
+
+# Or with plain podman / docker
+podman run -d \
+  --name radegast-edr \
+  -p 8000:8000 \
+  -e RADEGAST_SECRET_KEY=<your-secret> \
+  -e RADEGAST_BASE_URL=https://your.domain \
+  -e RADEGAST_CORS_ORIGINS=https://your.domain \
+  -v radegast_db:/app/data/db \
+  -v radegast_uploads:/app/data/uploads \
+  -v radegast_releases:/app/data/releases \
+  docker.io/radegast-edr/console:latest
+```
+
+### Using podman-compose
+
+Clone the repository and start all services with persistent named volumes:
+
+```bash
+git clone https://github.com/radegast-edr/radegast-backend.git
+cd radegast-backend
+
+# Edit the environment section in podman-compose.yaml first, then:
+podman-compose up -d
+```
+
+Three named volumes are created automatically:
+
+| Volume | Mount | Purpose |
+|---|---|---|
+| `radegast_database` | `/app/data/db` | SQLite database |
+| `radegast_uploads` | `/app/data/uploads` | Uploaded configuration packs |
+| `radegast_releases` | `/app/data/releases` | Rustinel agent release binaries |
+
+The API is available at [http://localhost:8000](http://localhost:8000) and the interactive docs at [http://localhost:8000/docs](http://localhost:8000/docs).
+
+---
+
+## Local Development
 
 ### Prerequisites
 
-Ensure you have Python 3.11+ and `uv` (recommended) or standard `pip` installed.
+- Python 3.11+
+- [`uv`](https://github.com/astral-sh/uv) (recommended) or standard `pip`
 
 ### Installation
 
@@ -26,39 +75,46 @@ Ensure you have Python 3.11+ and `uv` (recommended) or standard `pip` installed.
    # python -m venv .venv && source .venv/bin/activate && pip install .
    ```
 
-2. Development tools installation:
+2. Install dev tools (test runner etc.):
    ```bash
-   uv sync --only-group dev
+   uv sync --dev
    # Or:
    # pip install .[dev]
    ```
 
 ### Running the Backend
 
-Start the development server with:
+Start the development server with hot-reload:
 ```bash
-uvicorn app.main:app --reload --port 8000
+uv run uvicorn app.main:app --reload --port 8000
 ```
-By default, the server runs on [http://localhost:8000](http://localhost:8000). You can access the auto-generated Swagger documentation at [http://localhost:8000/docs](http://localhost:8000/docs).
 
-### Configuration
-
-You can configure the application using environment variables prefixed with `RADEGAST_`. Standard settings (defined in [config.py](file:///home/adam/app/app/config.py)) include:
-
-| Environment Variable | Default Value | Description |
-|---|---|---|
-| `RADEGAST_DATABASE_URL` | `sqlite+aiosqlite:///./radegast_pack.db` | Async SQLAlchemy database URL |
-| `RADEGAST_SECRET_KEY` | `change-me-in-production` | Secret key used for session signing |
-| `RADEGAST_CORS_ORIGINS` | `http://localhost:5173` | Allowed CORS frontend origins |
-| `RADEGAST_SMTP_HOST` | `localhost` | Outgoing SMTP mail server |
-| `RADEGAST_SMTP_PORT` | `587` | Outgoing SMTP server port |
-| `RADEGAST_BASE_URL` | `http://localhost:8000` | Base URL of the API server |
+The server runs on [http://localhost:8000](http://localhost:8000). Interactive Swagger docs are available at [http://localhost:8000/docs](http://localhost:8000/docs).
 
 ### Running Tests
 
-Execute the complete asynchronous test suite using:
 ```bash
 uv run pytest
-# Or:
-# pytest
 ```
+
+---
+
+## Configuration
+
+All settings are controlled via environment variables prefixed with `RADEGAST_` (defined in [`app/config.py`](app/config.py)):
+
+| Environment Variable | Default | Description |
+|---|---|---|
+| `RADEGAST_DATABASE_URL` | `sqlite+aiosqlite:///./radegast.db` | Async SQLAlchemy database URL |
+| `RADEGAST_SECRET_KEY` | `change-me-in-production` | Secret key used for session signing — **must be changed in production** |
+| `RADEGAST_CORS_ORIGINS` | `http://localhost:5173,...` | Comma-separated list of allowed CORS origins |
+| `RADEGAST_BASE_URL` | `http://localhost:8000` | Public base URL of the API server (used in emails and install scripts) |
+| `RADEGAST_UPLOAD_DIR` | `uploads/packs` | Directory where uploaded configuration packs are stored |
+| `RADEGAST_RELEASES_DIR` | `agent/releases` | Directory containing Rustinel agent release binaries |
+| `RADEGAST_SMTP_HOST` | `localhost` | Outgoing SMTP mail server |
+| `RADEGAST_SMTP_PORT` | `587` | Outgoing SMTP server port |
+| `RADEGAST_SMTP_USER` | _(empty)_ | SMTP authentication username |
+| `RADEGAST_SMTP_PASSWORD` | _(empty)_ | SMTP authentication password |
+| `RADEGAST_SMTP_FROM` | `noreply@radegast.local` | Sender address for outgoing emails |
+| `RADEGAST_SESSION_COOKIE_NAME` | `radegast_session` | Name of the session cookie |
+| `RADEGAST_SESSION_MAX_AGE` | `604800` | Session lifetime in seconds (default: 7 days) |

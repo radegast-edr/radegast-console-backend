@@ -127,7 +127,7 @@ async def send_email(to: str, subject: str, html_body: str):
 
 async def send_verification_email(email: str):
     token = create_signed_token({"email": email}, salt="email-verify")
-    url = f"{settings.base_url}/auth/verify?token={token}"
+    url = f"{settings.base_url}/ui/verify?token={token}"
     html = VERIFY_EMAIL_TEMPLATE.render(url=url)
     await send_email(email, "Verify your Radegast EDR account", html)
 

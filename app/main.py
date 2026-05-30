@@ -7,13 +7,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import init_db
-from app.routers import auth, teams, devices, packs, logs, admin, groups, ui, install
+from app.routers import auth, teams, devices, packs, logs, admin, groups, ui, install, releases
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Create upload directory
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
+    Path(settings.releases_dir).mkdir(parents=True, exist_ok=True)
     # Initialize database
     await init_db()
     yield
@@ -46,6 +47,7 @@ app.include_router(prefix=f"/api/v{api_version}", router=groups.router)
 app.include_router(prefix=f"/api/v{api_version}", router=packs.router)
 app.include_router(prefix=f"/api/v{api_version}", router=logs.router)
 app.include_router(prefix=f"/api/v{api_version}", router=admin.router)
+app.include_router(prefix=f"/api/v{api_version}", router=releases.router)
 app.include_router(prefix="/ui", router=ui.router)
 
 

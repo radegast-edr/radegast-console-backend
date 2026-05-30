@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  radegast:
+    build:
+      context: .
+      dockerfile: Containerfile
+    container_name: radegast-edr
+    ports:
+      - "8000:8000"
+    volumes:
+      - radegast_database:/app/data/db
+      - radegast_uploads:/app/data/uploads
+    environment:
+      - RADEGAST_SECRET_KEY=change-me-in-production-with-a-real-secure-key
+      - RADEGAST_CORS_ORIGINS=http://localhost:8000
+      - RADEGAST_BASE_URL=http://localhost:8000
+      - RADEGAST_DATABASE_URL=sqlite+aiosqlite:////app/data/db/radegast_pack.db
+      - RADEGAST_UPLOAD_DIR=/app/data/uploads
+    restart: always
+
+volumes:
+  radegast_database:
+  radegast_uploads:

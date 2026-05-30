@@ -1,0 +1,38 @@
+# Python ignore
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.venv/
+venv/
+*.db
+*.db-journal
+*.sqlite
+.pytest_cache/
+tests/
+
+# Web ignore
+web/node_modules/
+web/.svelte-kit/
+web/build/
+
+# Environment files (local secrets)
+**/.env
+**/.env.*
+!**/.env.example
+
+# IDE / Tool configuration
+.idea/
+.vscode/
+.run/
+.git/
+.gitignore
+.gitmodules
+.antigravitycli/
+
+# Local data and temp files
+uploads/
+tmp/
+temp/
+scratch/
+*.log

@@ -1,12 +1,13 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import init_db
-from app.routers import auth, teams, devices, packs, logs, admin, groups
+from app.routers import auth, teams, devices, packs, logs, admin, groups, ui
 
 
 @asynccontextmanager
@@ -34,20 +35,43 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+api_version = "1"
 
 # Routers
-app.include_router(auth.router)
-app.include_router(teams.router)
-app.include_router(devices.router)
-app.include_router(groups.router)
-app.include_router(packs.router)
-app.include_router(logs.router)
-app.include_router(admin.router)
+app.include_router(prefix=f"/api/v{api_version}", router=auth.router)
+app.include_router(prefix=f"/api/v{api_version}", router=teams.router)
+app.include_router(prefix=f"/api/v{api_version}", router=devices.router)
+app.include_router(prefix=f"/api/v{api_version}", router=groups.router)
+app.include_router(prefix=f"/api/v{api_version}", router=packs.router)
+app.include_router(prefix=f"/api/v{api_version}", router=logs.router)
+app.include_router(prefix=f"/api/v{api_version}", router=admin.router)
+app.include_router(prefix="/ui", router=ui.router)
 
 
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/favicon.ico")
+async def favicon() -> FileResponse:
+    file_favicon = Path("web") / "static" / "favicon.ico"
+    if not file_favicon.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_favicon, media_type="image/x-icon")
+
+
+@app.get('/')
+async def root() -> RedirectResponse:
+    return RedirectResponse(url="/ui/", status_code=302)
+
+
+@app.get('/.well-known/security.txt')
+async def security_txt() -> FileResponse:
+    file_security = Path(__file__).parent.parent / "security.txt"
+    if not file_security.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_security, media_type="text/plain")
 
 
 if __name__ == "__main__":

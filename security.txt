@@ -1,0 +1,11 @@
+# Radegast EDR Security Policy
+#
+# This file covers security disclosures for the Radegast EDR platform
+# (console, web, infrastructure). For vulnerabilities in the Rustinel
+# agent engine, follow the separate policy at:
+# https://github.com/Karib0u/rustinel/blob/main/SECURITY.md
+
+Contact: mailto:security@radegast.app
+Expires: 2027-05-29T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://radegast.app/.well-known/security.txt

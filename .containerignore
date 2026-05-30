@@ -17,6 +17,9 @@ web/.svelte-kit/
 web/build/
 
 # Environment files (local secrets)
+# Note: **/.env does NOT match a root-level .env — exclude both forms explicitly.
+.env
+.env.*
 **/.env
 **/.env.*
 !**/.env.example
@@ -30,9 +33,15 @@ web/build/
 .gitmodules
 .antigravitycli/
 
+# Agent install scripts and release binaries — not needed in the image build context
+agent/release/
+
 # Local data and temp files
 uploads/
 tmp/
 temp/
 scratch/
 *.log
+
+# Documentation / misc — not needed in build context
+README.md

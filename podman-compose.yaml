@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   radegast:
+    image: docker.io/radegast-edr/console:latest
     build:
       context: .
       dockerfile: Containerfile

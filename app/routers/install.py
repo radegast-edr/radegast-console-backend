@@ -61,49 +61,131 @@ async def download_agent(
     return FileResponse(zip_path, media_type="application/zip", filename="rustinel.zip")
 
 
+def build_base64_write_and_decode_block(
+    base64_str: str,
+    base64_file_env_var: str = "SB",
+    base64_file_path: str = "%INSTALL_B64%",
+    output_file_env_var: str = "SO",
+    output_file_path: str = "%INSTALL_SCRIPT%",
+    line_size: int = 7000,
+    progress_label: str = "Decoding script",
+    delete_base64_file: bool = False,
+) -> str:
+    chunks = [base64_str[i:i+line_size] for i in range(0, len(base64_str), line_size)]
+    block = ""
+    block += f'set {base64_file_env_var}={base64_file_path}\r\n'
+    block += f'set {output_file_env_var}={output_file_path}\r\n'
+    if delete_base64_file:
+        block += f'if exist "%{base64_file_env_var}%" del "%{base64_file_env_var}%"\r\n'
+    
+    for i, chunk in enumerate(chunks):
+        op = ">" if i == 0 else ">>"
+        current = i + 1
+        total = len(chunks)
+        percent = int((current / total) * 100)
+        block += f'echo|set /p="{chunk}" {op} "%{base64_file_env_var}%"\r\n'
+        block += f'echo {progress_label}: {current}/{total} ({percent}%)\r\n'
+        
+    block += f'powershell -Command "$b = Get-Content -Path $env:{base64_file_env_var} -Raw; $x = [System.Convert]::FromBase64String($b); [System.IO.File]::WriteAllBytes($env:{output_file_env_var}, $x)"\r\n'
+    return block
+
+
 @install_router.get("/install")
 async def get_install_script(
     os_param: str = Query(..., alias="os"),
 ):
-    if os_param.lower() != "linux":
-        raise HTTPException(status_code=400, detail="Only linux OS is supported for automatic installation")
-
-    config_tmpl = AGENT_DIR / "config" / "linux" / "config.toml"
-    rustinel_service_tmpl = AGENT_DIR / "config" / "linux" / "rustinel.service"
-    radegast_service_tmpl = AGENT_DIR / "config" / "linux" / "radegast-agent.service"
-    install_script_tmpl = AGENT_DIR / "config" / "linux" / "install.sh"
-
-    if not (
-        config_tmpl.exists()
-        and rustinel_service_tmpl.exists()
-        and radegast_service_tmpl.exists()
-        and install_script_tmpl.exists()
-    ):
-        raise HTTPException(status_code=500, detail="Installation templates missing on server")
-
-    config_content = config_tmpl.read_text()
-    rustinel_service_content = rustinel_service_tmpl.read_text()
-    radegast_service_content = radegast_service_tmpl.read_text()
-    install_script_content = install_script_tmpl.read_text()
+    os_name = os_param.lower()
+    if os_name not in ("linux", "windows"):
+        raise HTTPException(status_code=400, detail="Only linux and windows OS are supported for automatic installation")
 
     backend_url = settings.base_url.rstrip("/")
 
-    # Prefill service
-    radegast_service_content = radegast_service_content.replace(
-        "<fix this to the actual absolute path AI>radegast-agent",
-        "/opt/radegast/home/.local/bin/radegast-agent"
-    ).replace(
-        "{{RADEGAST_AGENT_BACKEND_URL}}",
-        backend_url
-    )
+    if os_name == "linux":
+        config_tmpl = AGENT_DIR / "config" / "linux" / "config.toml"
+        rustinel_service_tmpl = AGENT_DIR / "config" / "linux" / "rustinel.service"
+        radegast_service_tmpl = AGENT_DIR / "config" / "linux" / "radegast-agent.service"
+        install_script_tmpl = AGENT_DIR / "config" / "linux" / "install.sh"
 
-    # Render install script via Jinja2
-    template = Template(install_script_content)
-    rendered_script = template.render(
-        backend_url=backend_url,
-        config_content=config_content,
-        rustinel_service_content=rustinel_service_content,
-        radegast_service_content=radegast_service_content,
-    )
+        if not (
+            config_tmpl.exists()
+            and rustinel_service_tmpl.exists()
+            and radegast_service_tmpl.exists()
+            and install_script_tmpl.exists()
+        ):
+            raise HTTPException(status_code=500, detail="Installation templates missing on server")
 
-    return PlainTextResponse(rendered_script, media_type="text/plain")
+        config_content = config_tmpl.read_text()
+        rustinel_service_content = rustinel_service_tmpl.read_text()
+        radegast_service_content = radegast_service_tmpl.read_text()
+        install_script_content = install_script_tmpl.read_text()
+
+        # Prefill service
+        radegast_service_content = radegast_service_content.replace(
+            "<fix this to the actual absolute path AI>radegast-agent",
+            "/opt/radegast/home/.local/bin/radegast-agent"
+        ).replace(
+            "{{RADEGAST_AGENT_BACKEND_URL}}",
+            backend_url
+        )
+
+        # Render install script via Jinja2
+        template = Template(install_script_content)
+        rendered_script = template.render(
+            backend_url=backend_url,
+            config_content=config_content,
+            rustinel_service_content=rustinel_service_content,
+            radegast_service_content=radegast_service_content,
+        )
+
+        return PlainTextResponse(rendered_script, media_type="text/plain")
+
+    else:
+        config_tmpl = AGENT_DIR / "config" / "windows" / "config.toml"
+        install_service_tmpl = AGENT_DIR / "config" / "windows" / "install-service.py"
+        install_bat_tmpl = AGENT_DIR / "config" / "windows" / "install.bat"
+
+        if not (
+            config_tmpl.exists()
+            and install_service_tmpl.exists()
+            and install_bat_tmpl.exists()
+        ):
+            raise HTTPException(status_code=500, detail="Windows installation templates missing on server")
+
+        config_content = config_tmpl.read_text(encoding="utf-8")
+        install_service_content = install_service_tmpl.read_text(encoding="utf-8")
+        install_bat_content = install_bat_tmpl.read_text(encoding="utf-8")
+
+        # Encode config to base64 to put it in install-service.py
+        import base64
+        config_b64 = base64.b64encode(config_content.encode("utf-8")).decode("utf-8")
+
+        # Render install-service.py using Jinja2
+        service_template = Template(install_service_content)
+        rendered_service = service_template.render(
+            backend_url=backend_url,
+            config_b64=config_b64,
+        )
+
+        # Base64 encode the entire install-service.py
+        service_b64 = base64.b64encode(rendered_service.encode("utf-8")).decode("utf-8")
+
+        # Build the write and decode block for the batch file
+        block = build_base64_write_and_decode_block(
+            base64_str=service_b64,
+            base64_file_env_var="SB",
+            base64_file_path="%INSTALL_B64%",
+            output_file_env_var="SO",
+            output_file_path="%INSTALL_SCRIPT%",
+            line_size=7000,
+            progress_label="Decoding script",
+            delete_base64_file=False
+        )
+
+        # Render install.bat using Jinja2 template
+        bat_template = Template(install_bat_content)
+        rendered_bat = bat_template.render(
+            install_service_block=block.strip()
+        )
+
+        return PlainTextResponse(rendered_bat, media_type="text/plain")
+

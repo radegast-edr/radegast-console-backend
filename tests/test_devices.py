@@ -233,8 +233,17 @@ class TestDeviceInstall:
         assert "radegast-agent" in script
         assert "rustinel" in script
 
-    async def test_get_install_script_invalid_os(self, client: AsyncClient):
+    async def test_get_install_script_windows(self, client: AsyncClient):
         resp = await client.get("/device/install?os=windows")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/plain")
+        script = resp.text
+        assert "@echo off" in script
+        assert "Radegast EDR Installation" in script
+        assert "Decoding script" in script
+
+    async def test_get_install_script_invalid_os(self, client: AsyncClient):
+        resp = await client.get("/device/install?os=macos")
         assert resp.status_code == 400
 
     async def test_download_agent_latest(self, client: AsyncClient):

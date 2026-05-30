@@ -218,3 +218,31 @@ class TestGroupEndpoints:
     async def test_unlink_group_not_found(self, auth_client: AsyncClient):
         resp = await auth_client.delete("/groups/99999/teams/1")
         assert resp.status_code in (403, 404)
+
+
+@pytest.mark.asyncio
+class TestDeviceInstall:
+    async def test_get_install_script_linux(self, client: AsyncClient):
+        resp = await client.get("/device/install?os=linux")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/plain")
+        script = resp.text
+        assert "#!/bin/bash" in script
+        assert "RADEGAST_TOKEN" in script
+        assert "%REPLACE_WITH_YOUR_AGENT_TOKEN%" in script
+        assert "radegast-agent" in script
+        assert "rustinel" in script
+
+    async def test_get_install_script_invalid_os(self, client: AsyncClient):
+        resp = await client.get("/device/install?os=windows")
+        assert resp.status_code == 400
+
+    async def test_download_agent_latest(self, client: AsyncClient):
+        resp = await client.get("/device/agent/download?os=linux&arch=amd64")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/zip"
+        assert len(resp.content) > 0
+
+    async def test_download_agent_not_found(self, client: AsyncClient):
+        resp = await client.get("/device/agent/download?os=linux&arch=nonexistent")
+        assert resp.status_code == 404

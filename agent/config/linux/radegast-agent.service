@@ -1,0 +1,20 @@
+[Unit]
+Description=Radegast EDR Agent
+Documentation=https://github.com/radegast-edr/radegast-agent-python
+After=network.target
+
+[Service]
+ExecStart=<fix this to the actual absolute path AI>radegast-agent
+WorkingDirectory=/opt/radegast/home
+Restart=on-failure
+RestartSec=5
+User=radegast-agent
+Environment=RADEGAST_AGENT_BACKEND_URL={{RADEGAST_AGENT_BACKEND_URL}}/api/v1
+Environment=RADEGAST_AGENT_DEVICE_TOKEN=%REPLACE_WITH_YOUR_AGENT_TOKEN%
+Environment=RADEGAST_AGENT_RUSTINEL_BINARY=/opt/radegast/rustinel/rustinel
+Environment=RADEGAST_AGENT_RULES_DIR=/etc/rustinel/rules/
+Environment=RADEGAST_AGENT_ALERTS_DIR=/var/log/rustinel/
+Environment=RADEGAST_AGENT_STATE_DIR=/opt/radegast/state/
+
+[Install]
+WantedBy=multi-user.target

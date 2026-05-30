@@ -227,6 +227,8 @@ async def set_signing_key(
     device: Device = Depends(get_current_device),
     db: AsyncSession = Depends(get_db),
 ):
+    if device.signature_public_key is not None:
+        raise HTTPException(status_code=400, detail="Signing key already set")
     device.signature_public_key = data.signature_public_key
     await db.commit()
     return {"message": "Signing key set"}

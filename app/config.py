@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     smtp_from: str = "noreply@radegast.local"
     base_url: str = "http://localhost:8000"
     upload_dir: str = "uploads/packs"
+    releases_dir: str = "agent/releases"
     session_cookie_name: str = "radegast_session"
     session_max_age: int = 86400 * 7  # 7 days
 

@@ -1,0 +1,74 @@
+# Rustinel Configuration File
+# This file is optional - the agent will use defaults if not present
+
+# 1. Feature Toggles & Rules
+[scanner]
+sigma_enabled = true
+sigma_rules_path = "/etc/rustinel/rules/sigma"
+yara_enabled = true
+yara_rules_path = "/etc/rustinel/rules/yara"
+
+[reload]
+enabled = true
+debounce_ms = 2000          # poll cadence is max(debounce_ms, 2000)
+
+# Shared allowlist applied to:
+# - response.allowlist_paths
+# - ioc.hash_allowlist_paths
+# - scanner.yara_allowlist_paths
+#
+# Platform defaults are compiled in — only set this to override them.
+#
+# Linux defaults:
+#   /usr/bin/, /usr/sbin/, /usr/lib/, /usr/lib64/, /usr/libexec/,
+#   /bin/, /sbin/, /lib/, /lib64/
+# Windows defaults:
+#   C:\Windows\, C:\Program Files\, C:\Program Files (x86)\
+#
+# [allowlist]
+# paths = [
+#   "/usr/bin/",
+#   "/usr/sbin/",
+#   "/custom/trusted/path/",
+# ]
+
+# 2. Operational Logging (The Agent's internal health)
+#    Writes to: {directory}/{filename}.<date>
+[logging]
+level = "info"              # trace, debug, info, warn, error
+# Optional target-aware filter (takes precedence over level when set)
+# filter = "info,engine=info,scanner=info,ioc=info,rustinel::normalizer=info"
+directory = "logs"
+filename = "/var/log/rustinel/rustinel.log"
+console_output = true       # If true, duplicate logs to stdout (dev mode)
+
+# 3. Security Alerts (The Detection Output)
+#    Writes to: {directory}/{filename}.<date>
+[alerts]
+directory = "logs"
+filename = "/var/log/rustinel/alerts.json"    # Will contain newline-delimited JSON (NDJSON)
+match_debug = "off"         # off | summary | full (attach match details to alerts.json)
+
+# 4. Active Response (Optional Prevention)
+[response]
+enabled = false
+prevention_enabled = false
+min_severity = "critical"   # sigma: critical only; yara always treated as critical
+channel_capacity = 128
+# Processes that will never be terminated, matched by image basename or full path.
+# Complement the compiled-in path allowlist above for named system processes.
+#
+# Linux examples:  systemd, systemd-journald, sshd, dbus-daemon, auditd
+# Windows examples: smss.exe, csrss.exe, wininit.exe, lsass.exe, svchost.exe
+#
+# allowlist_images = []
+
+# 5. Atomic IOC Detection (Hashes, IPs, Domains, Path Regex)
+[ioc]
+enabled = true
+hashes_path = "/etc/rustinel/rules/ioc/hashes.txt"
+ips_path = "/etc/rustinel/rules/ioc/ips.txt"
+domains_path = "/etc/rustinel/rules/ioc/domains.txt"
+paths_regex_path = "/etc/rustinel/rules/ioc/paths_regex.txt"
+default_severity = "high"
+max_file_size_mb = 50

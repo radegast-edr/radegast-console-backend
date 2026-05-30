@@ -6,3 +6,5 @@ venv
 .run
 uploads
 .antigravitycli
+agent/releases
+!agent/releases/.gitkeep

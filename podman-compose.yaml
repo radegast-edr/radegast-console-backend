@@ -11,14 +11,17 @@ services:
     volumes:
       - radegast_database:/app/data/db
       - radegast_uploads:/app/data/uploads
+      - radegast_releases:/app/data/releases
     environment:
       - RADEGAST_SECRET_KEY=change-me-in-production-with-a-real-secure-key
       - RADEGAST_CORS_ORIGINS=http://localhost:8000
       - RADEGAST_BASE_URL=http://localhost:8000
       - RADEGAST_DATABASE_URL=sqlite+aiosqlite:////app/data/db/radegast.db
       - RADEGAST_UPLOAD_DIR=/app/data/uploads
+      - RADEGAST_RELEASES_DIR=/app/data/releases
     restart: always
 
 volumes:
   radegast_database:
   radegast_uploads:
+  radegast_releases:

@@ -7,6 +7,7 @@ class TeamCreate(BaseModel):
     permission_invite: str | None = None
     permission_admin: str | None = None
     permission_logs: str | None = None
+    managing_team_id: int | None = None
 
 
 class TeamUpdate(BaseModel):
@@ -15,6 +16,7 @@ class TeamUpdate(BaseModel):
     permission_invite: str | None = None
     permission_admin: str | None = None
     permission_logs: str | None = None
+    managing_team_id: int | None = None
 
 
 class TeamResponse(BaseModel):
@@ -24,6 +26,7 @@ class TeamResponse(BaseModel):
     permission_invite: str | None
     permission_admin: str | None
     permission_logs: str | None
+    managing_team_id: int | None = None
 
     model_config = {"from_attributes": True}
 

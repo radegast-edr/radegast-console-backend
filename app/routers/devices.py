@@ -19,6 +19,11 @@ from app.schemas.device import (
     DeviceSetSigningKey,
 )
 from app.services.auth import generate_token, hash_token
+from app.services.permissions import (
+    get_user_team_ids_transitive,
+    is_user_member_of_team_transitive,
+    has_team_admin_permission,
+)
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -38,10 +43,11 @@ async def create_device(
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
 
-    has_access = any(
-        user in team.users and team.permission_admin is not None
-        for team in group.teams
-    )
+    has_access = False
+    for team in group.teams:
+        if await has_team_admin_permission(team.id, user.id, db):
+            has_access = True
+            break
     if not has_access:
         raise HTTPException(status_code=403, detail="No admin permission on any team for this group")
 
@@ -71,10 +77,13 @@ async def list_devices(
     db: AsyncSession = Depends(get_db),
 ):
     # Return devices visible to user through their teams' groups
+    team_ids = await get_user_team_ids_transitive(user.id, db)
+    if not team_ids:
+        return []
     result = await db.execute(
         select(Team)
         .options(selectinload(Team.groups).selectinload(DeviceGroup.devices))
-        .where(Team.users.any(User.id == user.id))
+        .where(Team.id.in_(list(team_ids)))
     )
     teams = result.scalars().all()
     devices = set()
@@ -105,11 +114,14 @@ async def get_device(
         raise HTTPException(status_code=404, detail="Device not found")
 
     # Verify user can see this device (member of at least one team owning any of its groups)
-    visible = any(
-        user in team.users
-        for group in device.groups
-        for team in group.teams
-    )
+    visible = False
+    for group in device.groups:
+        for team in group.teams:
+            if await is_user_member_of_team_transitive(team.id, user.id, db):
+                visible = True
+                break
+        if visible:
+            break
     if not visible:
         raise HTTPException(status_code=403, detail="Not authorized")
 
@@ -138,7 +150,11 @@ async def remove_device_from_group(
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
 
-    has_access = any(user in team.users and team.permission_admin is not None for team in group.teams)
+    has_access = False
+    for team in group.teams:
+        if await has_team_admin_permission(team.id, user.id, db):
+            has_access = True
+            break
     if not has_access:
         raise HTTPException(status_code=403, detail="No admin permission on any team for this group")
 
@@ -173,10 +189,11 @@ async def add_device_to_group(
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
 
-    has_access = any(
-        user in team.users and team.permission_admin is not None
-        for team in group.teams
-    )
+    has_access = False
+    for team in group.teams:
+        if await has_team_admin_permission(team.id, user.id, db):
+            has_access = True
+            break
     if not has_access:
         raise HTTPException(status_code=403, detail="No admin permission on any team for this group")
 
@@ -190,11 +207,14 @@ async def add_device_to_group(
         raise HTTPException(status_code=404, detail="Device not found")
 
     if device.groups:
-        device_admin = any(
-            user in team.users and team.permission_admin is not None
-            for g in device.groups
-            for team in g.teams
-        )
+        device_admin = False
+        for g in device.groups:
+            for team in g.teams:
+                if await has_team_admin_permission(team.id, user.id, db):
+                    device_admin = True
+                    break
+            if device_admin:
+                break
         if not device_admin:
             raise HTTPException(status_code=403, detail="No admin permission on this device")
 
@@ -221,11 +241,14 @@ async def rename_device(
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
 
-    has_access = any(
-        user in team.users and team.permission_admin is not None
-        for group in device.groups
-        for team in group.teams
-    )
+    has_access = False
+    for group in device.groups:
+        for team in group.teams:
+            if await has_team_admin_permission(team.id, user.id, db):
+                has_access = True
+                break
+        if has_access:
+            break
     if not has_access:
         raise HTTPException(status_code=403, detail="No admin permission")
 

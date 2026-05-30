@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Enum, Integer, String
+from sqlalchemy import Enum, Integer, String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -41,8 +41,14 @@ class Team(Base):
     permission_logs: Mapped[PermissionLogs | None] = mapped_column(
         Enum(PermissionLogs), nullable=True
     )
+    managing_team_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("teams.id"), nullable=True
+    )
 
     users = relationship("User", secondary=team_users, back_populates="teams")
     groups = relationship(
         "DeviceGroup", secondary=team_device_groups, back_populates="teams"
+    )
+    managing_team: Mapped["Team | None"] = relationship(
+        "Team", remote_side=[id], backref="managed_teams"
     )

@@ -169,10 +169,12 @@ async def enable_pack_for_group(
     if not group:
         raise HTTPException(status_code=404, detail="Device group not found")
 
-    has_write = any(
-        user in team.users and team.permission_pack == "write"
-        for team in group.teams
-    )
+    from app.services.permissions import is_user_member_of_team_transitive
+    has_write = False
+    for team in group.teams:
+        if await is_user_member_of_team_transitive(team.id, user.id, db) and team.permission_pack == "write":
+            has_write = True
+            break
     if not has_write:
         raise HTTPException(status_code=403, detail="No pack write permission for this group")
 
@@ -218,10 +220,12 @@ async def list_enabled_packs(
     if not group:
         raise HTTPException(status_code=404, detail="Device group not found")
 
-    has_read = any(
-        user in team.users and team.permission_pack is not None
-        for team in group.teams
-    )
+    from app.services.permissions import is_user_member_of_team_transitive
+    has_read = False
+    for team in group.teams:
+        if await is_user_member_of_team_transitive(team.id, user.id, db) and team.permission_pack is not None:
+            has_read = True
+            break
     if not has_read:
         raise HTTPException(status_code=403, detail="No pack permission for this group")
 
@@ -261,10 +265,12 @@ async def disable_pack(
     if not group:
         raise HTTPException(status_code=404, detail="Device group not found")
 
-    has_write = any(
-        user in team.users and team.permission_pack == "write"
-        for team in group.teams
-    )
+    from app.services.permissions import is_user_member_of_team_transitive
+    has_write = False
+    for team in group.teams:
+        if await is_user_member_of_team_transitive(team.id, user.id, db) and team.permission_pack == "write":
+            has_write = True
+            break
     if not has_write:
         raise HTTPException(status_code=403, detail="No pack write permission")
 

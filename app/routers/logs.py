@@ -229,18 +229,19 @@ async def get_encryption_keys(
     )
     device = result.scalar_one()
 
+    from app.services.permissions import get_team_members_transitive
     user_ids = set()
     for group in device.groups:
         for team in group.teams:
             if team.permission_logs == "read":
-                for u in team.users:
-                    user_ids.add(u.id)
+                team_user_ids = await get_team_members_transitive(team.id, db)
+                user_ids.update(team_user_ids)
 
     if not user_ids:
         return []
 
     result = await db.execute(
-        select(PublicKey).where(PublicKey.user_id.in_(user_ids))
+        select(PublicKey).where(PublicKey.user_id.in_(list(user_ids)))
     )
     keys = result.scalars().all()
     return [{"user_id": k.user_id, "public_key": k.public_key, "key_type": k.key_type} for k in keys]

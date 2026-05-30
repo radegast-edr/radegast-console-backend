@@ -19,17 +19,69 @@ from app.schemas.team import (
 )
 from app.services.email import send_invite_email
 
+from app.services.permissions import (
+    get_user_team_ids_transitive,
+    is_user_member_of_team_transitive,
+    has_team_admin_permission,
+)
+
 router = APIRouter(prefix="/teams", tags=["teams"])
+
+
+async def verify_admin_chain(
+    team_id: int | None,
+    permission_admin: str | None,
+    managing_team_id: int | None,
+    db: AsyncSession,
+) -> None:
+    """
+    Verify that the team will either have admin=write or lead to a team with admin=write somewhere in the chain.
+    """
+    if permission_admin == "write":
+        return
+
+    if managing_team_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Team must have admin='write' or specify a managing team to prevent permanent lockout.",
+        )
+
+    # Walk up the chain of managing teams to verify that at least one has admin=write
+    curr_id = managing_team_id
+    visited = set()
+    if team_id is not None:
+        visited.add(team_id)
+
+    has_write = False
+    while curr_id is not None and curr_id not in visited:
+        visited.add(curr_id)
+        res = await db.execute(select(Team).where(Team.id == curr_id))
+        mt = res.scalar_one_or_none()
+        if not mt:
+            break
+        if mt.permission_admin == "write":
+            has_write = True
+            break
+        curr_id = mt.managing_team_id
+
+    if not has_write:
+        raise HTTPException(
+            status_code=400,
+            detail="Every team must have admin='write' or have a team with admin='write' somewhere in its managing chain.",
+        )
 
 
 @router.get("/", response_model=list[TeamResponse])
 async def list_teams(
     user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
+    team_ids = await get_user_team_ids_transitive(user.id, db)
+    if not team_ids:
+        return []
     result = await db.execute(
         select(Team)
         .options(selectinload(Team.users))
-        .where(Team.users.any(User.id == user.id))
+        .where(Team.id.in_(list(team_ids)))
     )
     teams = result.scalars().all()
     return teams
@@ -41,12 +93,22 @@ async def create_team(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if data.managing_team_id is not None:
+        if not await has_team_admin_permission(data.managing_team_id, user.id, db):
+            raise HTTPException(
+                status_code=403,
+                detail="No admin permission on the managing team",
+            )
+
+    await verify_admin_chain(None, data.permission_admin, data.managing_team_id, db)
+
     team = Team(
         name=data.name,
         permission_pack=data.permission_pack,
         permission_invite=data.permission_invite,
         permission_admin=data.permission_admin,
         permission_logs=data.permission_logs,
+        managing_team_id=data.managing_team_id,
     )
     db.add(team)
     await db.flush()
@@ -74,8 +136,29 @@ async def update_team(
     db: AsyncSession = Depends(get_db),
 ):
     team = await _get_user_team(team_id, user, db)
-    if team.permission_admin is None:
+    if not await has_team_admin_permission(team_id, user.id, db):
         raise HTTPException(status_code=403, detail="No admin permission on this team")
+
+    # If updating managing_team_id, verify user has admin access to that managing team
+    if "managing_team_id" in data.model_fields_set and data.managing_team_id is not None:
+        if not await has_team_admin_permission(data.managing_team_id, user.id, db):
+            raise HTTPException(
+                status_code=403,
+                detail="No admin permission on the managing team",
+            )
+
+    # Validate the resulting admin chain
+    proposed_admin = (
+        data.permission_admin
+        if "permission_admin" in data.model_fields_set
+        else team.permission_admin
+    )
+    proposed_managing = (
+        data.managing_team_id
+        if "managing_team_id" in data.model_fields_set
+        else team.managing_team_id
+    )
+    await verify_admin_chain(team.id, proposed_admin, proposed_managing, db)
 
     if "name" in data.model_fields_set:
         team.name = data.name
@@ -87,6 +170,8 @@ async def update_team(
         team.permission_admin = data.permission_admin
     if "permission_logs" in data.model_fields_set:
         team.permission_logs = data.permission_logs
+    if "managing_team_id" in data.model_fields_set:
+        team.managing_team_id = data.managing_team_id
 
     await db.commit()
     await db.refresh(team)
@@ -101,7 +186,8 @@ async def invite_to_team(
     db: AsyncSession = Depends(get_db),
 ):
     team = await _get_user_team(team_id, user, db)
-    if team.permission_invite is None:
+    is_admin = await has_team_admin_permission(team_id, user.id, db)
+    if not is_admin and team.permission_invite is None:
         raise HTTPException(status_code=403, detail="No invite permission on this team")
 
     await send_invite_email(data.email, team.id, team.name)
@@ -126,7 +212,7 @@ async def remove_member(
     db: AsyncSession = Depends(get_db),
 ):
     team = await _get_user_team(team_id, user, db)
-    if team.permission_admin is None:
+    if not await has_team_admin_permission(team_id, user.id, db):
         raise HTTPException(status_code=403, detail="No admin permission on this team")
 
     # For teams with admin=write, ensure at least one admin always remains
@@ -167,7 +253,7 @@ async def create_team_group(
     db: AsyncSession = Depends(get_db),
 ):
     team = await _get_user_team(team_id, user, db)
-    if team.permission_admin is None:
+    if not await has_team_admin_permission(team_id, user.id, db):
         raise HTTPException(status_code=403, detail="No admin permission on this team")
 
     group = DeviceGroup(name=data.name)
@@ -187,7 +273,7 @@ async def link_group_to_team(
     db: AsyncSession = Depends(get_db),
 ):
     team = await _get_user_team(team_id, user, db)
-    if team.permission_admin is None:
+    if not await has_team_admin_permission(team_id, user.id, db):
         raise HTTPException(status_code=403, detail="No admin permission on this team")
 
     result = await db.execute(
@@ -200,10 +286,11 @@ async def link_group_to_team(
         raise HTTPException(status_code=404, detail="Device group not found")
 
     # Verify user has admin access to this group (i.e. has admin permission on at least one team this group currently belongs to)
-    group_admin = any(
-        user in t.users and t.permission_admin is not None
-        for t in group.teams
-    )
+    group_admin = False
+    for t in group.teams:
+        if await has_team_admin_permission(t.id, user.id, db):
+            group_admin = True
+            break
     if not group_admin:
         raise HTTPException(status_code=403, detail="No admin permission on this device group")
 
@@ -248,6 +335,6 @@ async def _get_user_team(team_id: int, user: User, db: AsyncSession) -> Team:
     team = result.scalar_one_or_none()
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
-    if user not in team.users:
+    if not await is_user_member_of_team_transitive(team_id, user.id, db):
         raise HTTPException(status_code=403, detail="Not a member of this team")
     return team

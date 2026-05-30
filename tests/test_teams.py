@@ -26,7 +26,7 @@ class TestTeamCRUD:
     async def test_create_team(self, auth_client: AsyncClient):
         resp = await auth_client.post(
             "/teams/",
-            json={"name": "My Team", "permission_pack": "read"},
+            json={"name": "My Team", "permission_pack": "read", "permission_admin": "write"},
         )
         assert resp.status_code == 200
         assert resp.json()["name"] == "My Team"
@@ -292,4 +292,98 @@ class TestDeviceGroups:
         # User 2 tries to add User 1's device to User 2's group. This should fail.
         resp = await client.post(f"/devices/{device_id}/groups/{user2_group_id}")
         assert resp.status_code == 403
+
+    async def test_managing_team_transitive_membership_and_permissions(self, client: AsyncClient):
+        # 1. User 1 registers. User 1 has Team 1 (admin=write by default)
+        user1_email = "user1_mt@example.com"
+        await client.post("/auth/register", json={"email": user1_email, "password": "User1Pass123!"})
+        from app.services.auth import create_signed_token
+        token = create_signed_token({"email": user1_email}, salt="email-verify")
+        await client.get(f"/auth/verify?token={token}")
+
+        # Log in User 1
+        await client.post("/auth/login", json={"email": user1_email, "password": "User1Pass123!"})
+        resp = await client.get("/teams/")
+        user1_teams = resp.json()
+        team1_id = user1_teams[0]["id"]
+
+        # 2. Try to create Team 2 with admin=None and NO managing team (should fail with 400)
+        resp = await client.post(
+            "/teams/",
+            json={"name": "Team 2", "permission_admin": None}
+        )
+        assert resp.status_code == 400
+
+        # 3. Create Team 2 with admin=None and managing_team_id = team1_id (should succeed)
+        resp = await client.post(
+            "/teams/",
+            json={"name": "Team 2", "permission_admin": None, "managing_team_id": team1_id}
+        )
+        assert resp.status_code == 200
+        team2_id = resp.json()["id"]
+
+        # 4. Create Team 3 with admin=None and managing_team_id = team2_id (valid chain leading to team1_id -> admin=write)
+        resp = await client.post(
+            "/teams/",
+            json={"name": "Team 3", "permission_admin": None, "managing_team_id": team2_id}
+        )
+        assert resp.status_code == 200
+        team3_id = resp.json()["id"]
+
+        # 5. Try to create a circular dependency (Team 1 managed by Team 3, which is managed by Team 2, which is managed by Team 1)
+        # Update Team 1 to be managed by Team 3. Since Team 1 has admin=write, this is valid.
+        resp = await client.put(
+            f"/teams/{team1_id}",
+            json={"managing_team_id": team3_id}
+        )
+        assert resp.status_code == 200
+
+        # Now try to set Team 1 admin to None (this would create a cycle without admin=write anywhere)
+        resp = await client.put(
+            f"/teams/{team1_id}",
+            json={"permission_admin": None}
+        )
+        assert resp.status_code == 400
+
+        # 6. Verify virtual membership:
+        # Log out User 1, and register User 2.
+        await client.post("/auth/logout")
+        user2_email = "user2_mt@example.com"
+        await client.post("/auth/register", json={"email": user2_email, "password": "User2Pass123!"})
+        token = create_signed_token({"email": user2_email}, salt="email-verify")
+        await client.get(f"/auth/verify?token={token}")
+
+        # Log in User 2
+        await client.post("/auth/login", json={"email": user2_email, "password": "User2Pass123!"})
+        # User 2 only belongs to Team 2's default team.
+        # User 1 invites User 2 to Team 1. We must log in User 1 to invite User 2.
+        await client.post("/auth/logout")
+        await client.post("/auth/login", json={"email": user1_email, "password": "User1Pass123!"})
+
+        # User 1 invites User 2 to Team 1
+        resp = await client.post(f"/teams/{team1_id}/invite", json={"email": user2_email})
+        assert resp.status_code == 200
+
+        # Log out User 1, log in User 2, accept invite to Team 1
+        await client.post("/auth/logout")
+        await client.post("/auth/login", json={"email": user2_email, "password": "User2Pass123!"})
+
+        invite_token = create_signed_token({"email": user2_email, "team_id": team1_id}, salt="team-invite")
+        resp = await client.get(f"/auth/invite/accept?token={invite_token}")
+        assert resp.status_code == 200
+
+        # Now User 2 is a direct member of Team 1.
+        # Since Team 1 manages Team 2, which manages Team 3, User 2 should be a transitive member of Team 2 and Team 3!
+        # So User 2 should see Team 2 and Team 3 in their teams list!
+        resp = await client.get("/teams/")
+        assert resp.status_code == 200
+        team_names = [t["name"] for t in resp.json()]
+        assert "Team 2" in team_names
+        assert "Team 3" in team_names
+
+        # And User 2 should have admin permission on Team 2 and Team 3 (since Team 1 has admin=write, and Team 1 manages them)
+        # Verify User 2 can update Team 3's name (requires admin permission on Team 3)
+        resp = await client.put(f"/teams/{team3_id}", json={"name": "Team 3 Updated"})
+        assert resp.status_code == 200
+        assert resp.json()["name"] == "Team 3 Updated"
 

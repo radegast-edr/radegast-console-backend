@@ -106,5 +106,6 @@ class NotificationSettings(BaseModel):
     notify_recovery_used: bool
     notify_keys_transferred: bool
     notify_device_log: bool
+    notify_downtime_maintenance: bool
 
     model_config = {"from_attributes": True}

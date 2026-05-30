@@ -607,6 +607,7 @@ class TestNotificationSettings:
         assert "notify_new_keys" in data
         assert data["notify_login"] is True
         assert data["notify_device_log"] is True
+        assert data["notify_downtime_maintenance"] is True
 
     async def test_update_notifications(self, client: AsyncClient):
         from unittest.mock import AsyncMock, patch
@@ -617,6 +618,7 @@ class TestNotificationSettings:
             "notify_recovery_used": False,
             "notify_keys_transferred": True,
             "notify_device_log": False,
+            "notify_downtime_maintenance": False,
         }
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
             resp = await client.put("/auth/notifications", json=payload)
@@ -624,11 +626,13 @@ class TestNotificationSettings:
         data = resp.json()
         assert data["notify_login"] is False
         assert data["notify_device_log"] is False
+        assert data["notify_downtime_maintenance"] is False
 
         # Verify persisted
         resp2 = await client.get("/auth/notifications")
         assert resp2.json()["notify_login"] is False
         assert resp2.json()["notify_device_log"] is False
+        assert resp2.json()["notify_downtime_maintenance"] is False
 
     async def test_notifications_requires_auth(self, client: AsyncClient):
         resp = await client.get("/auth/notifications", cookies={})

@@ -447,12 +447,15 @@ async def update_notifications(
         disabled_features.append("Keys transferred to another device")
     if user.notify_device_log and not data.notify_device_log:
         disabled_features.append("New alert notification")
+    if user.notify_downtime_maintenance and not data.notify_downtime_maintenance:
+        disabled_features.append("Platform downtime and maintenance emails")
 
     user.notify_login = data.notify_login
     user.notify_new_keys = data.notify_new_keys
     user.notify_recovery_used = data.notify_recovery_used
     user.notify_keys_transferred = data.notify_keys_transferred
     user.notify_device_log = data.notify_device_log
+    user.notify_downtime_maintenance = data.notify_downtime_maintenance
     await db.commit()
 
     if disabled_features:

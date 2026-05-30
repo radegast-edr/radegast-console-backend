@@ -37,6 +37,7 @@ class User(Base):
     notify_recovery_used: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     notify_keys_transferred: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     notify_device_log: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    notify_downtime_maintenance: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     public_keys = relationship("PublicKey", back_populates="user", cascade="all, delete-orphan")
     teams = relationship("Team", secondary=team_users, back_populates="users")

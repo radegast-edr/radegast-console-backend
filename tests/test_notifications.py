@@ -341,6 +341,7 @@ class TestNotificationDisabledAlert:
             "notify_recovery_used": True,
             "notify_keys_transferred": True,
             "notify_device_log": True,
+            "notify_downtime_maintenance": True,
         }
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
             resp = await client.put("/auth/notifications", json=payload)
@@ -361,6 +362,7 @@ class TestNotificationDisabledAlert:
             "notify_recovery_used": True,
             "notify_keys_transferred": True,
             "notify_device_log": True,
+            "notify_downtime_maintenance": True,
         }
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
             resp = await client.put("/auth/notifications", json=payload)
@@ -368,3 +370,28 @@ class TestNotificationDisabledAlert:
 
         subjects = [call.args[1] for call in mock_send.call_args_list]
         assert not any("Notification Settings Disabled" in s for s in subjects)
+
+    async def test_notification_downtime_maintenance_disabled_sends_email(self, client: AsyncClient):
+        email = "notif_disabled_downtime@example.com"
+        password = "Password123!"
+        await _register_and_verify(client, email, password)
+        await _login(client, email, password)
+
+        payload = {
+            "notify_login": True,
+            "notify_new_keys": True,
+            "notify_recovery_used": True,
+            "notify_keys_transferred": True,
+            "notify_device_log": True,
+            "notify_downtime_maintenance": False,
+        }
+        with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
+            resp = await client.put("/auth/notifications", json=payload)
+            assert resp.status_code == 200
+
+        calls = mock_send.call_args_list
+        assert len(calls) > 0
+        disabled_emails = [call.args for call in calls if "Notification Settings Disabled" in call.args[1]]
+        assert len(disabled_emails) == 1
+        body = disabled_emails[0][2]
+        assert "Platform downtime and maintenance emails" in body

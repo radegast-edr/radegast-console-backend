@@ -15,6 +15,7 @@ class Device(Base):
     token: Mapped[str] = mapped_column(String(255), nullable=False)
     token_change: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     signature_public_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_seen: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     groups = relationship(
         "DeviceGroup", secondary=device_group_devices, back_populates="devices"

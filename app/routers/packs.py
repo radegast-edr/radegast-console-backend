@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -316,6 +317,8 @@ async def device_available_packs(
         .where(Device.id == device.id)
     )
     device = result.scalar_one()
+    device.last_seen = datetime.utcnow()
+    await db.commit()
 
     packs = []
     for group in device.groups:

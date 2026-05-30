@@ -39,7 +39,7 @@ def _group_detail(group: DeviceGroup) -> dict:
             }
             for t in group.teams
         ],
-        "devices": [{"id": d.id, "name": d.name, "signature_public_key": d.signature_public_key} for d in group.devices],
+        "devices": [{"id": d.id, "name": d.name, "signature_public_key": d.signature_public_key, "last_seen": d.last_seen} for d in group.devices],
     }
 
 

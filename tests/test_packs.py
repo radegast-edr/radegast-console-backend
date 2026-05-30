@@ -137,6 +137,40 @@ class TestPackVersions:
         assert resp.status_code == 200
         assert len(resp.json()) == 2
 
+    async def test_upload_invalid_version_format_fails(self, maintainer_client: AsyncClient):
+        resp = await maintainer_client.post(
+            "/packs/", json={"name": "Semver Format Pack", "description": "Test"}
+        )
+        pack_id = resp.json()["id"]
+
+        zip_content = b"PK\x03\x04" + b"\x00" * 100
+        for invalid_version in ["1.0", "1.0.0.0", "v1.0.0", "abc"]:
+            resp = await maintainer_client.post(
+                f"/packs/{pack_id}/versions?version={invalid_version}",
+                files={"file": ("pack.zip", zip_content, "application/zip")},
+            )
+            assert resp.status_code == 400
+
+    async def test_upload_older_version_fails(self, maintainer_client: AsyncClient):
+        resp = await maintainer_client.post(
+            "/packs/", json={"name": "Older Version Pack", "description": "Test"}
+        )
+        pack_id = resp.json()["id"]
+
+        zip_content = b"PK\x03\x04" + b"\x00" * 100
+        resp = await maintainer_client.post(
+            f"/packs/{pack_id}/versions?version=1.0.0",
+            files={"file": ("pack.zip", zip_content, "application/zip")},
+        )
+        assert resp.status_code == 200
+
+        resp = await maintainer_client.post(
+            f"/packs/{pack_id}/versions?version=0.9.0",
+            files={"file": ("pack.zip", zip_content, "application/zip")},
+        )
+        assert resp.status_code == 400
+        assert "must be higher than existing version" in resp.json()["detail"]
+
 
 @pytest.mark.asyncio
 class TestPackEnabling:
@@ -262,6 +296,7 @@ class TestDevicePacks:
 
         # Create device (automatically added to group on creation)
         resp = await maintainer_client.post("/devices/", json={"name": "DevPackAgent", "group_id": group_id})
+        device_id = resp.json()["id"]
         device_token = resp.json()["token"]
 
         await maintainer_client.post(
@@ -272,15 +307,30 @@ class TestDevicePacks:
         # Login as device using client (same object as maintainer_client)
         await client.post("/auth/device/login", json={"token": device_token})
 
-        return {"version_id": version_id, "pack_id": pack_id, "group_id": group_id}
+        return {"version_id": version_id, "pack_id": pack_id, "group_id": group_id, "device_id": device_id, "token": device_token}
 
     async def test_device_available_packs(self, maintainer_client: AsyncClient, client: AsyncClient):
         info = await self._setup_device_with_pack(maintainer_client, client)
+
+        # Check last_seen is None initially (wait, _setup_device_with_pack already logged in as device, so let's log back in as maintainer first)
+        await client.post("/auth/login", json={"email": "maintainer@example.com", "password": "MaintainerPass123!"})
+        resp = await client.get(f"/devices/{info['device_id']}")
+        assert resp.status_code == 200
+        assert resp.json()["last_seen"] is None
+
+        # Log back in as device
+        await client.post("/auth/device/login", json={"token": info["token"]})
         resp = await client.get("/packs/device/available")
         assert resp.status_code == 200
         packs = resp.json()
         assert len(packs) >= 1
         assert any(p["pack_version_id"] == info["version_id"] for p in packs)
+
+        # Log back in as maintainer to check last_seen is updated
+        await client.post("/auth/login", json={"email": "maintainer@example.com", "password": "MaintainerPass123!"})
+        resp = await client.get(f"/devices/{info['device_id']}")
+        assert resp.status_code == 200
+        assert resp.json()["last_seen"] is not None
 
     async def test_device_download_pack_not_found(
         self, auth_client: AsyncClient, client: AsyncClient

@@ -84,7 +84,7 @@ async def list_devices(
                 devices.add(device)
 
     return [
-        DeviceResponse(id=d.id, name=d.name, signature_public_key=d.signature_public_key)
+        DeviceResponse(id=d.id, name=d.name, signature_public_key=d.signature_public_key, last_seen=d.last_seen)
         for d in devices
     ]
 
@@ -117,6 +117,7 @@ async def get_device(
         id=device.id,
         name=device.name,
         signature_public_key=device.signature_public_key,
+        last_seen=device.last_seen,
         groups=[{"id": g.id, "name": g.name} for g in device.groups],
     )
 
@@ -217,7 +218,7 @@ async def rename_device(
 
     device.name = data.name
     await db.commit()
-    return DeviceResponse(id=device.id, name=device.name, signature_public_key=device.signature_public_key)
+    return DeviceResponse(id=device.id, name=device.name, signature_public_key=device.signature_public_key, last_seen=device.last_seen)
 
 
 @router.post("/signing-key")

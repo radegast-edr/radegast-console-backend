@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel
 from app.schemas.team import DeviceGroupResponse
 
@@ -11,6 +12,7 @@ class DeviceResponse(BaseModel):
     id: int
     name: str
     signature_public_key: str | None
+    last_seen: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -19,6 +21,7 @@ class DeviceDetailResponse(BaseModel):
     id: int
     name: str
     signature_public_key: str | None
+    last_seen: datetime | None = None
     groups: list[DeviceGroupResponse]
 
     model_config = {"from_attributes": True}

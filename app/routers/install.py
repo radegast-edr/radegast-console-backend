@@ -67,7 +67,7 @@ def build_base64_write_and_decode_block(
     base64_file_path: str = "%INSTALL_B64%",
     output_file_env_var: str = "SO",
     output_file_path: str = "%INSTALL_SCRIPT%",
-    line_size: int = 7000,
+    line_size: int = 2000,
     progress_label: str = "Decoding script",
     delete_base64_file: bool = False,
 ) -> str:
@@ -83,11 +83,12 @@ def build_base64_write_and_decode_block(
         current = i + 1
         total = len(chunks)
         percent = int((current / total) * 100)
-        block += f'echo|set /p="{chunk}" {op} "%{base64_file_env_var}%"\r\n'
+        block += f'(echo {chunk}){op}"%{base64_file_env_var}%"\r\n'
         block += f'echo {progress_label}: {current}/{total} ({percent}%)\r\n'
         
     block += f'powershell -Command "$b = Get-Content -Path $env:{base64_file_env_var} -Raw; $x = [System.Convert]::FromBase64String($b); [System.IO.File]::WriteAllBytes($env:{output_file_env_var}, $x)"\r\n'
     return block
+
 
 
 @install_router.get("/install")

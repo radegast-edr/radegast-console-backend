@@ -1,3 +1,5 @@
+from datetime import datetime, timezone as tz
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +25,7 @@ from app.services.permissions import (
     get_user_team_ids_transitive,
     is_user_member_of_team_transitive,
     has_team_admin_permission,
+    has_device_admin_permission,
 )
 
 router = APIRouter(prefix="/devices", tags=["devices"])
@@ -207,15 +210,7 @@ async def add_device_to_group(
         raise HTTPException(status_code=404, detail="Device not found")
 
     if device.groups:
-        device_admin = False
-        for g in device.groups:
-            for team in g.teams:
-                if await has_team_admin_permission(team.id, user.id, db):
-                    device_admin = True
-                    break
-            if device_admin:
-                break
-        if not device_admin:
+        if not await has_device_admin_permission(device_id, user.id, db):
             raise HTTPException(status_code=403, detail="No admin permission on this device")
 
     if device not in group.devices:
@@ -241,15 +236,7 @@ async def rename_device(
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
 
-    has_access = False
-    for group in device.groups:
-        for team in group.teams:
-            if await has_team_admin_permission(team.id, user.id, db):
-                has_access = True
-                break
-        if has_access:
-            break
-    if not has_access:
+    if not await has_device_admin_permission(device_id, user.id, db):
         raise HTTPException(status_code=403, detail="No admin permission")
 
     device.name = data.name
@@ -268,6 +255,37 @@ async def set_signing_key(
     device.signature_public_key = data.signature_public_key
     await db.commit()
     return {"message": "Signing key set"}
+
+
+@router.post("/{device_id}/reinstall", response_model=DeviceCreateResponse)
+async def reinstall_device(
+    device_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Device)
+        .options(selectinload(Device.groups).selectinload(DeviceGroup.teams).selectinload(Team.users))
+        .where(Device.id == device_id)
+    )
+    device = result.scalar_one_or_none()
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    if not await has_device_admin_permission(device_id, user.id, db):
+        raise HTTPException(status_code=403, detail="No admin permission")
+
+    raw_token = generate_token()
+    device.token = hash_token(raw_token)
+    device.token_change = datetime.now(tz=tz.utc)
+    await db.commit()
+    await db.refresh(device)
+
+    return DeviceCreateResponse(
+        id=device.id,
+        name=device.name,
+        token=raw_token,
+    )
 
 
 @router.delete("/{device_id}")

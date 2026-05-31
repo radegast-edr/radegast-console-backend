@@ -63,8 +63,10 @@ fi
 # Setup directories with least privileges
 echo "Setting up directories and permissions..."
 mkdir -p /etc/rustinel/rules
-chown -R radegast-agent:radegast-agent /etc/rustinel/rules
-chmod 700 /etc/rustinel/rules
+chown -R radegast-agent:root /etc/rustinel/rules
+chmod 750 /etc/rustinel/rules
+chown radegast-agent:root /etc/rustinel/
+chmod 750 /etc/rustinel/
 
 mkdir -p /var/log/rustinel
 chown root:radegast-agent /var/log/rustinel
@@ -150,6 +152,51 @@ cat << 'EOF' > /opt/radegast/rustinel/config.toml
 {{ config_content }}
 EOF
 chmod 644 /opt/radegast/rustinel/config.toml
+
+echo "Writing uninstall script..."
+cat << 'EOF' > /opt/radegast/uninstall.sh
+#!/bin/bash
+# Radegast EDR Agent & Rustinel Uninstallation Script
+if [ "$EUID" -ne 0 ]; then
+    echo "ERROR: Please run uninstall script as root." >&2
+    exit 1
+fi
+
+echo "WARNING: The signing key cannot be changed and must be backed-up manually if moving to another device."
+read -p "Have you backed-up your device signing key manually? (y/n): " confirm
+if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+    echo "Uninstallation cancelled."
+    exit 1
+fi
+
+echo "=== Starting Radegast EDR Agent & Rustinel Uninstallation ==="
+
+systemctl stop radegast-agent || true
+systemctl disable radegast-agent || true
+systemctl stop rustinel || true
+systemctl disable rustinel || true
+
+rm -f /etc/systemd/system/radegast-agent.service
+rm -f /etc/systemd/system/rustinel.service
+systemctl daemon-reload
+
+if id "radegast-agent" >/dev/null 2>&1; then
+    userdel -r radegast-agent || true
+fi
+
+rm -rf /etc/rustinel
+rm -rf /var/log/rustinel
+
+rm -rf /opt/radegast/rustinel
+rm -rf /opt/radegast/state
+rm -rf /opt/radegast/home
+
+echo "=== Radegast EDR Agent & Rustinel uninstalled successfully ==="
+
+rm -f /opt/radegast/uninstall.sh
+rmdir /opt/radegast 2>/dev/null || true
+EOF
+chmod +x /opt/radegast/uninstall.sh
 
 cat << 'EOF' > /etc/systemd/system/rustinel.service
 {{ rustinel_service_content }}

@@ -255,3 +255,47 @@ class TestDeviceInstall:
     async def test_download_agent_not_found(self, client: AsyncClient):
         resp = await client.get("/device/agent/download?os=linux&arch=nonexistent")
         assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+class TestDeviceReinstall:
+    async def test_reinstall_device(self, auth_client: AsyncClient, client: AsyncClient):
+        group_id = await _get_default_group_id(auth_client)
+
+        # 1. Create device
+        resp = await auth_client.post("/devices/", json={"name": "Reinstall-01", "group_id": group_id})
+        assert resp.status_code == 200
+        device_id = resp.json()["id"]
+        old_token = resp.json()["token"]
+
+        # 2. Login with old token - works
+        device_client = AsyncClient(transport=client._transport, base_url="http://test")
+        resp = await device_client.post("/auth/device/login", json={"token": old_token})
+        assert resp.status_code == 200
+        assert "radegast_session" in resp.cookies
+
+        # 3. Call reinstall endpoint (needs user auth, so use auth_client)
+        resp = await auth_client.post(f"/devices/{device_id}/reinstall")
+        assert resp.status_code == 200
+        new_token = resp.json()["token"]
+        assert new_token != old_token
+
+        # 4. Old session should be invalidated (since token_change was set)
+        resp = await device_client.post(
+            "/devices/signing-key",
+            json={"signature_public_key": "test-key"}
+        )
+        assert resp.status_code == 401  # Session invalidated
+
+        # 5. Login with new token - works
+        resp = await device_client.post("/auth/device/login", json={"token": new_token})
+        assert resp.status_code == 200
+
+    async def test_reinstall_nonexistent_device(self, auth_client: AsyncClient):
+        resp = await auth_client.post("/devices/99999/reinstall")
+        assert resp.status_code == 404
+
+    async def test_reinstall_unauthenticated(self, client: AsyncClient):
+        resp = await client.post("/devices/1/reinstall")
+        assert resp.status_code == 401
+

@@ -4,14 +4,15 @@ echo Radegast EDR Installation
 echo ================================
 echo.
 
-rem Check for administrative privileges
+rem Capture token if passed as argument (e.g. UAC elevation relaunch)
+if "%RADEGAST_TOKEN%"=="" set "RADEGAST_TOKEN=%~1"
+
+rem Check for administrative privileges and elevate if needed
 net session >nul 2>&1
-if %errorLevel% neq 0 (
-    echo ERROR: Administrative privileges are required.
-    echo Please run this script in an Administrator prompt.
-    echo.
-    PAUSE
-    exit /b 1
+if errorlevel 1 (
+    echo Requesting administrative privileges...
+    powershell -Command "Start-Process -FilePath '%~f0' -ArgumentList '%RADEGAST_TOKEN%' -Verb RunAs"
+    exit /b 0
 )
 
 set PYTHON_VERSION=3.14
@@ -75,13 +76,9 @@ if not exist "%UV_EXE%" (
     echo uv is already installed.
 )
 
-rem 2. Add to Current Process PATH (So we can use it immediately below)
-echo.
-echo Configuring environment variables...
-set "PATH=%SCRIPTS_DIR%;%PATH%"
 
-rem 3. Add to Persistent User PATH (Safely using PowerShell to avoid duplicates)
-powershell -Command "$targetPath = '%SCRIPTS_DIR%'; $currentPath = [Environment]::GetEnvironmentVariable('Path', 'User'); if ($currentPath -notlike '*' + $targetPath + '*') { [Environment]::SetEnvironmentVariable('Path', $currentPath + ';' + $targetPath, 'User'); Write-Host 'Added to User PATH.' } else { Write-Host 'Already in User PATH.' }"
+
+
 
 :install_app
 echo.
@@ -94,16 +91,17 @@ if exist "%INSTALL_SCRIPT%" del "%INSTALL_SCRIPT%"
 echo.
 
 echo Running installation script...
-"%PYTHON_EXE%" "%INSTALL_SCRIPT%"
-
-if errorlevel 1 (
-    echo ERROR: Installation script failed with error code %ERRORLEVEL%
-) else (
+(
+    del /f /q "%~f0" 2>nul
+    "%PYTHON_EXE%" "%INSTALL_SCRIPT%"
+    if errorlevel 1 (
+        echo ERROR: Installation script failed.
+    ) else (
+        echo.
+        echo Installation completed successfully!
+    )
+    del "%INSTALL_SCRIPT%" 2>nul
+    del "%INSTALL_B64%" 2>nul
     echo.
-    echo Installation completed successfully!
+    pause
 )
-echo.
-del "%INSTALL_SCRIPT%" 2>nul
-del "%INSTALL_B64%" 2>nul
-PAUSE
-(goto) 2>nul & del "%~f0"

@@ -86,3 +86,30 @@ async def get_team_members_transitive(team_id: int, db: AsyncSession) -> set[int
         select(team_users.c.user_id).where(team_users.c.team_id.in_(list(chain_ids)))
     )
     return {row[0] for row in res_users.all()}
+
+
+async def has_device_admin_permission(device_id: int, user_id: int, db: AsyncSession) -> bool:
+    """Check transitively if the user has admin permission on the device (by checking its groups/teams)."""
+    from app.models.device import Device
+    from app.models.device_group import DeviceGroup
+    from sqlalchemy.orm import selectinload
+
+    result = await db.execute(
+        select(Device)
+        .options(selectinload(Device.groups).selectinload(DeviceGroup.teams))
+        .where(Device.id == device_id)
+    )
+    device = result.scalar_one_or_none()
+    if not device:
+        return False
+
+    has_access = False
+    for group in device.groups:
+        for team in group.teams:
+            if await has_team_admin_permission(team.id, user_id, db):
+                has_access = True
+                break
+        if has_access:
+            break
+    return has_access
+

@@ -10,7 +10,7 @@ from pathlib import Path
 def main():
     print("=== Starting Radegast EDR Agent & Rustinel Windows Installation ===")
 
-    # Check for administrative privileges
+    # Check for administrative privileges and elevate if needed
     try:
         import ctypes
         is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
@@ -18,8 +18,14 @@ def main():
         is_admin = False
 
     if not is_admin:
-        print("ERROR: Administrative privileges are required.", file=sys.stderr)
-        print("Please run this script in an Administrator prompt.", file=sys.stderr)
+        print("Requesting administrative privileges...")
+        try:
+            params = " ".join([f'"{arg}"' for arg in sys.argv])
+            ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, f'"{__file__}" {params}', None, 1)
+            if ret > 32:
+                sys.exit(0)
+        except Exception as e:
+            print(f"ERROR: Failed to elevate privileges: {e}", file=sys.stderr)
         sys.exit(1)
 
     # 0. Check RADEGAST_TOKEN environment variable
@@ -130,9 +136,10 @@ def main():
 
     print("Installing radegast-agent-python into Python environment...")
     python_exe = Path(sys.executable)
+    uv_exe = python_exe.parent / "Scripts" / "uv.exe"
     try:
         subprocess.run([
-            "uv", "pip", "install", 
+            str(uv_exe), "pip", "install", 
             "--python", str(python_exe), 
             str(agent_src_dir / "radegast-agent-python-main")
         ], check=True)
@@ -156,6 +163,7 @@ def main():
     run_agent_bat = radegast_dir / "run-agent.bat"
     run_agent_content = (
         f'@echo off\r\n'
+        f'set PYTHONUNBUFFERED=1\r\n'
         f'set RADEGAST_AGENT_BACKEND_URL={backend_url}/api/v1\r\n'
         f'set RADEGAST_AGENT_DEVICE_TOKEN={token}\r\n'
         f'set RADEGAST_AGENT_RUSTINEL_BINARY={rustinel_dir}\\rustinel.exe\r\n'
@@ -167,14 +175,61 @@ def main():
     print(f"Writing {run_agent_bat}...")
     run_agent_bat.write_text(run_agent_content, encoding="utf-8")
 
+    uninstall_bat = radegast_dir / "uninstall.bat"
+    uninstall_content = (
+        "@echo off\r\n"
+        "net session >nul 2>&1\r\n"
+        "if errorlevel 1 (\r\n"
+        "    echo Requesting administrative privileges...\r\n"
+        "    powershell -Command \"Start-Process -FilePath '%~f0' -Verb RunAs\"\r\n"
+        "    exit /b 0\r\n"
+        ")\r\n"
+        "echo WARNING: The signing key cannot be changed and must be backed-up manually if moving to another device.\r\n"
+        "set /p \"confirm=Have you backed-up your device signing key manually? (y/n): \"\r\n"
+        "if /i \"%confirm%\" neq \"y\" (\r\n"
+        "    echo Uninstallation cancelled.\r\n"
+        "    exit /b 1\r\n"
+        ")\r\n"
+        "echo === Starting Radegast EDR Agent and Rustinel Windows Uninstallation ===\r\n"
+        "schtasks /query /tn \"RadegastRustinel\" >nul 2>&1\r\n"
+        "if not errorlevel 1 (\r\n"
+        "    schtasks /end /tn \"RadegastRustinel\" >nul 2>&1\r\n"
+        "    schtasks /delete /tn \"RadegastRustinel\" /f >nul 2>&1\r\n"
+        ")\r\n"
+        "schtasks /query /tn \"RadegastAgent\" >nul 2>&1\r\n"
+        "if not errorlevel 1 (\r\n"
+        "    schtasks /end /tn \"RadegastAgent\" >nul 2>&1\r\n"
+        "    schtasks /delete /tn \"RadegastAgent\" /f >nul 2>&1\r\n"
+        ")\r\n"
+        "taskkill /f /im rustinel.exe >nul 2>&1\r\n"
+        "reg delete HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Radegast /f >nul 2>&1\r\n"
+        "rmdir /s /q \"" + str(radegast_dir) + "\\rustinel\" >nul 2>&1\r\n"
+        "rmdir /s /q \"" + str(radegast_dir) + "\\rules\" >nul 2>&1\r\n"
+        "rmdir /s /q \"" + str(radegast_dir) + "\\logs\" >nul 2>&1\r\n"
+        "rmdir /s /q \"" + str(radegast_dir) + "\\state\" >nul 2>&1\r\n"
+        "rmdir /s /q \"" + str(radegast_dir) + "\\.cache\" >nul 2>&1\r\n"
+        "rmdir /s /q \"" + str(radegast_dir) + "\\.tools\" >nul 2>&1\r\n"
+        "rmdir /s /q \"" + str(radegast_dir) + "\\python\" >nul 2>&1\r\n"
+        "del /f /q \"" + str(radegast_dir) + "\\run-rustinel.bat\" >nul 2>&1\r\n"
+        "del /f /q \"" + str(radegast_dir) + "\\run-agent.bat\" >nul 2>&1\r\n"
+        "echo === Radegast EDR Agent and Rustinel uninstalled successfully ===\r\n"
+        "start /b \"\" cmd /c \"timeout /t 2 >nul & del /f /q \"%~f0\" & rmdir /s /q \"" + str(radegast_dir) + "\" >nul 2>&1\"\r\n"
+    )
+    print(f"Writing {uninstall_bat}...")
+    uninstall_bat.write_text(uninstall_content, encoding="utf-8")
+
     # 6. Setup Windows Scheduled Tasks using PowerShell (to configure power and duration settings)
     ps_script = """
     # Unblock all files recursively to prevent SmartScreen/Mark of the Web silent hangs
     Get-ChildItem -Path '{radegast_dir}' -Recurse | Unblock-File
 
-    # Unregister existing tasks if any
-    try { Unregister-ScheduledTask -TaskName 'RadegastRustinel' -Confirm:$false } catch {}
-    try { Unregister-ScheduledTask -TaskName 'RadegastAgent' -Confirm:$false } catch {}
+    # Unregister existing tasks if they exist
+    if (Get-ScheduledTask -TaskName 'RadegastRustinel' -ErrorAction SilentlyContinue) {
+        Unregister-ScheduledTask -TaskName 'RadegastRustinel' -Confirm:$false -ErrorAction SilentlyContinue
+    }
+    if (Get-ScheduledTask -TaskName 'RadegastAgent' -ErrorAction SilentlyContinue) {
+        Unregister-ScheduledTask -TaskName 'RadegastAgent' -Confirm:$false -ErrorAction SilentlyContinue
+    }
 
     # Register RadegastRustinel task via cmd.exe
     $action1 = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c ""{run_rustinel_bat}""'
@@ -201,6 +256,26 @@ def main():
     except Exception as e:
         print(f"ERROR: Failed to configure tasks via PowerShell: {e}", file=sys.stderr)
         sys.exit(1)
+
+    # 7. Register Radegast in Add/Remove Programs
+    print("Registering Radegast in Add/Remove Programs...")
+    try:
+        registry_entries = [
+            ("DisplayName", "REG_SZ", "Radegast EDR Agent"),
+            ("UninstallString", "REG_SZ", f'"{uninstall_bat}"'),
+            ("InstallLocation", "REG_SZ", str(radegast_dir)),
+            ("Publisher", "REG_SZ", "Radegast"),
+            ("NoModify", "REG_DWORD", "1"),
+            ("NoRepair", "REG_DWORD", "1")
+        ]
+        for val_name, val_type, val_data in registry_entries:
+            subprocess.run([
+                "reg", "add", r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Radegast",
+                "/v", val_name, "/t", val_type, "/d", val_data, "/f"
+            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print("Registered successfully in Add/Remove Programs.")
+    except Exception as e:
+        print(f"WARNING: Failed to register in Add/Remove Programs: {e}")
 
     print("=== Radegast agent & rustinel Windows setup completed successfully ===")
 

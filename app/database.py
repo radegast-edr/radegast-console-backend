@@ -29,6 +29,7 @@ async def init_db():
         PublicKey,
         Team,
         User,
+        QueuedEmail,
     )
 
     async with engine.begin() as conn:

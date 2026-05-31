@@ -12,12 +12,28 @@ from app.routers import auth, teams, devices, packs, logs, admin, groups, ui, in
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import asyncio
     # Create upload directory
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.releases_dir).mkdir(parents=True, exist_ok=True)
     # Initialize database
     await init_db()
-    yield
+
+    # Start email queue processor loop
+    email_task = None
+    if settings.enable_email_worker:
+        from app.services.email import process_email_queue_loop
+        email_task = asyncio.create_task(process_email_queue_loop())
+
+    try:
+        yield
+    finally:
+        if email_task:
+            email_task.cancel()
+            try:
+                await email_task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(

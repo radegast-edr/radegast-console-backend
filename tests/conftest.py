@@ -57,15 +57,25 @@ def setup_test_releases():
     shutil.rmtree(test_dir, ignore_errors=True)
 
 
+from app.config import settings
+settings.enable_email_worker = False
+
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
 
 @pytest_asyncio.fixture
 async def db_engine():
     engine = create_async_engine(TEST_DB_URL, echo=False)
+    import app.database
+    original_session = app.database.async_session
+    app.database.async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield engine
+
+    app.database.async_session = original_session
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
     await engine.dispose()

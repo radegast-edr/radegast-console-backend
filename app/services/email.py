@@ -81,7 +81,7 @@ DEVICE_LOG_TEMPLATE = Template("""
 <h2>New Alert — Radegast EDR</h2>
 <p>A new alert was submitted by device <strong>{{ device_name }}</strong> (ID: {{ device_id }}).</p>
 <p><strong>Time:</strong> {{ time }} UTC</p>
-<p><a href="{{ base_url }}/logs">View Logs</a></p>
+<p><a href="{{ base_url }}/ui/alerts">View Alerts</a></p>
 </body>
 </html>
 """)

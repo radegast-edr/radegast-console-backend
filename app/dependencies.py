@@ -1,5 +1,6 @@
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -7,6 +8,32 @@ from app.middleware.session import SessionData, parse_session_cookie
 from app.models.user import User
 from app.models.device import Device
 from app.config import settings
+
+
+def mfa_level_value(level: str) -> int:
+    lvl = level.lower()
+    if lvl in ("hardware_token", "token"):
+        return 2
+    if lvl == "otp":
+        return 1
+    return 0
+
+
+def user_has_required_mfa_setup(user: User, required_level: str) -> bool:
+    req_val = mfa_level_value(required_level)
+    if req_val == 0:
+        return True
+    has_otp = bool(user.otp_enabled and user.otp_secret)
+    has_token = False
+    try:
+        has_token = bool(user.hardware_tokens and len(user.hardware_tokens) > 0)
+    except Exception:
+        pass
+    if req_val == 1:  # otp
+        return has_otp or has_token
+    elif req_val == 2:  # hardware_token/token
+        return has_token
+    return True
 
 
 async def get_session(request: Request) -> SessionData:
@@ -20,17 +47,49 @@ async def get_session(request: Request) -> SessionData:
 
 
 async def get_current_user(
+    request: Request,
     session: SessionData = Depends(get_session),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     if session.scope != "user":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User session required")
-    result = await db.execute(select(User).where(User.id == session.id))
+    result = await db.execute(
+        select(User).options(selectinload(User.hardware_tokens)).where(User.id == session.id)
+    )
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     if user.password_change > session.issued_at:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session invalidated")
+
+    # Enforce role-based MFA level
+    required_level = "none"
+    if user.role.value == "admin":
+        required_level = settings.mfa_required_level_admin
+    elif user.role.value == "maintainer":
+        required_level = settings.mfa_required_level_maintainer
+    elif user.role.value == "user":
+        required_level = settings.mfa_required_level_user
+
+    session_mfa_level = getattr(session, "mfa_level", "none")
+
+    # Bypass enforcement for MFA setup, verification, profile, and logout
+    path = request.url.path
+    is_mfa_path = (
+        "/auth/mfa" in path
+        or "/auth/logout" in path
+        or "/auth/me" in path
+    )
+
+    if not is_mfa_path:
+        # Only enforce if they actually have the required MFA configured
+        if user_has_required_mfa_setup(user, required_level):
+            if mfa_level_value(session_mfa_level) < mfa_level_value(required_level):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"MFA level '{required_level}' required for role '{user.role.value}'",
+                )
+
     return user
 
 

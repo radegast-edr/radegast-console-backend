@@ -120,3 +120,8 @@ All settings are controlled via environment variables prefixed with `RADEGAST_` 
 | `RADEGAST_SESSION_MAX_AGE` | `604800` | Session lifetime in seconds (default: 7 days) |
 | `RADEGAST_TURNSTILE_SITE_KEY` | _(empty)_ | Cloudflare Turnstile Site Key for optional registration-protection |
 | `RADEGAST_TURNSTILE_SECRET_KEY` | _(empty)_ | Cloudflare Turnstile Secret Key for verifying Turnstile responses |
+| `RADEGAST_EMAIL_DEBOUNCE_SECONDS` | `180` | Email debounce limit in seconds before sending queued emails |
+| `RADEGAST_ENABLE_EMAIL_WORKER` | `true` | Boolean flag to enable background email sending worker loop |
+| `RADEGAST_MFA_REQUIRED_LEVEL_ADMIN` | `hardware_token` | Required MFA level for Admin accounts (none, otp, hardware_token) |
+| `RADEGAST_MFA_REQUIRED_LEVEL_MAINTAINER` | `none` | Required MFA level for Maintainer accounts (none, otp, hardware_token) |
+| `RADEGAST_MFA_REQUIRED_LEVEL_USER` | `none` | Required MFA level for User accounts (none, otp, hardware_token) |

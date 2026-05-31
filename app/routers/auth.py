@@ -1,4 +1,9 @@
 from datetime import datetime, timedelta, timezone as tz
+import base64
+import json
+import pyotp
+import webauthn
+from webauthn.helpers.structs import PublicKeyCredentialDescriptor
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from sqlalchemy import func, insert, select
@@ -6,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, get_session, mfa_level_value, user_has_required_mfa_setup
 from app.middleware.session import create_session_cookie
 from app.models.device_group import DeviceGroup
 from app.models.key_transfer import KeyTransfer
@@ -14,6 +19,7 @@ from app.models.team import Team
 from app.models.user import User
 from app.models.public_key import PublicKey
 from app.models.device import Device
+from app.models.hardware_token import HardwareToken
 from app.models.associations import team_device_groups, team_users
 from app.schemas.user import (
     ChangePasswordRequest,
@@ -31,6 +37,15 @@ from app.schemas.user import (
     UserLogin,
     UserRegister,
     UserResponse,
+    MfaOtpSetupResponse,
+    MfaOtpVerifyRequest,
+    MfaHardwareTokenSetupResponse,
+    MfaHardwareTokenVerifyRequest,
+    MfaHardwareTokenAssertionOptionsRequest,
+    MfaHardwareTokenAssertionOptionsResponse,
+    MfaVerifyRequest,
+    MfaHardwareTokenResponse,
+    MfaSettingsResponse,
 )
 from app.schemas.device import DeviceLogin
 from app.services.auth import (
@@ -168,7 +183,9 @@ async def login(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(User).where(User.email == data.email))
+    result = await db.execute(
+        select(User).options(selectinload(User.hardware_tokens)).where(User.email == data.email)
+    )
     user = result.scalar_one_or_none()
     if not user or not verify_password(data.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -184,9 +201,37 @@ async def login(
         pk_obj = pk_res.scalar_one_or_none()
         if pk_obj:
             pk_obj.last_used_at = datetime.utcnow()
-            # We will commit below or now. Committing now is fine.
 
-    cookie = create_session_cookie("user", user.id)
+    # Check if they have MFA configured
+    has_otp = user.otp_enabled and user.otp_secret is not None
+    has_token = len(user.hardware_tokens) > 0
+
+    if has_otp or has_token:
+        # Determine the required MFA level for this user's role
+        required_level = "none"
+        if user.role.value == "admin":
+            required_level = settings.mfa_required_level_admin
+        elif user.role.value == "maintainer":
+            required_level = settings.mfa_required_level_maintainer
+        elif user.role.value == "user":
+            required_level = settings.mfa_required_level_user
+
+        methods = []
+        # Only offer OTP if the required level does not mandate hardware_token
+        if has_otp and mfa_level_value(required_level) < mfa_level_value("hardware_token"):
+            methods.append("otp")
+        if has_token:
+            methods.append("hardware_token")
+
+        mfa_token = create_signed_token({"user_id": user.id}, salt="mfa-login")
+        await db.commit()
+        return {
+            "status": "mfa_required",
+            "mfa_token": mfa_token,
+            "methods": methods,
+        }
+
+    cookie = create_session_cookie("user", user.id, mfa_level="none")
     response.set_cookie(
         key=settings.session_cookie_name,
         value=cookie,
@@ -430,12 +475,32 @@ async def me(user: User = Depends(get_current_user), db: AsyncSession = Depends(
             select(func.count()).select_from(PublicKey).where(PublicKey.user_id == user.id)
         )
     ).scalar()
+
+    required_level = "none"
+    if user.role.value == "admin":
+        required_level = settings.mfa_required_level_admin
+    elif user.role.value == "maintainer":
+        required_level = settings.mfa_required_level_maintainer
+    elif user.role.value == "user":
+        required_level = settings.mfa_required_level_user
+
+    mfa_setup_missing = not user_has_required_mfa_setup(user, required_level)
+
+    conf_level = "none"
+    if len(user.hardware_tokens) > 0:
+        conf_level = "hardware_token"
+    elif user.otp_enabled and user.otp_secret:
+        conf_level = "otp"
+
     return UserResponse(
         id=user.id,
         email=user.email,
-        role=user.role,
+        role=user.role.value if hasattr(user.role, "value") else str(user.role),
         verified=user.verified,
         has_keys=key_count > 0,
+        mfa_required_level=required_level,
+        mfa_setup_missing=mfa_setup_missing,
+        mfa_configured_level=conf_level,
     )
 
 
@@ -616,6 +681,423 @@ async def accept_invite(token: str, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     return {"message": f"Successfully joined team '{team.name}'"}
+
+
+def base64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode("utf-8").rstrip("=")
+
+
+def base64url_decode(data: str) -> bytes:
+    rem = len(data) % 4
+    if rem > 0:
+        data += "=" * (4 - rem)
+    return base64.urlsafe_b64decode(data)
+
+
+@router.post("/mfa/otp/setup", response_model=MfaOtpSetupResponse)
+async def mfa_otp_setup(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    secret = pyotp.random_base32()
+    totp = pyotp.totp.TOTP(secret)
+    uri = totp.provisioning_uri(name=user.email, issuer_name="Radegast EDR")
+
+    user.otp_secret = secret
+    user.otp_enabled = False
+    await db.commit()
+
+    return MfaOtpSetupResponse(secret=secret, provisioning_uri=uri)
+
+
+@router.post("/mfa/otp/verify")
+async def mfa_otp_verify(
+    data: MfaOtpVerifyRequest,
+    response: Response,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not user.otp_secret:
+        raise HTTPException(status_code=400, detail="OTP setup not initiated")
+
+    totp = pyotp.totp.TOTP(user.otp_secret)
+    if not totp.verify(data.code):
+        raise HTTPException(status_code=400, detail="Invalid OTP code")
+
+    user.otp_enabled = True
+    await db.commit()
+
+    cookie = create_session_cookie("user", user.id, mfa_level="otp")
+    response.set_cookie(
+        key=settings.session_cookie_name,
+        value=cookie,
+        httponly=True,
+        samesite="lax",
+        max_age=settings.session_max_age,
+    )
+
+    return {"message": "OTP enabled successfully"}
+
+
+@router.post("/mfa/hardware-token/setup", response_model=MfaHardwareTokenSetupResponse)
+async def mfa_hardware_token_setup(
+    user: User = Depends(get_current_user),
+):
+    from urllib.parse import urlparse
+    parsed = urlparse(settings.base_url)
+    rp_id = parsed.hostname or "localhost"
+
+    options = webauthn.generate_registration_options(
+        rp_id=rp_id,
+        rp_name="Radegast EDR",
+        user_id=str(user.id).encode("utf-8"),
+        user_name=user.email,
+        user_display_name=user.email,
+    )
+
+    options_json = json.loads(webauthn.options_to_json(options))
+
+    registration_token = create_signed_token(
+        {"challenge": options_json["challenge"], "user_id": user.id},
+        salt="hardware-token-register"
+    )
+
+    return MfaHardwareTokenSetupResponse(options=options_json, registration_token=registration_token)
+
+
+@router.post("/mfa/hardware-token/verify")
+async def mfa_hardware_token_verify(
+    data: MfaHardwareTokenVerifyRequest,
+    response: Response,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    token_data = verify_signed_token(data.registration_token, salt="hardware-token-register", max_age=300)
+    if not token_data or token_data.get("user_id") != user.id:
+        raise HTTPException(status_code=400, detail="Invalid or expired registration token")
+
+    expected_challenge = base64url_decode(token_data["challenge"])
+
+    from urllib.parse import urlparse
+    parsed = urlparse(settings.base_url)
+    rp_id = parsed.hostname or "localhost"
+
+    origins = [
+        "http://localhost:5173",
+        "http://localhost:8000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:8000",
+        "http://test",
+    ]
+    base_url_origin = settings.base_url.rstrip("/")
+    if base_url_origin not in origins:
+        origins.append(base_url_origin)
+
+    try:
+        verification = webauthn.verify_registration_response(
+            credential=data.credential_response,
+            expected_challenge=expected_challenge,
+            expected_rp_id=rp_id,
+            expected_origin=origins,
+            require_user_verification=False,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"WebAuthn verification failed: {str(e)}")
+
+    cred_id_str = base64url_encode(verification.credential_id)
+    pub_key_str = base64url_encode(verification.credential_public_key)
+
+    token = HardwareToken(
+        user_id=user.id,
+        credential_id=cred_id_str,
+        public_key=pub_key_str,
+        sign_count=verification.sign_count,
+        name=data.name or "Hardware token",
+    )
+    db.add(token)
+    await db.commit()
+
+    cookie = create_session_cookie("user", user.id, mfa_level="hardware_token")
+    response.set_cookie(
+        key=settings.session_cookie_name,
+        value=cookie,
+        httponly=True,
+        samesite="lax",
+        max_age=settings.session_max_age,
+    )
+
+    return {"message": "Hardware token registered successfully"}
+
+
+@router.post("/mfa/hardware-token/assertion-options", response_model=MfaHardwareTokenAssertionOptionsResponse)
+async def mfa_hardware_token_assertion_options(
+    data: MfaHardwareTokenAssertionOptionsRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    token_data = verify_signed_token(data.mfa_token, salt="mfa-login", max_age=300)
+    if not token_data or "user_id" not in token_data:
+        raise HTTPException(status_code=400, detail="Invalid or expired MFA token")
+
+    result = await db.execute(
+        select(HardwareToken).where(HardwareToken.user_id == token_data["user_id"])
+    )
+    tokens = result.scalars().all()
+    if not tokens:
+        raise HTTPException(status_code=400, detail="No Hardware tokens registered for this user")
+
+    allow_credentials = [
+        PublicKeyCredentialDescriptor(id=base64url_decode(t.credential_id))
+        for t in tokens
+    ]
+
+    from urllib.parse import urlparse
+    parsed = urlparse(settings.base_url)
+    rp_id = parsed.hostname or "localhost"
+
+    options = webauthn.generate_authentication_options(
+        rp_id=rp_id,
+        allow_credentials=allow_credentials,
+    )
+
+    options_json = json.loads(webauthn.options_to_json(options))
+
+    assertion_token = create_signed_token(
+        {"challenge": options_json["challenge"], "user_id": token_data["user_id"]},
+        salt="hardware-token-login"
+    )
+
+    return MfaHardwareTokenAssertionOptionsResponse(options=options_json, assertion_token=assertion_token)
+
+
+@router.post("/mfa/verify")
+async def mfa_verify(
+    data: MfaVerifyRequest,
+    request: Request,
+    response: Response,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    token_data = verify_signed_token(data.mfa_token, salt="mfa-login", max_age=300)
+    if not token_data or "user_id" not in token_data:
+        raise HTTPException(status_code=400, detail="Invalid or expired MFA token")
+
+    user_id = token_data["user_id"]
+    result = await db.execute(
+        select(User).options(selectinload(User.hardware_tokens)).where(User.id == user_id)
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if data.method == "otp":
+        if not data.otp_code:
+            raise HTTPException(status_code=400, detail="OTP code required")
+        if not user.otp_secret or not user.otp_enabled:
+            raise HTTPException(status_code=400, detail="OTP not enabled for this user")
+
+        totp = pyotp.totp.TOTP(user.otp_secret)
+        if not totp.verify(data.otp_code):
+            raise HTTPException(status_code=400, detail="Invalid OTP code")
+
+        mfa_level = "otp"
+
+    elif data.method == "hardware_token":
+        if not data.assertion_token or not data.webauthn_response:
+            raise HTTPException(status_code=400, detail="Assertion token and webauthn response required")
+
+        assert_data = verify_signed_token(data.assertion_token, salt="hardware-token-login", max_age=300)
+        if not assert_data or assert_data.get("user_id") != user_id:
+            raise HTTPException(status_code=400, detail="Invalid or expired assertion token")
+
+        expected_challenge = base64url_decode(assert_data["challenge"])
+
+        cred_id_str = data.webauthn_response.get("id")
+        if not cred_id_str:
+            raise HTTPException(status_code=400, detail="Credential ID missing from response")
+
+        token_obj = next((k for k in user.hardware_tokens if k.credential_id == cred_id_str), None)
+        if not token_obj:
+            raise HTTPException(status_code=400, detail="Hardware token credential not registered for this user")
+
+        from urllib.parse import urlparse
+        parsed = urlparse(settings.base_url)
+        rp_id = parsed.hostname or "localhost"
+
+        origins = [
+            "http://localhost:5173",
+            "http://localhost:8000",
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:8000",
+            "http://test",
+        ]
+        base_url_origin = settings.base_url.rstrip("/")
+        if base_url_origin not in origins:
+            origins.append(base_url_origin)
+
+        try:
+            verification = webauthn.verify_authentication_response(
+                credential=data.webauthn_response,
+                expected_challenge=expected_challenge,
+                expected_rp_id=rp_id,
+                expected_origin=origins,
+                credential_public_key=base64url_decode(token_obj.public_key),
+                credential_current_sign_count=token_obj.sign_count,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"WebAuthn verification failed: {str(e)}")
+
+        token_obj.sign_count = verification.new_sign_count
+        mfa_level = "hardware_token"
+
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported MFA method")
+
+    cookie = create_session_cookie("user", user.id, mfa_level=mfa_level)
+    response.set_cookie(
+        key=settings.session_cookie_name,
+        value=cookie,
+        httponly=True,
+        samesite="lax",
+        max_age=settings.session_max_age,
+    )
+
+    if user.notify_login:
+        background_tasks.add_task(send_login_notification, user.email, _client_ip(request))
+
+    await db.commit()
+    return {"message": "Login successful", "user_id": user.id}
+
+
+@router.get("/mfa/settings", response_model=MfaSettingsResponse)
+async def get_mfa_settings(
+    request: Request,
+    user: User = Depends(get_current_user),
+    session = Depends(get_session),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(HardwareToken).where(HardwareToken.user_id == user.id)
+    )
+    tokens = result.scalars().all()
+
+    required_level = "none"
+    if user.role.value == "admin":
+        required_level = settings.mfa_required_level_admin
+    elif user.role.value == "maintainer":
+        required_level = settings.mfa_required_level_maintainer
+    elif user.role.value == "user":
+        required_level = settings.mfa_required_level_user
+
+    current_level = getattr(session, "mfa_level", "none")
+
+    return MfaSettingsResponse(
+        otp_enabled=user.otp_enabled and user.otp_secret is not None,
+        hardware_tokens=[MfaHardwareTokenResponse.model_validate(t) for t in tokens],
+        required_level=required_level,
+        current_level=current_level,
+    )
+
+
+@router.post("/mfa/otp/disable")
+async def mfa_otp_disable(
+    response: Response,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(HardwareToken).where(HardwareToken.user_id == user.id)
+    )
+    tokens = result.scalars().all()
+    has_token = len(tokens) > 0
+
+    required_level = "none"
+    if user.role.value == "admin":
+        required_level = settings.mfa_required_level_admin
+    elif user.role.value == "maintainer":
+        required_level = settings.mfa_required_level_maintainer
+    elif user.role.value == "user":
+        required_level = settings.mfa_required_level_user
+
+    if required_level in ("otp", "hardware_token", "token") and not has_token:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot disable OTP. Your role requires at least '{required_level}' MFA, and you have no Hardware tokens registered."
+        )
+
+    user.otp_enabled = False
+    user.otp_secret = None
+    await db.commit()
+
+    mfa_level = "hardware_token" if has_token else "none"
+    cookie = create_session_cookie("user", user.id, mfa_level=mfa_level)
+    response.set_cookie(
+        key=settings.session_cookie_name,
+        value=cookie,
+        httponly=True,
+        samesite="lax",
+        max_age=settings.session_max_age,
+    )
+
+    return {"message": "OTP disabled successfully"}
+
+
+@router.delete("/mfa/hardware-token/{token_id}")
+async def delete_hardware_token(
+    token_id: int,
+    response: Response,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(HardwareToken).where(HardwareToken.user_id == user.id)
+    )
+    tokens = result.scalars().all()
+
+    target_token = next((t for t in tokens if t.id == token_id), None)
+    if not target_token:
+        raise HTTPException(status_code=404, detail="Hardware token not found")
+
+    required_level = "none"
+    if user.role.value == "admin":
+        required_level = settings.mfa_required_level_admin
+    elif user.role.value == "maintainer":
+        required_level = settings.mfa_required_level_maintainer
+    elif user.role.value == "user":
+        required_level = settings.mfa_required_level_user
+
+    has_otp = user.otp_enabled and user.otp_secret is not None
+    remaining_token_count = len(tokens) - 1
+
+    if required_level in ("hardware_token", "token") and remaining_token_count == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete Hardware token. Your role requires Hardware token MFA, and this is your last registered Hardware token."
+        )
+    if required_level == "otp" and remaining_token_count == 0 and not has_otp:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete Hardware token. Your role requires at least OTP MFA, and you do not have OTP enabled."
+        )
+
+    await db.delete(target_token)
+    await db.commit()
+
+    mfa_level = "none"
+    if remaining_token_count > 0:
+        mfa_level = "hardware_token"
+    elif has_otp:
+        mfa_level = "otp"
+
+    cookie = create_session_cookie("user", user.id, mfa_level=mfa_level)
+    response.set_cookie(
+        key=settings.session_cookie_name,
+        value=cookie,
+        httponly=True,
+        samesite="lax",
+        max_age=settings.session_max_age,
+    )
+
+    return {"message": "Hardware token deleted successfully"}
 
 
 @router.get("/config")

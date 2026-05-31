@@ -8,3 +8,4 @@ uploads
 .antigravitycli
 agent/releases
 !agent/releases/.gitkeep
+.certs

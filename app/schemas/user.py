@@ -21,6 +21,9 @@ class UserResponse(BaseModel):
     role: str
     verified: bool
     has_keys: bool = False
+    mfa_required_level: str = "none"
+    mfa_setup_missing: bool = False
+    mfa_configured_level: str = "none"
 
     model_config = {"from_attributes": True}
 
@@ -110,3 +113,54 @@ class NotificationSettings(BaseModel):
     notify_downtime_maintenance: bool
 
     model_config = {"from_attributes": True}
+
+
+class MfaOtpSetupResponse(BaseModel):
+    secret: str
+    provisioning_uri: str
+
+
+class MfaOtpVerifyRequest(BaseModel):
+    code: str
+
+
+class MfaHardwareTokenSetupResponse(BaseModel):
+    options: dict
+    registration_token: str
+
+
+class MfaHardwareTokenVerifyRequest(BaseModel):
+    registration_token: str
+    credential_response: dict
+    name: str | None = None
+
+
+class MfaHardwareTokenAssertionOptionsRequest(BaseModel):
+    mfa_token: str
+
+
+class MfaHardwareTokenAssertionOptionsResponse(BaseModel):
+    options: dict
+    assertion_token: str
+
+
+class MfaVerifyRequest(BaseModel):
+    mfa_token: str
+    method: str
+    otp_code: str | None = None
+    assertion_token: str | None = None
+    webauthn_response: dict | None = None
+
+
+class MfaHardwareTokenResponse(BaseModel):
+    id: int
+    name: str
+
+    model_config = {"from_attributes": True}
+
+
+class MfaSettingsResponse(BaseModel):
+    otp_enabled: bool
+    hardware_tokens: list[MfaHardwareTokenResponse]
+    required_level: str
+    current_level: str

@@ -30,6 +30,7 @@ async def init_db():
         Team,
         User,
         QueuedEmail,
+        HardwareToken,
     )
 
     async with engine.begin() as conn:

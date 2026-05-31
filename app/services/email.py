@@ -212,6 +212,17 @@ async def send_notification_disabled_alert(email: str, disabled_features: list[s
     await send_email(email, "Notification Settings Disabled — Radegast EDR", html, email_type="notification_disabled")
 
 
+async def send_password_reset_email(email: str, new_password: str):
+    html = f"""
+    <h2>Password Reset</h2>
+    <p>Your Radegast EDR password has been reset by an administrator.</p>
+    <p>Your new temporary password is: <pre>{new_password}</pre></p>
+    <p><strong>Change your new password as soon as possible</strong></p>
+    <p>All MFA devices (OTP, Hardware tokens) have been removed from your account. You can configure them again in your account settings after logging in.</p>
+    """
+    await send_email(email, "Your Radegast EDR password has been reset", html, email_type="verify")
+
+
 def combine_html_bodies(html_bodies: list[str]) -> str:
     import re
     extracted_bodies = []

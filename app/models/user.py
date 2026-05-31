@@ -31,6 +31,10 @@ class User(Base):
     )
     verified: Mapped[bool] = mapped_column(default=False, nullable=False)
 
+    # MFA fields
+    otp_secret: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    otp_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     # Email notification preferences
     notify_login: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     notify_new_keys: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -41,3 +45,4 @@ class User(Base):
 
     public_keys = relationship("PublicKey", back_populates="user", cascade="all, delete-orphan")
     teams = relationship("Team", secondary=team_users, back_populates="users")
+    hardware_tokens = relationship("HardwareToken", back_populates="user", cascade="all, delete-orphan")

@@ -42,6 +42,7 @@ tmp/
 temp/
 scratch/
 *.log
+.certs
 
 # Documentation / misc — not needed in build context
 README.md

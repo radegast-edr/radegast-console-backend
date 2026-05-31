@@ -20,6 +20,7 @@ dependencies = [
     "aiofiles>=24.1.0",
     "pyotp>=2.9.0",
     "webauthn>=2.7.1",
+    "filelock>=3.29.0",
 ]
 
 [project.optional-dependencies]

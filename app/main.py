@@ -19,7 +19,6 @@ async def lifespan(app: FastAPI):
     # Initialize database
     await init_db()
 
-    # Start email queue processor loop
     email_task = None
     if settings.enable_email_worker:
         from app.services.email import process_email_queue_loop

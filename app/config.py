@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     turnstile_secret_key: str | None = None
     email_debounce_seconds: int = 180
     enable_email_worker: bool = True
+    worker_lock_path: str = "/tmp/radegast-console.lock"
     mfa_required_level_admin: str = "none"
     mfa_required_level_maintainer: str = "none"
     mfa_required_level_user: str = "none"

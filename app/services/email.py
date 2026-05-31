@@ -1,7 +1,10 @@
+import random
+
 import aiosmtplib
 import asyncio
-from datetime import datetime, timedelta
+from datetime import timedelta
 from email.mime.text import MIMEText
+from filelock import Timeout
 from jinja2 import Template
 from sqlalchemy import select, delete
 
@@ -9,7 +12,7 @@ from app.config import settings
 import app.database
 from app.models.queued_email import QueuedEmail
 from app.services.auth import create_signed_token
-from app.utils import ensure_utc, utc_now
+from app.utils import ensure_utc, get_worker_lock, utc_now
 
 VERIFY_EMAIL_TEMPLATE = Template("""
 <html>
@@ -288,9 +291,13 @@ async def process_email_queue():
 
 
 async def process_email_queue_loop():
+    lock = get_worker_lock()
     while True:
         try:
-            await process_email_queue()
+            async with lock:
+                await process_email_queue()
+        except Timeout:
+            pass
         except Exception as e:
             print(f"[EMAIL QUEUE WORKER ERROR] {e}")
-        await asyncio.sleep(5)
+        await asyncio.sleep(random.randint(5, 60))

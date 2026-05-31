@@ -62,20 +62,21 @@ fi
 
 # Setup directories with least privileges
 echo "Setting up directories and permissions..."
-mkdir -p /etc/rustinel/rules
+mkdir -p /etc/rustinel/rules/ioc
+touch /etc/rustinel/rules/ioc/hashes.txt
+touch /etc/rustinel/rules/ioc/ips.txt
+touch /etc/rustinel/rules/ioc/domains.txt
+touch /etc/rustinel/rules/ioc/paths_regex.txt
 chown -R radegast-agent:root /etc/rustinel/rules
 chmod 750 /etc/rustinel/rules
+chmod 750 /etc/rustinel/rules/ioc
+chmod 640 /etc/rustinel/rules/ioc/*.txt
 chown radegast-agent:root /etc/rustinel/
 chmod 750 /etc/rustinel/
 
 mkdir -p /var/log/rustinel
 chown root:radegast-agent /var/log/rustinel
 chmod 750 /var/log/rustinel
-
-# Pre-create alerts.json so radegast-agent has read-only access to it
-touch /var/log/rustinel/alerts.json
-chown root:radegast-agent /var/log/rustinel/alerts.json
-chmod 640 /var/log/rustinel/alerts.json
 
 mkdir -p /opt/radegast/home
 chown radegast-agent:radegast-agent /opt/radegast/home

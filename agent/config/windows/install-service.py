@@ -40,6 +40,7 @@ def main():
     radegast_dir = Path(program_files) / "Radegast"
     rustinel_dir = radegast_dir / "rustinel"
     rules_dir = radegast_dir / "rules"
+    ioc_dir = rules_dir / "ioc"
     logs_dir = radegast_dir / "logs"
     state_dir = radegast_dir / "state"
     cache_dir = radegast_dir / ".cache"
@@ -47,8 +48,14 @@ def main():
     agent_src_dir = radegast_dir / "agent-src"
 
     print(f"Creating directories under {radegast_dir}...")
-    for d in [radegast_dir, rustinel_dir, rules_dir, logs_dir, state_dir, cache_dir, tools_dir, agent_src_dir]:
+    for d in [radegast_dir, rustinel_dir, rules_dir, ioc_dir, logs_dir, state_dir, cache_dir, tools_dir, agent_src_dir]:
         d.mkdir(parents=True, exist_ok=True)
+
+    # Pre-create IOC text files
+    for filename in ["hashes.txt", "ips.txt", "domains.txt", "paths_regex.txt"]:
+        file_path = ioc_dir / filename
+        if not file_path.exists():
+            file_path.write_text("", encoding="utf-8")
 
     # 2. Get architecture and download rustinel
     machine = platform.machine().lower()

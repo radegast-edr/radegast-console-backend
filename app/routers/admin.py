@@ -12,6 +12,7 @@ from app.schemas.device import DeviceResponse
 from app.schemas.pack import PackResponse
 from app.schemas.user import UserResponse
 from app.services.packs import delete_pack_files
+from app.utils import utc_now
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -167,10 +168,9 @@ async def reset_user_password(
     alphabet = string.ascii_letters + string.digits
     new_password = "".join(secrets.choice(alphabet) for _ in range(12))
 
-    from datetime import datetime, timezone as tz
     from app.services.auth import hash_password
     target.password = hash_password(new_password)
-    target.password_change = datetime.now(tz=tz.utc)
+    target.password_change = utc_now()
 
     target.otp_enabled = False
     target.otp_secret = None

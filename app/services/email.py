@@ -1,6 +1,6 @@
 import aiosmtplib
 import asyncio
-from datetime import datetime, timezone as tz, timedelta
+from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from jinja2 import Template
 from sqlalchemy import select, delete
@@ -9,6 +9,7 @@ from app.config import settings
 import app.database
 from app.models.queued_email import QueuedEmail
 from app.services.auth import create_signed_token
+from app.utils import ensure_utc, utc_now
 
 VERIFY_EMAIL_TEMPLATE = Template("""
 <html>
@@ -163,7 +164,7 @@ async def send_invite_email(email: str, team_id: int, team_name: str):
 
 async def send_login_notification(email: str, ip: str):
     html = LOGIN_ALERT_TEMPLATE.render(
-        time=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        time=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
         ip=ip,
     )
     await send_email(email, "New Login Alert — Radegast EDR", html, email_type="login")
@@ -172,7 +173,7 @@ async def send_login_notification(email: str, ip: str):
 async def send_new_keys_notification(email: str, key_type: str = "primary", ip: str = "unknown"):
     html = NEW_KEYS_TEMPLATE.render(
         key_type=key_type,
-        time=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        time=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
         ip=ip,
     )
     await send_email(email, "New Encryption Keys Added — Radegast EDR", html, email_type="new_keys")
@@ -180,7 +181,7 @@ async def send_new_keys_notification(email: str, key_type: str = "primary", ip: 
 
 async def send_recovery_used_notification(email: str, ip: str):
     html = RECOVERY_USED_TEMPLATE.render(
-        time=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        time=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
         ip=ip,
     )
     await send_email(email, "Recovery Key Used — Radegast EDR", html, email_type="recovery")
@@ -188,7 +189,7 @@ async def send_recovery_used_notification(email: str, ip: str):
 
 async def send_keys_transferred_notification(email: str, ip: str):
     html = KEYS_TRANSFERRED_TEMPLATE.render(
-        time=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        time=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
         ip=ip,
     )
     await send_email(email, "Encryption Keys Transferred — Radegast EDR", html, email_type="keys_transferred")
@@ -198,7 +199,7 @@ async def send_device_log_notification(email: str, device_name: str, device_id: 
     html = DEVICE_LOG_TEMPLATE.render(
         device_name=device_name,
         device_id=device_id,
-        time=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        time=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
         base_url=settings.base_url,
     )
     await send_email(email, f"New Alert from {device_name} — Radegast EDR", html, email_type="device_log")
@@ -207,7 +208,7 @@ async def send_device_log_notification(email: str, device_name: str, device_id: 
 async def send_notification_disabled_alert(email: str, disabled_features: list[str]):
     html = NOTIFICATION_DISABLED_TEMPLATE.render(
         features=disabled_features,
-        time=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        time=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
     )
     await send_email(email, "Notification Settings Disabled — Radegast EDR", html, email_type="notification_disabled")
 
@@ -246,7 +247,7 @@ def combine_html_bodies(html_bodies: list[str]) -> str:
 async def process_email_queue():
     debounce_seconds = getattr(settings, "email_debounce_seconds", 180)
     debounce_limit = timedelta(seconds=debounce_seconds)
-    now = datetime.now(tz=tz.utc)
+    now = utc_now()
 
     async with app.database.async_session() as session:
         result = await session.execute(
@@ -267,8 +268,7 @@ async def process_email_queue():
         for (email_to, email_type), emails in groups.items():
             oldest_email = emails[0]
             oldest_created = oldest_email.created_at
-            if oldest_created.tzinfo is None:
-                oldest_created = oldest_created.replace(tzinfo=tz.utc)
+            oldest_created = ensure_utc(oldest_created)
 
             if now - oldest_created >= debounce_limit:
                 if len(emails) == 1:

@@ -1,5 +1,3 @@
-from datetime import datetime, timezone as tz
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +7,7 @@ from app.database import get_db
 from app.dependencies import get_current_device, get_current_user
 from app.models.associations import device_group_devices
 from app.models.device import Device
+from app.utils import utc_now
 from app.models.device_group import DeviceGroup
 from app.models.team import Team
 from app.models.user import User
@@ -277,7 +276,7 @@ async def reinstall_device(
 
     raw_token = generate_token()
     device.token = hash_token(raw_token)
-    device.token_change = datetime.now(tz=tz.utc)
+    device.token_change = utc_now()
     await db.commit()
     await db.refresh(device)
 

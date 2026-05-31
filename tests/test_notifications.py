@@ -1,6 +1,6 @@
 """Tests that email notifications are sent (or suppressed) when security events occur."""
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -305,7 +305,7 @@ class TestDeviceLogNotification:
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
             await device_client.post(
                 "/logs/",
-                json={"time": datetime.utcnow().isoformat(), "content": "enc-log"},
+                json={"time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(), "content": "enc-log"},
             )
 
         subjects = [call.args[1] for call in mock_send.call_args_list]
@@ -320,7 +320,7 @@ class TestDeviceLogNotification:
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
             await client.post(
                 "/logs/",
-                json={"time": datetime.utcnow().isoformat(), "content": "enc-log"},
+                json={"time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(), "content": "enc-log"},
             )
 
         subjects = [call.args[1] for call in mock_send.call_args_list]

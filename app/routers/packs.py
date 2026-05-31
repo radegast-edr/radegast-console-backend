@@ -1,4 +1,3 @@
-from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +6,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.dependencies import get_current_device, get_current_user
 from app.models.device import Device
+from app.utils import utc_now
 from app.models.device_group import DeviceGroup
 from app.models.pack import Pack
 from app.models.pack_enabled import PackEnabled
@@ -323,7 +323,7 @@ async def device_available_packs(
         .where(Device.id == device.id)
     )
     device = result.scalar_one()
-    device.last_seen = datetime.utcnow()
+    device.last_seen = utc_now()
     await db.commit()
 
     packs = []

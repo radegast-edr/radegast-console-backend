@@ -1,4 +1,4 @@
-from datetime import datetime, timezone as tz
+from datetime import datetime, timezone
 from sqlalchemy import ForeignKey, Integer, String, Text, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -14,7 +14,7 @@ class PublicKey(Base):
     key_type: Mapped[str] = mapped_column(String(20), nullable=False, default="regular")
     name: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_used_at: Mapped[datetime | None] = mapped_column(
-        DateTime, default=datetime.now(tz=tz.utc), nullable=False
+        DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False
     )
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
 

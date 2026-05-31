@@ -587,7 +587,7 @@ class TestSessionInvalidation:
         from sqlalchemy import select
         from app.models.user import User
         from app.services.auth import create_signed_token
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
 
         email = "sesstest@example.com"
         password = "Password123!"
@@ -603,7 +603,7 @@ class TestSessionInvalidation:
         async with session_factory() as session:
             result = await session.execute(select(User).where(User.email == email))
             user = result.scalar_one()
-            user.password_change = datetime.utcnow() + timedelta(hours=1)
+            user.password_change = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1)
             await session.commit()
 
         # Session should now be invalid
@@ -653,7 +653,6 @@ class TestChangePassword:
         resp = await client.post(
             "/auth/change-password",
             json={"old_password": "x", "new_password": "NewPass456!"},
-            cookies={},  # no session
         )
         # Should fail (401 or 403)
         assert resp.status_code in (401, 403)
@@ -707,7 +706,7 @@ class TestNotificationSettings:
         assert resp2.json()["notify_downtime_maintenance"] is False
 
     async def test_notifications_requires_auth(self, client: AsyncClient):
-        resp = await client.get("/auth/notifications", cookies={})
+        resp = await client.get("/auth/notifications")
         assert resp.status_code in (401, 403)
 
 

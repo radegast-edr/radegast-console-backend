@@ -1,5 +1,5 @@
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -14,7 +14,7 @@ class SessionData:
     def __init__(self, scope: str, id: int, issued_at: float, mfa_level: str = "none"):
         self.scope = scope
         self.id = id
-        self.issued_at = datetime.utcfromtimestamp(issued_at)
+        self.issued_at = datetime.fromtimestamp(issued_at, tz=timezone.utc)
         self.mfa_level = mfa_level
 
 

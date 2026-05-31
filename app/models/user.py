@@ -1,5 +1,5 @@
 import enum
-from datetime import datetime, timezone as tz
+from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, Enum, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -24,10 +24,10 @@ class User(Base):
         Enum(UserRole), default=UserRole.user, nullable=False
     )
     password_change: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.now(tz=tz.utc), nullable=False
+        DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False
     )
     registered_on: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.now(tz=tz.utc), nullable=False
+        DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False
     )
     verified: Mapped[bool] = mapped_column(default=False, nullable=False)
 

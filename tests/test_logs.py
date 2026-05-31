@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from httpx import AsyncClient
 
 
@@ -23,7 +23,7 @@ class TestLogSubmission:
         resp = await client.post(
             "/logs/",
             json={
-                "time": datetime.utcnow().isoformat(),
+                "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                 "content": "encrypted-log-content-here",
                 "signature": "sig-data",
             },
@@ -35,7 +35,7 @@ class TestLogSubmission:
         resp = await auth_client.post(
             "/logs/",
             json={
-                "time": datetime.utcnow().isoformat(),
+                "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                 "content": "some-content",
             },
         )
@@ -60,7 +60,7 @@ class TestLogRetrieval:
         await client.post(
             "/logs/",
             json={
-                "time": datetime.utcnow().isoformat(),
+                "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                 "content": "test-log-data",
             },
         )
@@ -96,7 +96,7 @@ class TestLogRetrieval:
         await client.post("/auth/device/login", json={"token": token})
         await client.post(
             "/logs/",
-            json={"time": datetime.utcnow().isoformat(), "content": "filtered-log"},
+            json={"time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(), "content": "filtered-log"},
         )
 
         # Re-login as user to query logs (client == auth_client)

@@ -5,6 +5,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.dependencies import get_current_device, get_current_user
+from app.utils import ensure_utc
 from app.models.associations import device_group_devices, team_device_groups, team_users
 from app.models.device import Device
 from app.models.device_group import DeviceGroup
@@ -27,7 +28,7 @@ async def submit_log(
 ):
     log = Log(
         device_id=device.id,
-        time=data.time,
+        time=ensure_utc(data.time),
         content=data.content,
         signature=data.signature,
     )

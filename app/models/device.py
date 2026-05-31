@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -13,9 +13,9 @@ class Device(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     token: Mapped[str] = mapped_column(String(255), nullable=False)
-    token_change: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    token_change: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     signature_public_key: Mapped[str | None] = mapped_column(Text, nullable=True)
-    last_seen: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     groups = relationship(
         "DeviceGroup", secondary=device_group_devices, back_populates="devices"

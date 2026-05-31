@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone as tz
+from datetime import datetime, timedelta, timezone
 import base64
 import json
 import pyotp
@@ -14,6 +14,7 @@ from app.database import get_db
 from app.dependencies import get_current_user, get_session, mfa_level_value, user_has_required_mfa_setup
 from app.middleware.session import create_session_cookie
 from app.models.device_group import DeviceGroup
+from app.utils import ensure_utc, utc_now
 from app.models.key_transfer import KeyTransfer
 from app.models.team import Team
 from app.models.user import User
@@ -112,9 +113,10 @@ async def register(data: UserRegister, request: Request, db: AsyncSession = Depe
     existing: User | None = (await db.execute(select(User).where(User.email == data.email))).scalar_one_or_none()
     if existing:
         if not existing.verified:
-            if datetime.utcnow() - existing.password_change > timedelta(hours=24):
+            now = utc_now()
+            if now - ensure_utc(existing.password_change) > timedelta(hours=24):
                 await send_verification_email(data.email)
-                existing.password_change = datetime.utcnow()
+                existing.password_change = now
                 await db.commit()
                 raise HTTPException(status_code=400, detail="Email not verified. A new verification email has been sent.")
             else:
@@ -200,7 +202,7 @@ async def login(
         )
         pk_obj = pk_res.scalar_one_or_none()
         if pk_obj:
-            pk_obj.last_used_at = datetime.utcnow()
+            pk_obj.last_used_at = utc_now()
 
     # Check if they have MFA configured
     has_otp = user.otp_enabled and user.otp_secret is not None
@@ -515,7 +517,7 @@ async def change_password(
     if len(data.new_password) < 8:
         raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
     user.password = hash_password(data.new_password)
-    user.password_change = datetime.now(tz=tz.utc)
+    user.password_change = utc_now()
     await db.commit()
     return {"message": "Password changed successfully"}
 
@@ -568,7 +570,7 @@ async def initiate_key_transfer(
     transfer = KeyTransfer(
         user_id=user.id,
         receiver_age_public_key=data.receiver_age_public_key,
-        expires_at=datetime.utcnow() + timedelta(minutes=10),
+        expires_at=utc_now() + timedelta(minutes=10),
     )
     db.add(transfer)
     await db.commit()
@@ -589,7 +591,7 @@ async def get_key_transfer(
         raise HTTPException(status_code=404, detail="Transfer not found")
     if transfer.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
-    if datetime.utcnow() > transfer.expires_at:
+    if utc_now() > ensure_utc(transfer.expires_at):
         raise HTTPException(status_code=410, detail="Transfer expired")
 
     return KeyTransferStatusResponse(
@@ -617,7 +619,7 @@ async def complete_key_transfer(
         raise HTTPException(status_code=404, detail="Transfer not found")
     if transfer.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
-    if datetime.utcnow() > transfer.expires_at:
+    if utc_now() > ensure_utc(transfer.expires_at):
         raise HTTPException(status_code=410, detail="Transfer expired")
     if transfer.status == "completed":
         raise HTTPException(status_code=400, detail="Transfer already completed")

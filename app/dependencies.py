@@ -8,6 +8,7 @@ from app.middleware.session import SessionData, parse_session_cookie
 from app.models.user import User
 from app.models.device import Device
 from app.config import settings
+from app.utils import ensure_utc
 
 
 def mfa_level_value(level: str) -> int:
@@ -59,7 +60,7 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    if user.password_change > session.issued_at:
+    if ensure_utc(user.password_change).timestamp() > session.issued_at.timestamp():
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session invalidated")
 
     # Enforce role-based MFA level
@@ -103,7 +104,7 @@ async def get_current_device(
     device = result.scalar_one_or_none()
     if not device:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Device not found")
-    if device.token_change and device.token_change > session.issued_at:
+    if device.token_change and ensure_utc(device.token_change).timestamp() > session.issued_at.timestamp():
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session invalidated")
     return device
 

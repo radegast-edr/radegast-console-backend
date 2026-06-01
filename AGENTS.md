@@ -9,6 +9,7 @@
 ## Code style
 
 - In Python, all imports are on the top of the file. stdlib first, 3rd party packages after a new line, local imports after than
+- Cover all new features with new tests so that the test coverage does not decrease.
 
 ## Required Post-Task Validation
 

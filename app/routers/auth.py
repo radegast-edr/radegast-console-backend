@@ -1,6 +1,6 @@
 import base64
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
 import pyotp
@@ -57,6 +57,7 @@ from app.schemas.user import (
     UserLogin,
     UserRegister,
     UserResponse,
+    UnsubscribeRequest,
 )
 from app.services.auth import (
     create_signed_token,
@@ -64,6 +65,7 @@ from app.services.auth import (
     hash_token,
     verify_password,
     verify_signed_token,
+    load_signed_token_without_age,
 )
 from app.services.email import (
     send_keys_transferred_notification,
@@ -72,6 +74,7 @@ from app.services.email import (
     send_notification_disabled_alert,
     send_recovery_used_notification,
     send_verification_email,
+    EMAIL_TYPE_TO_PREFERENCE,
 )
 from app.utils import ensure_utc, utc_now
 
@@ -103,7 +106,9 @@ def _normalize_origin(origin: str) -> str | None:
 
 def _configured_webauthn_origins() -> list[str]:
     origins: list[str] = []
-    for source in (settings.base_url, settings.cors_origins, settings.webauthn_origins):
+    for source in (settings.base_url, settings.cors_origins, settings.webauthn_origins, settings.web_ui_url):
+        if not source:
+            continue
         parts = source.split(",") if isinstance(source, str) else []
         for candidate in parts:
             normalized = _normalize_origin(candidate)
@@ -1142,3 +1147,75 @@ async def get_auth_config():
     return {
         "turnstile_site_key": settings.turnstile_site_key,
     }
+
+
+@router.post("/unsubscribe")
+async def unsubscribe(
+    data: UnsubscribeRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    token_data = load_signed_token_without_age(data.token, salt="unsubscribe")
+    if not token_data:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid unsubscribe link."
+        )
+
+    user_id = token_data.get("user_id")
+    expires_at_str = token_data.get("expires_at")
+    if user_id is None or not expires_at_str:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid unsubscribe link."
+        )
+
+    try:
+        expires_at = datetime.fromisoformat(expires_at_str)
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid unsubscribe link."
+        )
+
+    expires_at = ensure_utc(expires_at)
+    if utc_now() > expires_at:
+        raise HTTPException(
+            status_code=400,
+            detail="The unsubscribe link has expired. Please log in and unsubscribe manually."
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found."
+        )
+
+    pref_field = token_data.get("preference_field")
+    if not pref_field:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid unsubscribe link."
+        )
+
+    # Find the matching preference name
+    pref_name = None
+    for k, (field, name) in EMAIL_TYPE_TO_PREFERENCE.items():
+        if field == pref_field:
+            pref_name = name
+            break
+
+    if not pref_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid unsubscribe link."
+        )
+
+    setattr(user, pref_field, False)
+    await db.commit()
+    return {
+        "message": f"Successfully unsubscribed from {pref_name.lower()}.",
+        "preference_name": pref_name
+    }
+

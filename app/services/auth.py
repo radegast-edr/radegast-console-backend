@@ -35,3 +35,11 @@ def verify_signed_token(token: str, salt: str = "default", max_age: int = 86400)
         return _serializer.loads(token, salt=salt, max_age=max_age)
     except Exception:
         return None
+
+
+def load_signed_token_without_age(token: str, salt: str = "default") -> dict | None:
+    try:
+        return _serializer.loads(token, salt=salt)
+    except Exception:
+        return None
+

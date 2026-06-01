@@ -98,7 +98,7 @@ async def test_bulk_email_grouping_and_combining(db_session):
             await process_email_queue()
 
             mock_direct.assert_called_once()
-            to_email, subject, html_body = mock_direct.call_args[0]
+            to_email, subject, html_body, *rest = mock_direct.call_args[0]
             assert to_email == "bulk@example.com"
             assert subject.startswith("[Bulk]")
             assert "New Login Alert" in subject

@@ -164,3 +164,8 @@ class MfaSettingsResponse(BaseModel):
     hardware_tokens: list[MfaHardwareTokenResponse]
     required_level: str
     current_level: str
+
+
+class UnsubscribeRequest(BaseModel):
+    token: str
+

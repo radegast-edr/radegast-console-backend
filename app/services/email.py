@@ -11,6 +11,7 @@ from sqlalchemy import select, delete
 from app.config import settings
 import app.database
 from app.models.queued_email import QueuedEmail
+from app.models.user import User
 from app.services.auth import create_signed_token
 from app.utils import ensure_utc, get_worker_lock, utc_now
 
@@ -89,7 +90,7 @@ DEVICE_LOG_TEMPLATE = Template("""
 <h2>New Alert — Radegast EDR</h2>
 <p>A new alert was submitted by device <strong>{{ device_name }}</strong> (ID: {{ device_id }}).</p>
 <p><strong>Time:</strong> {{ time }} UTC</p>
-<p><a href="{{ base_url }}/ui/alerts">View Alerts</a></p>
+<p><a href="{{ base_url }}/alerts">View Alerts</a></p>
 </body>
 </html>
 """)
@@ -111,7 +112,51 @@ NOTIFICATION_DISABLED_TEMPLATE = Template("""
 """)
 
 
-async def send_email_direct(to: str, subject: str, html_body: str):
+def get_web_ui_base() -> str:
+    if settings.web_ui_url:
+        return settings.web_ui_url.rstrip('/')
+    return f"{settings.base_url.rstrip('/')}/ui"
+
+
+EMAIL_TYPE_TO_PREFERENCE = {
+    "login": ("notify_login", "New login alerts"),
+    "new_keys": ("notify_new_keys", "New encryption keys added"),
+    "recovery": ("notify_recovery_used", "Recovery key usage alerts"),
+    "keys_transferred": ("notify_keys_transferred", "Encryption keys transferred alerts"),
+    "device_log": ("notify_device_log", "New device alerts"),
+    "downtime_maintenance": ("notify_downtime_maintenance", "Platform downtime and maintenance emails"),
+}
+
+
+async def send_email_direct(to: str, subject: str, html_body: str, email_type: str | None = None):
+    async with app.database.async_session() as session:
+        result = await session.execute(select(User).where(User.email == to))
+        user = result.scalar_one_or_none()
+
+    if user and email_type in EMAIL_TYPE_TO_PREFERENCE:
+        pref_field, pref_name = EMAIL_TYPE_TO_PREFERENCE[email_type]
+        expires_at = (utc_now() + timedelta(weeks=2)).isoformat()
+        token = create_signed_token({
+            "user_id": user.id,
+            "expires_at": expires_at,
+            "preference_field": pref_field
+        }, salt="unsubscribe")
+        ui_base = get_web_ui_base()
+        unsubscribe_url = f"{ui_base}/unsubscribe?token={token}"
+        
+        footer_html = f"""
+<div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #666; text-align: center;">
+    If you no longer wish to receive {pref_name.lower()}, you can 
+    <a href="{unsubscribe_url}" style="color: #0066cc; text-decoration: none;">unsubscribe here</a>.
+</div>
+"""
+        if "</body>" in html_body:
+            html_body = html_body.replace("</body>", f"{footer_html}</body>")
+        elif "</BODY>" in html_body:
+            html_body = html_body.replace("</BODY>", f"{footer_html}</BODY>")
+        else:
+            html_body += footer_html
+
     msg = MIMEText(html_body, "html")
     msg["From"] = settings.smtp_from
     msg["To"] = to
@@ -136,7 +181,7 @@ async def send_email_direct(to: str, subject: str, html_body: str):
 async def send_email(to: str, subject: str, html_body: str, email_type: str | None = None):
     # Verification emails are sent right away.
     if email_type == "verify" or email_type is None:
-        await send_email_direct(to, subject, html_body)
+        await send_email_direct(to, subject, html_body, email_type)
         return
 
     # Queue the email
@@ -153,7 +198,8 @@ async def send_email(to: str, subject: str, html_body: str, email_type: str | No
 
 async def send_verification_email(email: str):
     token = create_signed_token({"email": email}, salt="email-verify")
-    url = f"{settings.base_url}/ui/verify?token={token}"
+    ui_base = get_web_ui_base()
+    url = f"{ui_base}/verify?token={token}"
     html = VERIFY_EMAIL_TEMPLATE.render(url=url)
     await send_email(email, "Verify your Radegast EDR account", html, email_type="verify")
 
@@ -199,11 +245,12 @@ async def send_keys_transferred_notification(email: str, ip: str):
 
 
 async def send_device_log_notification(email: str, device_name: str, device_id: int):
+    ui_base = get_web_ui_base()
     html = DEVICE_LOG_TEMPLATE.render(
         device_name=device_name,
         device_id=device_id,
         time=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
-        base_url=settings.base_url,
+        base_url=ui_base,
     )
     await send_email(email, f"New Alert from {device_name} — Radegast EDR", html, email_type="device_log")
 
@@ -281,7 +328,7 @@ async def process_email_queue():
                     subject = f"[Bulk] {emails[0].subject}"
                     html_body = combine_html_bodies([e.html_body for e in emails])
 
-                await send_email_direct(email_to, subject, html_body)
+                await send_email_direct(email_to, subject, html_body, email_type)
 
                 ids_to_delete = [e.id for e in emails]
                 await session.execute(

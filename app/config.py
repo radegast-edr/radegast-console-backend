@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     mfa_required_level_user: str = "none"
     webauthn_rp_id: str | None = None
     webauthn_origins: str = ""
+    web_ui_url: str | None = None
 
     model_config = {"env_prefix": "radegast_"}
 

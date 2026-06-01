@@ -4,12 +4,11 @@ from unittest.mock import MagicMock, patch
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.models.user import User, UserRole
 from app.models.hardware_token import HardwareToken
-from app.services.auth import create_signed_token, hash_password
+from app.services.auth import hash_password
 
 
 @pytest.mark.asyncio

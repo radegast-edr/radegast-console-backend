@@ -1,13 +1,16 @@
+import time
+
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.database import get_db
 from app.middleware.session import SessionData, parse_session_cookie
-from app.models.user import User
 from app.models.device import Device
-from app.config import settings
+from app.models.user import User
+from app.schemas.user import MfaVerifyRequest, UserLogin
 from app.utils import ensure_utc
 
 
@@ -128,11 +131,6 @@ async def require_role(role: str):
 
 RequireMaintainer = Depends(require_role("maintainer"))
 RequireAdmin = Depends(require_role("admin"))
-
-
-import time
-from collections import defaultdict
-from app.schemas.user import UserLogin, MfaVerifyRequest
 
 
 def _client_ip(request: Request) -> str:

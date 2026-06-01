@@ -198,7 +198,7 @@ async def list_logs(
 
     seen_log_ids = set()
     if logs:
-        log_ids = [l.id for l in logs]
+        log_ids = [log.id for log in logs]
         seen_res = await db.execute(
             select(LogSeen.log_id).where(LogSeen.user_id == user.id, LogSeen.log_id.in_(log_ids))
         )

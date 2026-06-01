@@ -1,19 +1,22 @@
+import asyncio
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, RedirectResponse
+import uvicorn
 
 from app.config import settings
 from app.database import init_db
 from app.middleware.request_logging import RequestLoggingMiddleware
-from app.routers import auth, teams, devices, packs, logs, admin, groups, ui, install, releases
+from app.routers import admin, auth, devices, groups, install, logs, packs, releases, teams, ui
+from app.services.email import process_email_queue_loop
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    import asyncio
     # Create upload directory
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.releases_dir).mkdir(parents=True, exist_ok=True)
@@ -22,7 +25,6 @@ async def lifespan(app: FastAPI):
 
     email_task = None
     if settings.enable_email_worker:
-        from app.services.email import process_email_queue_loop
         email_task = asyncio.create_task(process_email_queue_loop())
 
     try:
@@ -42,8 +44,6 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
-
-from collections import defaultdict
 app.state.rate_limits = defaultdict(list)
 
 # CORS
@@ -98,5 +98,4 @@ async def security_txt() -> FileResponse:
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="127.0.1", port=8000, access_log=False)
+    uvicorn.run(app, host="127.0.0.1", port=8000, access_log=False)

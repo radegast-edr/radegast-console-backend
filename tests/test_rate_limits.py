@@ -1,7 +1,8 @@
-import pytest
 from httpx import AsyncClient
-from app.main import app
+import pytest
+
 from app.dependencies import rate_limit_login, rate_limit_mfa, rate_limit_mfa_otp
+from app.main import app
 
 @pytest.mark.asyncio
 class TestRateLimits:

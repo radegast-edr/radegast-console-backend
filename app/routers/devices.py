@@ -7,7 +7,6 @@ from app.database import get_db
 from app.dependencies import get_current_device, get_current_user
 from app.models.associations import device_group_devices
 from app.models.device import Device
-from app.utils import utc_now
 from app.models.device_group import DeviceGroup
 from app.models.team import Team
 from app.models.user import User
@@ -26,6 +25,7 @@ from app.services.permissions import (
     has_team_admin_permission,
     has_device_admin_permission,
 )
+from app.utils import utc_now
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 

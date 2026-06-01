@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import settings
 from app.models.user import User, UserRole
-from app.models.hardware_token import HardwareToken
 from app.services.auth import hash_password
 
 

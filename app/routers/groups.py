@@ -11,7 +11,6 @@ from app.models.device import Device
 from app.models.device_group import DeviceGroup
 from app.models.team import Team
 from app.models.user import User
-from app.schemas.team import DeviceGroupResponse
 from app.services.permissions import (
     get_user_team_ids_transitive,
     is_user_member_of_team_transitive,
@@ -55,7 +54,6 @@ def _group_detail(group: DeviceGroup) -> dict:
 @router.get("/")
 async def list_groups(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """List all device groups visible to the current user (via their teams)."""
-    from app.services.permissions import get_user_team_ids_transitive
     team_ids = await get_user_team_ids_transitive(user.id, db)
     if not team_ids:
         return []
@@ -91,7 +89,6 @@ async def get_group(
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
 
-    from app.services.permissions import is_user_member_of_team_transitive
     visible = False
     for team in group.teams:
         if await is_user_member_of_team_transitive(team.id, user.id, db):

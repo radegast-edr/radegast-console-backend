@@ -1,38 +1,36 @@
-from datetime import datetime, timedelta, timezone
 import base64
 import json
-import sys
+from datetime import timedelta
+
 import pyotp
-import webauthn
-from webauthn.helpers.structs import PublicKeyCredentialDescriptor
-
-SECURE_COOKIE = "pytest" not in sys.modules
-
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from sqlalchemy import func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+import webauthn
+from webauthn.helpers.structs import PublicKeyCredentialDescriptor
 
+from app.config import settings
 from app.database import get_db
 from app.dependencies import (
     get_current_user,
     get_session,
     mfa_level_value,
-    user_has_required_mfa_setup,
     rate_limit_login,
     rate_limit_mfa,
     rate_limit_mfa_otp,
+    user_has_required_mfa_setup,
 )
 from app.middleware.session import create_session_cookie
+from app.models.associations import team_device_groups, team_users
+from app.models.device import Device
 from app.models.device_group import DeviceGroup
-from app.utils import ensure_utc, utc_now
+from app.models.hardware_token import HardwareToken
 from app.models.key_transfer import KeyTransfer
+from app.models.public_key import PublicKey
 from app.models.team import Team
 from app.models.user import User
-from app.models.public_key import PublicKey
-from app.models.device import Device
-from app.models.hardware_token import HardwareToken
-from app.models.associations import team_device_groups, team_users
+from app.schemas.device import DeviceLogin
 from app.schemas.user import (
     ChangePasswordRequest,
     KeyRecoverResponse,
@@ -43,26 +41,24 @@ from app.schemas.user import (
     KeyTransferInitiateRequest,
     KeyTransferInitiateResponse,
     KeyTransferStatusResponse,
+    MfaHardwareTokenAssertionOptionsRequest,
+    MfaHardwareTokenAssertionOptionsResponse,
+    MfaHardwareTokenResponse,
+    MfaHardwareTokenSetupResponse,
+    MfaHardwareTokenVerifyRequest,
+    MfaOtpSetupResponse,
+    MfaOtpVerifyRequest,
+    MfaSettingsResponse,
+    MfaVerifyRequest,
     NotificationSettings,
-    PublicKeyResponse,
     PublicKeyAddRequest,
+    PublicKeyResponse,
     UserLogin,
     UserRegister,
     UserResponse,
-    MfaOtpSetupResponse,
-    MfaOtpVerifyRequest,
-    MfaHardwareTokenSetupResponse,
-    MfaHardwareTokenVerifyRequest,
-    MfaHardwareTokenAssertionOptionsRequest,
-    MfaHardwareTokenAssertionOptionsResponse,
-    MfaVerifyRequest,
-    MfaHardwareTokenResponse,
-    MfaSettingsResponse,
 )
-from app.schemas.device import DeviceLogin
 from app.services.auth import (
     create_signed_token,
-    generate_token,
     hash_password,
     hash_token,
     verify_password,
@@ -72,11 +68,13 @@ from app.services.email import (
     send_keys_transferred_notification,
     send_login_notification,
     send_new_keys_notification,
+    send_notification_disabled_alert,
     send_recovery_used_notification,
     send_verification_email,
-    send_notification_disabled_alert,
 )
-from app.config import settings
+from app.utils import ensure_utc, utc_now
+
+SECURE_COOKIE = True
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 

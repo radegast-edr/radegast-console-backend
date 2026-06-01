@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -235,7 +235,7 @@ async def list_team_groups(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    team = await _get_user_team(team_id, user, db)
+    await _get_user_team(team_id, user, db)
     result = await db.execute(
         select(DeviceGroup)
         .options(selectinload(DeviceGroup.teams))

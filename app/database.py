@@ -17,21 +17,5 @@ async def get_db():
 
 
 async def init_db():
-    from app.models import (  # noqa: F401
-        Device,
-        DeviceGroup,
-        KeyTransfer,
-        Log,
-        LogSeen,
-        Pack,
-        PackEnabled,
-        PackVersion,
-        PublicKey,
-        Team,
-        User,
-        QueuedEmail,
-        HardwareToken,
-    )
-
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

@@ -6,7 +6,6 @@ from sqlalchemy import select
 from app.config import settings
 from app.models.queued_email import QueuedEmail
 from app.services.email import (
-    send_email,
     send_verification_email,
     send_login_notification,
     process_email_queue,

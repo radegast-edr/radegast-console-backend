@@ -1,8 +1,8 @@
+import os
 from pathlib import Path
 import re
-import os
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, PlainTextResponse
 from jinja2 import Template
 

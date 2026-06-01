@@ -691,7 +691,7 @@ class TestNotificationSettings:
             "notify_device_log": False,
             "notify_downtime_maintenance": False,
         }
-        with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
+        with patch("app.services.email.send_email", new_callable=AsyncMock):
             resp = await client.put("/auth/notifications", json=payload)
             assert resp.status_code == 200
         data = resp.json()

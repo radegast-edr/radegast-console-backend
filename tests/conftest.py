@@ -1,18 +1,35 @@
+import io
+from pathlib import Path
+import shutil
+import tempfile
+import zipfile
+
+from httpx import ASGITransport, AsyncClient
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+import app.database as app_database
+import app.routers.auth as auth_router
+import app.routers.install as install_router
+from app.config import settings
 from app.database import Base, get_db
+from app.dependencies import rate_limit_login, rate_limit_mfa, rate_limit_mfa_otp
 from app.main import app
+from app.models.user import User, UserRole
+from app.services.auth import create_signed_token
+
+# Disable email worker for tests
+settings.enable_email_worker = False
+# Disable secure cookies for tests
+auth_router.SECURE_COOKIE = False
+
+TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
+
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_uploads():
-    import tempfile
-    import shutil
-    from pathlib import Path
-    from app.config import settings
-
     old_upload_dir = settings.upload_dir
     test_dir = tempfile.mkdtemp()
     settings.upload_dir = test_dir
@@ -26,14 +43,6 @@ def setup_test_uploads():
 def setup_test_releases():
     """Create a temporary releases directory with a stub zip so the agent
     download endpoint returns 200 without requiring real release binaries."""
-    import io
-    import zipfile
-    import tempfile
-    import shutil
-    from pathlib import Path
-    from app.config import settings
-    import app.routers.install as install_router
-
     old_releases_dir = settings.releases_dir
     old_releases_path = install_router.RELEASES_DIR
 
@@ -57,24 +66,17 @@ def setup_test_releases():
     shutil.rmtree(test_dir, ignore_errors=True)
 
 
-from app.config import settings
-settings.enable_email_worker = False
-
-TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
-
-
 @pytest_asyncio.fixture
 async def db_engine():
     engine = create_async_engine(TEST_DB_URL, echo=False)
-    import app.database
-    original_session = app.database.async_session
-    app.database.async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    original_session = app_database.async_session
+    app_database.async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield engine
 
-    app.database.async_session = original_session
+    app_database.async_session = original_session
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
@@ -95,8 +97,6 @@ async def client(db_engine):
     async def override_get_db():
         async with session_factory() as session:
             yield session
-
-    from app.dependencies import rate_limit_login, rate_limit_mfa, rate_limit_mfa_otp
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[rate_limit_login] = lambda: None
@@ -137,7 +137,6 @@ async def registered_user(client: AsyncClient):
     await client.post("/auth/register", json={"email": email, "password": password})
 
     # Manually verify via token
-    from app.services.auth import create_signed_token
     token = create_signed_token({"email": email}, salt="email-verify")
     await client.get(f"/auth/verify?token={token}")
 
@@ -156,11 +155,6 @@ async def auth_client(client: AsyncClient, registered_user):
 @pytest_asyncio.fixture
 async def admin_client(client: AsyncClient, db_engine):
     """Client with authenticated admin user."""
-    from sqlalchemy import select
-    from app.models.user import User, UserRole
-    from app.services.auth import hash_password, create_signed_token
-    from datetime import datetime
-
     email = "admin@example.com"
     password = "AdminPass123!"
 
@@ -189,10 +183,6 @@ async def admin_client(client: AsyncClient, db_engine):
 @pytest_asyncio.fixture
 async def maintainer_client(client: AsyncClient, db_engine):
     """Client with authenticated maintainer user."""
-    from sqlalchemy import select
-    from app.models.user import User, UserRole
-    from app.services.auth import create_signed_token
-
     email = "maintainer@example.com"
     password = "MaintainerPass123!"
 

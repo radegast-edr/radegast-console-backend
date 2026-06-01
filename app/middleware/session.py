@@ -1,8 +1,6 @@
 import time
 from datetime import datetime, timezone
 
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 from app.config import settings

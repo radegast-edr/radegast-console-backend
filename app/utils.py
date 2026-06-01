@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
-from filelock import AsyncFileLock
 from pathlib import Path
+
+from filelock import AsyncFileLock
 
 from app.config import settings
 

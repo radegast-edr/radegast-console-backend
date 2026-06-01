@@ -20,7 +20,7 @@ def test_get_request_session_label_for_user_and_device():
     user_cookie = create_session_cookie("user", 42)
     device_cookie = create_session_cookie("device", 99)
 
-    user_request = DummyRequest("GET", "/health", "127.0.0.1", 1234, {settings.session_cookie_name: user_cookie})
+    user_request = DummyRequest("GET", "/api/v1/health", "127.0.0.1", 1234, {settings.session_cookie_name: user_cookie})
     device_request = DummyRequest("POST", "/logs/", "127.0.0.1", 1234, {settings.session_cookie_name: device_cookie})
 
     assert get_request_session_label(user_request) == "[U42]"
@@ -40,7 +40,7 @@ async def test_request_logging_includes_session_label(client, caplog, scope, ses
     cookie = create_session_cookie(scope, session_id)
     client.cookies.set(settings.session_cookie_name, cookie)
 
-    resp = await client.get("/health")
+    resp = await client.get("/api/v1/health")
     assert resp.status_code == 200
 
     assert any(label in record.message for record in caplog.records)

@@ -58,7 +58,7 @@ async def has_team_admin_permission(team_id: int, user_id: int, db: AsyncSession
             break
             
         # If this team in the chain has admin permission, and the user is a member (direct or virtual) of this team:
-        if team.permission_admin is not None and curr_id in user_team_ids:
+        if team.permission_admin == "write" and curr_id in user_team_ids:
             return True
             
         curr_id = team.managing_team_id

@@ -128,3 +128,56 @@ async def require_role(role: str):
 
 RequireMaintainer = Depends(require_role("maintainer"))
 RequireAdmin = Depends(require_role("admin"))
+
+
+import time
+from collections import defaultdict
+from app.schemas.user import UserLogin, MfaVerifyRequest
+
+
+def _client_ip(request: Request) -> str:
+    for header in ("cf-connecting-ip", "x-real-ip", "x-forwarded-for"):
+        val = request.headers.get(header)
+        if val:
+            return val.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def check_rate_limit(request: Request, key: str, limit: int, window: float):
+    rate_limits = request.app.state.rate_limits
+
+    now = time.time()
+    timestamps = [t for t in rate_limits[key] if now - t < window]
+    rate_limits[key] = timestamps
+    if len(timestamps) >= limit:
+        wait_time = int(window - (now - timestamps[0]))
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Too many attempts. Please try again in {wait_time} seconds."
+        )
+    rate_limits[key].append(now)
+
+
+async def rate_limit_login(request: Request, data: UserLogin):
+    ip = _client_ip(request)
+    check_rate_limit(request, f"login:ip:{ip}", limit=5, window=30)
+    check_rate_limit(request, f"login:email:{data.email}", limit=5, window=30)
+
+
+async def rate_limit_mfa(request: Request, data: MfaVerifyRequest):
+    from app.services.auth import verify_signed_token
+    ip = _client_ip(request)
+    check_rate_limit(request, f"mfa:ip:{ip}", limit=5, window=30)
+
+    token_data = verify_signed_token(data.mfa_token, salt="mfa-login", max_age=300)
+    if not token_data or "user_id" not in token_data:
+        raise HTTPException(status_code=400, detail="Invalid or expired MFA token")
+
+    user_id = token_data["user_id"]
+    check_rate_limit(request, f"mfa:user:{user_id}", limit=5, window=30)
+
+
+async def rate_limit_mfa_otp(request: Request, user: User = Depends(get_current_user)):
+    ip = _client_ip(request)
+    check_rate_limit(request, f"mfa_setup:ip:{ip}", limit=5, window=30)
+    check_rate_limit(request, f"mfa_setup:user:{user.id}", limit=5, window=30)

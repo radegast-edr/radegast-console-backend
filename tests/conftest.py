@@ -96,7 +96,12 @@ async def client(db_engine):
         async with session_factory() as session:
             yield session
 
+    from app.dependencies import rate_limit_login, rate_limit_mfa, rate_limit_mfa_otp
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[rate_limit_login] = lambda: None
+    app.dependency_overrides[rate_limit_mfa] = lambda: None
+    app.dependency_overrides[rate_limit_mfa_otp] = lambda: None
 
     class TestAPIPrefixMiddleware:
         def __init__(self, app):
@@ -107,7 +112,7 @@ async def client(db_engine):
                 path = scope.get("path", "")
                 if not (
                     path.startswith("/api/v1")
-                    or path in ("/health", "/favicon.ico", "/.well-known/security.txt")
+                    or path in ("/favicon.ico", "/.well-known/security.txt")
                     or path.startswith("/ui")
                 ):
                     scope["path"] = f"/api/v1{path}"

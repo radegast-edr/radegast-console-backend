@@ -43,6 +43,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+from collections import defaultdict
+app.state.rate_limits = defaultdict(list)
+
 # CORS
 origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 app.add_middleware(
@@ -68,7 +71,7 @@ app.include_router(prefix="/ui", router=ui.router)
 app.add_middleware(RequestLoggingMiddleware)
 
 
-@app.get("/health")
+@app.get(f"/api/v{api_version}/health")
 async def health():
     return {"status": "ok"}
 

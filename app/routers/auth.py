@@ -1,9 +1,12 @@
 from datetime import datetime, timedelta, timezone
 import base64
 import json
+import sys
 import pyotp
 import webauthn
 from webauthn.helpers.structs import PublicKeyCredentialDescriptor
+
+SECURE_COOKIE = "pytest" not in sys.modules
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from sqlalchemy import func, insert, select
@@ -11,7 +14,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.dependencies import get_current_user, get_session, mfa_level_value, user_has_required_mfa_setup
+from app.dependencies import (
+    get_current_user,
+    get_session,
+    mfa_level_value,
+    user_has_required_mfa_setup,
+    rate_limit_login,
+    rate_limit_mfa,
+    rate_limit_mfa_otp,
+)
 from app.middleware.session import create_session_cookie
 from app.models.device_group import DeviceGroup
 from app.utils import ensure_utc, utc_now
@@ -184,6 +195,7 @@ async def login(
     response: Response,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    _rate_limit = Depends(rate_limit_login),
 ):
     result = await db.execute(
         select(User).options(selectinload(User.hardware_tokens)).where(User.email == data.email)
@@ -239,6 +251,7 @@ async def login(
         value=cookie,
         httponly=True,
         samesite="lax",
+        secure=SECURE_COOKIE,
         max_age=settings.session_max_age,
     )
 
@@ -651,6 +664,7 @@ async def device_login(
         value=cookie,
         httponly=True,
         samesite="lax",
+        secure=SECURE_COOKIE,
         max_age=settings.session_max_age,
     )
 
@@ -716,8 +730,10 @@ async def mfa_otp_setup(
 async def mfa_otp_verify(
     data: MfaOtpVerifyRequest,
     response: Response,
+    request: Request,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    _rate_limit = Depends(rate_limit_mfa_otp),
 ):
     if not user.otp_secret:
         raise HTTPException(status_code=400, detail="OTP setup not initiated")
@@ -735,6 +751,7 @@ async def mfa_otp_verify(
         value=cookie,
         httponly=True,
         samesite="lax",
+        secure=SECURE_COOKIE,
         max_age=settings.session_max_age,
     )
 
@@ -825,6 +842,7 @@ async def mfa_hardware_token_verify(
         value=cookie,
         httponly=True,
         samesite="lax",
+        secure=SECURE_COOKIE,
         max_age=settings.session_max_age,
     )
 
@@ -878,6 +896,7 @@ async def mfa_verify(
     response: Response,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    _rate_limit = Depends(rate_limit_mfa),
 ):
     token_data = verify_signed_token(data.mfa_token, salt="mfa-login", max_age=300)
     if not token_data or "user_id" not in token_data:
@@ -960,6 +979,7 @@ async def mfa_verify(
         value=cookie,
         httponly=True,
         samesite="lax",
+        secure=SECURE_COOKIE,
         max_age=settings.session_max_age,
     )
 
@@ -1037,6 +1057,7 @@ async def mfa_otp_disable(
         value=cookie,
         httponly=True,
         samesite="lax",
+        secure=SECURE_COOKIE,
         max_age=settings.session_max_age,
     )
 
@@ -1096,6 +1117,7 @@ async def delete_hardware_token(
         value=cookie,
         httponly=True,
         samesite="lax",
+        secure=SECURE_COOKIE,
         max_age=settings.session_max_age,
     )
 

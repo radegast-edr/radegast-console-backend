@@ -28,3 +28,9 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+if settings.secret_key == "change-me-in-production":
+    print("\n" + "="*80)
+    print("WARNING: Using default secret key 'change-me-in-production'!")
+    print("This is OK for developing locally but MUST be changed in production.")
+    print("="*80 + "\n")

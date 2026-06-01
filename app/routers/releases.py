@@ -60,6 +60,28 @@ async def list_releases():
     return _list_all_releases()
 
 
+def _validate_release_params(version: str, os_name: str, arch: str, is_upload: bool = False) -> tuple[str, str, str]:
+    err_code = 400 if is_upload else 404
+
+    if not SEMVER_RE.match(version):
+        raise HTTPException(status_code=err_code, detail="Version must be semver (e.g. 1.2.3)")
+
+    os_name = os_name.lower()
+    arch = arch.lower()
+
+    if os_name not in VALID_OS:
+        raise HTTPException(status_code=err_code, detail=f"OS must be one of: {', '.join(sorted(VALID_OS))}")
+
+    # Validate specific arch allowed for each OS
+    if os_name == "linux" and arch not in {"amd64", "arm64"}:
+        raise HTTPException(status_code=err_code, detail="Arch must be one of: amd64, arm64")
+    elif os_name == "windows" and arch != "amd64":
+        raise HTTPException(status_code=err_code, detail="Arch must be one of: amd64")
+    elif os_name == "mac" and arch != "m5":
+        raise HTTPException(status_code=err_code, detail="Arch must be one of: m5")
+    return version, os_name, arch
+
+
 @router.post("/")
 async def upload_release(
     version: str = Form(...),
@@ -72,22 +94,7 @@ async def upload_release(
     if user.role != UserRole.admin:
         raise HTTPException(status_code=403, detail="Admin role required")
 
-    if not SEMVER_RE.match(version):
-        raise HTTPException(status_code=400, detail="Version must be semver (e.g. 1.2.3)")
-
-    os_name = os_name.lower()
-    arch = arch.lower()
-
-    if os_name not in VALID_OS:
-        raise HTTPException(status_code=400, detail=f"OS must be one of: {', '.join(sorted(VALID_OS))}")
-
-    # Validate specific arch allowed for each OS
-    if os_name == "linux" and arch not in {"amd64", "arm64"}:
-        raise HTTPException(status_code=400, detail="Arch must be one of: amd64, arm64")
-    elif os_name == "windows" and arch != "amd64":
-        raise HTTPException(status_code=400, detail="Arch must be one of: amd64")
-    elif os_name == "mac" and arch != "m5":
-        raise HTTPException(status_code=400, detail="Arch must be one of: m5")
+    version, os_name, arch = _validate_release_params(version, os_name, arch, is_upload=True)
 
     dest_dir = _releases_dir() / version / os_name / arch
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -123,6 +130,8 @@ async def delete_release(
     if user.role != UserRole.admin:
         raise HTTPException(status_code=403, detail="Admin role required")
 
+    version, os_name, arch = _validate_release_params(version, os_name, arch)
+
     zip_path = _releases_dir() / version / os_name / arch / "rustinel.zip"
     if not zip_path.exists():
         raise HTTPException(status_code=404, detail="Release not found")
@@ -150,6 +159,8 @@ async def download_release(
     user: User = Depends(get_current_user),
 ):
     """Download a specific release zip. Any authenticated user."""
+    version, os_name, arch = _validate_release_params(version, os_name, arch)
+
     zip_path = _releases_dir() / version / os_name / arch / "rustinel.zip"
     if not zip_path.exists():
         raise HTTPException(status_code=404, detail="Release not found")

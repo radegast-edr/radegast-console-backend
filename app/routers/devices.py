@@ -298,6 +298,9 @@ async def delete_device(
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
 
+    if not await has_device_admin_permission(device_id, user.id, db):
+        raise HTTPException(status_code=403, detail="No admin permission")
+
     await db.delete(device)
     await db.commit()
     return {"message": "Device deleted"}

@@ -46,12 +46,28 @@ async def download_agent(
     elif arch_name in ("aarch64", "arm64"):
         arch_name = "arm64"
 
-    if not version:
+    # Whitelist check for OS and arch combinations
+    if os_name == "linux" and arch_name not in {"amd64", "arm64"}:
+        raise HTTPException(status_code=404, detail="Agent release not found")
+    elif os_name == "windows" and arch_name != "amd64":
+        raise HTTPException(status_code=404, detail="Agent release not found")
+    elif os_name == "mac" and arch_name != "m5":
+        raise HTTPException(status_code=404, detail="Agent release not found")
+    elif os_name not in {"linux", "windows", "mac"}:
+        raise HTTPException(status_code=404, detail="Agent release not found")
+
+    if version:
+        if not re.match(r"^\d+\.\d+\.\d+$", version):
+            raise HTTPException(status_code=404, detail="Agent release not found")
+    else:
         version = get_latest_agent_version()
         if not version:
             raise HTTPException(status_code=404, detail="No agent releases found")
 
-    zip_path = RELEASES_DIR / version / os_name / arch_name / "rustinel.zip"
+    zip_path = (RELEASES_DIR / version / os_name / arch_name / "rustinel.zip").resolve()
+    if not zip_path.is_relative_to(RELEASES_DIR.resolve()):
+        raise HTTPException(status_code=400, detail="Invalid path")
+
     if not zip_path.exists():
         raise HTTPException(
             status_code=404,

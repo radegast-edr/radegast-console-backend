@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import init_db
+from app.middleware.request_logging import RequestLoggingMiddleware
 from app.routers import auth, teams, devices, packs, logs, admin, groups, ui, install, releases
 
 
@@ -64,6 +65,7 @@ app.include_router(prefix=f"/api/v{api_version}", router=logs.router)
 app.include_router(prefix=f"/api/v{api_version}", router=admin.router)
 app.include_router(prefix=f"/api/v{api_version}", router=releases.router)
 app.include_router(prefix="/ui", router=ui.router)
+app.add_middleware(RequestLoggingMiddleware)
 
 
 @app.get("/health")
@@ -94,4 +96,4 @@ async def security_txt() -> FileResponse:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.1", port=8000)
+    uvicorn.run(app, host="127.0.1", port=8000, access_log=False)

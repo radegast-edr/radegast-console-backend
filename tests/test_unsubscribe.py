@@ -66,7 +66,7 @@ async def test_unsubscribe_link_not_appended_to_transactional_email(db_session):
 
 
 @pytest.mark.asyncio
-async def test_unsubscribe_link_not_appended_to_unregistered_email():
+async def test_unsubscribe_link_not_appended_to_unregistered_email(db_session):
     email = "nonexistent_unregistered@example.com"
     orig_host = settings.smtp_host
     settings.smtp_host = "smtp.example.com"
@@ -156,7 +156,7 @@ async def test_unsubscribe_api_invalid_token(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_web_ui_url_config_and_origins():
+async def test_web_ui_url_config_and_origins(db_session):
     # Save original settings
     orig_web_ui_url = settings.web_ui_url
     try:

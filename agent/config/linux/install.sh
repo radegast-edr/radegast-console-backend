@@ -51,6 +51,21 @@ elif [ "$ARCH_NAME" = "aarch64" ]; then
     ARCH_NAME="arm64"
 fi
 
+# 2b. Solve Debian bug with perf_event_paranoid
+# > Some Linux distributions define higher levels for kernel.perf_event_paranoid,
+# > for example Debian based distributions also use kernel.perf_event_paranoid=3,
+# > which disallows access to perf_event_open() without CAP_SYS_ADMIN.
+# -- https://opentelemetry.io/docs/zero-code/obi/setup/kubernetes/
+if [ -f /proc/sys/kernel/perf_event_paranoid ]; then
+    if [ "$(cat /proc/sys/kernel/perf_event_paranoid)" -eq 3 ]; then
+        echo "Solving Debian bug: kernel.perf_event_paranoid is set to 3. Setting to 2..."
+        sysctl -w kernel.perf_event_paranoid=2
+        if [ -d /etc/sysctl.d ]; then
+            echo "kernel.perf_event_paranoid = 2" > /etc/sysctl.d/99-radegast-perf.conf
+        fi
+    fi
+fi
+
 # 3. Create radegast-agent system user and directories
 echo "Creating radegast-agent system user..."
 if ! id "radegast-agent" >/dev/null 2>&1; then
@@ -187,6 +202,7 @@ fi
 
 rm -rf /etc/rustinel
 rm -rf /var/log/rustinel
+rm -f /etc/sysctl.d/99-radegast-perf.conf
 
 rm -rf /opt/radegast/rustinel
 rm -rf /opt/radegast/state

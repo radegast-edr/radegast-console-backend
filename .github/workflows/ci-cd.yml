@@ -57,3 +57,11 @@ jobs:
 
       - name: Push image
         run: docker compose -f podman-compose.yaml push
+
+      - name: Update Docker Hub Description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: radegastedr/console
+          readme-filepath: ./README.md

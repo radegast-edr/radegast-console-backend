@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     mfa_required_level_admin: str = "none"
     mfa_required_level_maintainer: str = "none"
     mfa_required_level_user: str = "none"
+    webauthn_rp_id: str | None = None
+    webauthn_origins: str = ""
 
     model_config = {"env_prefix": "radegast_"}
 

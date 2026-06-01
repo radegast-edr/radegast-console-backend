@@ -1,6 +1,7 @@
 import base64
 import json
 from datetime import timedelta
+from urllib.parse import urlparse
 
 import pyotp
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
@@ -86,6 +87,45 @@ def _client_ip(request: Request) -> str:
         if val:
             return val.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
+
+
+def _normalize_origin(origin: str) -> str | None:
+    origin = origin.strip().rstrip("/")
+    if not origin:
+        return None
+    parsed = urlparse(origin)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return None
+    if parsed.port:
+        return f"{parsed.scheme}://{parsed.hostname}:{parsed.port}"
+    return f"{parsed.scheme}://{parsed.hostname}"
+
+
+def _configured_webauthn_origins() -> list[str]:
+    origins: list[str] = []
+    for source in (settings.base_url, settings.cors_origins, settings.webauthn_origins):
+        parts = source.split(",") if isinstance(source, str) else []
+        for candidate in parts:
+            normalized = _normalize_origin(candidate)
+            if normalized and normalized not in origins:
+                origins.append(normalized)
+    return origins
+
+
+def _resolve_webauthn_rp_id(request: Request | None = None) -> str:
+    configured = (settings.webauthn_rp_id or "").strip()
+    if configured:
+        return configured
+
+    allowed_origins = _configured_webauthn_origins()
+    request_origin = _normalize_origin((request.headers.get("origin") if request else "") or "")
+    if request_origin and request_origin in allowed_origins:
+        parsed = urlparse(request_origin)
+        if parsed.hostname:
+            return parsed.hostname
+
+    parsed = urlparse(settings.base_url)
+    return parsed.hostname or "localhost"
 
 
 async def _verify_turnstile(token: str | None, remote_ip: str) -> None:
@@ -758,11 +798,10 @@ async def mfa_otp_verify(
 
 @router.post("/mfa/hardware-token/setup", response_model=MfaHardwareTokenSetupResponse)
 async def mfa_hardware_token_setup(
+    request: Request,
     user: User = Depends(get_current_user),
 ):
-    from urllib.parse import urlparse
-    parsed = urlparse(settings.base_url)
-    rp_id = parsed.hostname or "localhost"
+    rp_id = _resolve_webauthn_rp_id(request)
 
     options = webauthn.generate_registration_options(
         rp_id=rp_id,
@@ -775,7 +814,7 @@ async def mfa_hardware_token_setup(
     options_json = json.loads(webauthn.options_to_json(options))
 
     registration_token = create_signed_token(
-        {"challenge": options_json["challenge"], "user_id": user.id},
+        {"challenge": options_json["challenge"], "user_id": user.id, "rp_id": rp_id},
         salt="hardware-token-register"
     )
 
@@ -785,6 +824,7 @@ async def mfa_hardware_token_setup(
 @router.post("/mfa/hardware-token/verify")
 async def mfa_hardware_token_verify(
     data: MfaHardwareTokenVerifyRequest,
+    request: Request,
     response: Response,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -795,20 +835,8 @@ async def mfa_hardware_token_verify(
 
     expected_challenge = base64url_decode(token_data["challenge"])
 
-    from urllib.parse import urlparse
-    parsed = urlparse(settings.base_url)
-    rp_id = parsed.hostname or "localhost"
-
-    origins = [
-        "http://localhost:5173",
-        "http://localhost:8000",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:8000",
-        "http://test",
-    ]
-    base_url_origin = settings.base_url.rstrip("/")
-    if base_url_origin not in origins:
-        origins.append(base_url_origin)
+    rp_id = str(token_data.get("rp_id") or _resolve_webauthn_rp_id(request))
+    origins = _configured_webauthn_origins()
 
     try:
         verification = webauthn.verify_registration_response(
@@ -850,6 +878,7 @@ async def mfa_hardware_token_verify(
 @router.post("/mfa/hardware-token/assertion-options", response_model=MfaHardwareTokenAssertionOptionsResponse)
 async def mfa_hardware_token_assertion_options(
     data: MfaHardwareTokenAssertionOptionsRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     token_data = verify_signed_token(data.mfa_token, salt="mfa-login", max_age=300)
@@ -868,9 +897,7 @@ async def mfa_hardware_token_assertion_options(
         for t in tokens
     ]
 
-    from urllib.parse import urlparse
-    parsed = urlparse(settings.base_url)
-    rp_id = parsed.hostname or "localhost"
+    rp_id = _resolve_webauthn_rp_id(request)
 
     options = webauthn.generate_authentication_options(
         rp_id=rp_id,
@@ -880,7 +907,7 @@ async def mfa_hardware_token_assertion_options(
     options_json = json.loads(webauthn.options_to_json(options))
 
     assertion_token = create_signed_token(
-        {"challenge": options_json["challenge"], "user_id": token_data["user_id"]},
+        {"challenge": options_json["challenge"], "user_id": token_data["user_id"], "rp_id": rp_id},
         salt="hardware-token-login"
     )
 
@@ -938,20 +965,8 @@ async def mfa_verify(
         if not token_obj:
             raise HTTPException(status_code=400, detail="Hardware token credential not registered for this user")
 
-        from urllib.parse import urlparse
-        parsed = urlparse(settings.base_url)
-        rp_id = parsed.hostname or "localhost"
-
-        origins = [
-            "http://localhost:5173",
-            "http://localhost:8000",
-            "http://127.0.0.1:5173",
-            "http://127.0.0.1:8000",
-            "http://test",
-        ]
-        base_url_origin = settings.base_url.rstrip("/")
-        if base_url_origin not in origins:
-            origins.append(base_url_origin)
+        rp_id = str(assert_data.get("rp_id") or _resolve_webauthn_rp_id(request))
+        origins = _configured_webauthn_origins()
 
         try:
             verification = webauthn.verify_authentication_response(

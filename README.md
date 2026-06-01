@@ -126,3 +126,5 @@ All settings are controlled via environment variables prefixed with `RADEGAST_` 
 | `RADEGAST_MFA_REQUIRED_LEVEL_ADMIN` | `hardware_token` | Required MFA level for Admin accounts (none, otp, hardware_token) |
 | `RADEGAST_MFA_REQUIRED_LEVEL_MAINTAINER` | `none` | Required MFA level for Maintainer accounts (none, otp, hardware_token) |
 | `RADEGAST_MFA_REQUIRED_LEVEL_USER` | `none` | Required MFA level for User accounts (none, otp, hardware_token) |
+| `RADEGAST_WEBAUTHN_RP_ID` | _(empty)_ | Optional WebAuthn RP ID override. Set this to a shared parent domain (for example `radegast.app`) when API and Web UI run on different subdomains. |
+| `RADEGAST_WEBAUTHN_ORIGINS` | _(empty)_ | Optional comma-separated extra WebAuthn origins allowed during verification (for example `https://console.radegast.app`). |

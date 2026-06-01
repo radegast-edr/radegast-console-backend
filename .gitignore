@@ -9,3 +9,4 @@ uploads
 agent/releases
 !agent/releases/.gitkeep
 .certs
+.vscode/settings.json

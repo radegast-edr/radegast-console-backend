@@ -13,8 +13,8 @@ from app.models.user import User, UserRole
 
 router = APIRouter(prefix="/releases", tags=["releases"])
 
-VALID_OS = {"linux", "windows"}
-VALID_ARCH = {"amd64", "arm64"}
+VALID_OS = {"linux", "windows", "mac"}
+VALID_ARCH = {"amd64", "arm64", "m5"}
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
@@ -80,8 +80,14 @@ async def upload_release(
 
     if os_name not in VALID_OS:
         raise HTTPException(status_code=400, detail=f"OS must be one of: {', '.join(sorted(VALID_OS))}")
-    if arch not in VALID_ARCH:
-        raise HTTPException(status_code=400, detail=f"Arch must be one of: {', '.join(sorted(VALID_ARCH))}")
+
+    # Validate specific arch allowed for each OS
+    if os_name == "linux" and arch not in {"amd64", "arm64"}:
+        raise HTTPException(status_code=400, detail="Arch must be one of: amd64, arm64")
+    elif os_name == "windows" and arch != "amd64":
+        raise HTTPException(status_code=400, detail="Arch must be one of: amd64")
+    elif os_name == "mac" and arch != "m5":
+        raise HTTPException(status_code=400, detail="Arch must be one of: m5")
 
     dest_dir = _releases_dir() / version / os_name / arch
     dest_dir.mkdir(parents=True, exist_ok=True)

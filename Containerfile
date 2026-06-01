@@ -2,8 +2,8 @@
 FROM node:20-alpine AS frontend-builder
 WORKDIR /web
 # Copy frontend dependency files first to leverage Docker cache
-COPY web/package.json web/package-lock.json ./
-RUN npm ci
+COPY web/package.json web/package-lock.json web/.npmrc ./
+RUN npm install -g npm@latest && npm ci
 
 # Copy the rest of the web folder and build
 COPY web/ ./

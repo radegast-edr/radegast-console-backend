@@ -146,6 +146,17 @@ async def upload_version(
 
     pv = PackVersion(pack_id=pack_id, version=version, zip_path=path, release_notes=release_notes)
     db.add(pv)
+    await db.flush()
+
+    # Auto-update groups using this pack with autoupdate enabled
+    result_pe = await db.execute(
+        select(PackEnabled)
+        .join(PackVersion, PackEnabled.pack_version_id == PackVersion.id)
+        .where(PackVersion.pack_id == pack_id, PackEnabled.autoupdate == True)
+    )
+    for pe in result_pe.scalars().all():
+        pe.pack_version_id = pv.id
+
     await db.commit()
     await db.refresh(pv)
     return pv

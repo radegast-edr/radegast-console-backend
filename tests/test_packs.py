@@ -383,3 +383,75 @@ class TestDevicePacks:
     async def test_user_download_pack_requires_login(self, client: AsyncClient):
         resp = await client.get("/packs/download/1")
         assert resp.status_code == 401
+
+    async def test_autoupdate_enabled_on_publish(self, maintainer_client: AsyncClient):
+        # 1. Create a pack
+        resp = await maintainer_client.post(
+            "/packs/", json={"name": "Autoupdate Pack", "description": "Test"}
+        )
+        assert resp.status_code == 200
+        pack_id = resp.json()["id"]
+
+        # 2. Upload version 1.0.0
+        zip_content = b"PK\x03\x04" + b"\x00" * 100
+        resp = await maintainer_client.post(
+            f"/packs/{pack_id}/versions?version=1.0.0",
+            files={"file": ("pack.zip", zip_content, "application/zip")},
+        )
+        assert resp.status_code == 200
+        v1_id = resp.json()["id"]
+
+        # 3. Get team
+        resp = await maintainer_client.get("/teams/")
+        team_id = resp.json()[0]["id"]
+
+        # 4. Create two groups under this team
+        resp = await maintainer_client.post(
+            f"/teams/{team_id}/groups",
+            json={"name": "Group AutoUpdate Enabled"}
+        )
+        assert resp.status_code == 200
+        group_autoupdate_id = resp.json()["id"]
+
+        resp = await maintainer_client.post(
+            f"/teams/{team_id}/groups",
+            json={"name": "Group AutoUpdate Disabled"}
+        )
+        assert resp.status_code == 200
+        group_no_autoupdate_id = resp.json()["id"]
+
+        # 5. Enable pack for both groups (one with autoupdate=True, one with autoupdate=False)
+        resp = await maintainer_client.post(
+            f"/packs/groups/{group_autoupdate_id}/enable",
+            json={"pack_version_id": v1_id, "autoupdate": True},
+        )
+        assert resp.status_code == 200
+
+        resp = await maintainer_client.post(
+            f"/packs/groups/{group_no_autoupdate_id}/enable",
+            json={"pack_version_id": v1_id, "autoupdate": False},
+        )
+        assert resp.status_code == 200
+
+        # 6. Upload version 1.1.0 (publishing new version)
+        resp = await maintainer_client.post(
+            f"/packs/{pack_id}/versions?version=1.1.0",
+            files={"file": ("pack.zip", zip_content, "application/zip")},
+        )
+        assert resp.status_code == 200
+        v2_id = resp.json()["id"]
+
+        # 7. Check Enabled Pack versions for both groups
+        # For group with autoupdate=True, it should now be v2_id
+        resp = await maintainer_client.get(f"/packs/groups/{group_autoupdate_id}/enabled")
+        assert resp.status_code == 200
+        enabled_packs = resp.json()
+        assert len(enabled_packs) == 1
+        assert enabled_packs[0]["pack_version_id"] == v2_id
+
+        # For group with autoupdate=False, it should still be v1_id
+        resp = await maintainer_client.get(f"/packs/groups/{group_no_autoupdate_id}/enabled")
+        assert resp.status_code == 200
+        enabled_packs = resp.json()
+        assert len(enabled_packs) == 1
+        assert enabled_packs[0]["pack_version_id"] == v1_id

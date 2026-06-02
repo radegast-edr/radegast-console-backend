@@ -176,3 +176,83 @@ async def test_web_ui_url_config_and_origins(db_session):
 
     finally:
         settings.web_ui_url = orig_web_ui_url
+
+
+@pytest.mark.asyncio
+async def test_list_unsubscribe_headers_added(db_session):
+    email = "headers_target@example.com"
+    user = User(email=email, password="hashedpassword", verified=True)
+    db_session.add(user)
+    await db_session.commit()
+
+    orig_host = settings.smtp_host
+    settings.smtp_host = "smtp.example.com"
+    try:
+        with patch("aiosmtplib.send", new_callable=AsyncMock) as mock_send:
+            await send_email_direct(email, "Test Subject", "<html><body>Hello!</body></html>", email_type="login")
+
+        mock_send.assert_called_once()
+        msg = mock_send.call_args[0][0]
+        
+        # Verify unsubscribe headers exist in the MIME message object
+        assert "List-Unsubscribe" in msg
+        assert "List-Unsubscribe-Post" in msg
+        assert "List-Unsubscribe=One-Click" in msg["List-Unsubscribe-Post"]
+        assert "/auth/unsubscribe?token=" in msg["List-Unsubscribe"]
+    finally:
+        settings.smtp_host = orig_host
+
+
+@pytest.mark.asyncio
+async def test_one_click_unsubscribe_post_success(client: AsyncClient, db_session):
+    email = "oneclick_api@example.com"
+    user = User(email=email, password="hashedpassword", verified=True)
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+
+    assert user.notify_login is True
+
+    expires_at = (utc_now() + timedelta(weeks=2)).isoformat()
+    token = create_signed_token({
+        "user_id": user.id,
+        "expires_at": expires_at,
+        "preference_field": "notify_login"
+    }, salt="unsubscribe")
+
+    # Perform RFC 8058 standard One-Click POST request
+    # Token in query params, and body is "List-Unsubscribe=One-Click"
+    headers = {
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        "Content-Type": "text/plain"
+    }
+    resp = await client.post(
+        f"/auth/unsubscribe?token={token}",
+        content="List-Unsubscribe=One-Click",
+        headers=headers
+    )
+    assert resp.status_code == 200
+    assert "Successfully unsubscribed" in resp.json()["message"]
+
+    # Verify user preference was updated
+    await db_session.refresh(user)
+    assert user.notify_login is False
+
+
+@pytest.mark.asyncio
+async def test_unsubscribe_get_redirect(client: AsyncClient):
+    orig_web_ui = settings.web_ui_url
+    try:
+        settings.web_ui_url = "https://custom-ui.radegast.app"
+        
+        # Test redirect with token
+        resp = await client.get("/auth/unsubscribe?token=my_dummy_token", follow_redirects=False)
+        assert resp.status_code == 307
+        assert resp.headers["location"] == "https://custom-ui.radegast.app/unsubscribe?token=my_dummy_token"
+
+        # Test redirect without token
+        resp2 = await client.get("/auth/unsubscribe", follow_redirects=False)
+        assert resp2.status_code == 307
+        assert resp2.headers["location"] == "https://custom-ui.radegast.app/unsubscribe"
+    finally:
+        settings.web_ui_url = orig_web_ui

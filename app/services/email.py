@@ -11,6 +11,7 @@ from sqlalchemy import select, delete
 from app.config import settings
 import app.database
 from app.models.queued_email import QueuedEmail
+from app.models.email_bulk_state import EmailBulkState
 from app.models.user import User
 from app.services.auth import create_signed_token
 from app.utils import ensure_utc, get_worker_lock, utc_now
@@ -133,6 +134,7 @@ async def send_email_direct(to: str, subject: str, html_body: str, email_type: s
         result = await session.execute(select(User).where(User.email == to))
         user = result.scalar_one_or_none()
 
+    api_unsubscribe_url = None
     if user and email_type in EMAIL_TYPE_TO_PREFERENCE:
         pref_field, pref_name = EMAIL_TYPE_TO_PREFERENCE[email_type]
         expires_at = (utc_now() + timedelta(weeks=2)).isoformat()
@@ -143,6 +145,7 @@ async def send_email_direct(to: str, subject: str, html_body: str, email_type: s
         }, salt="unsubscribe")
         ui_base = get_web_ui_base()
         unsubscribe_url = f"{ui_base}/unsubscribe?token={token}"
+        api_unsubscribe_url = f"{settings.base_url.rstrip('/')}/auth/unsubscribe?token={token}"
         
         footer_html = f"""
 <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #666; text-align: center;">
@@ -161,6 +164,10 @@ async def send_email_direct(to: str, subject: str, html_body: str, email_type: s
     msg["From"] = settings.smtp_from
     msg["To"] = to
     msg["Subject"] = subject
+
+    if api_unsubscribe_url:
+        msg["List-Unsubscribe"] = f"<{api_unsubscribe_url}>"
+        msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
 
     if not settings.smtp_host or settings.smtp_host == "localhost":
         # In development, just log the email
@@ -295,8 +302,7 @@ def combine_html_bodies(html_bodies: list[str]) -> str:
 
 
 async def process_email_queue():
-    debounce_seconds = getattr(settings, "email_debounce_seconds", 180)
-    debounce_limit = timedelta(seconds=debounce_seconds)
+    intervals = [int(x.strip()) for x in settings.email_bulk_intervals.split(",")]
     now = utc_now()
 
     async with app.database.async_session() as session:
@@ -316,25 +322,79 @@ async def process_email_queue():
             groups[key].append(qe)
 
         for (email_to, email_type), emails in groups.items():
+            result_state = await session.execute(
+                select(EmailBulkState).where(
+                    EmailBulkState.email_to == email_to,
+                    EmailBulkState.email_type == email_type
+                )
+            )
+            state = result_state.scalar_one_or_none()
+            if not state:
+                state = EmailBulkState(
+                    email_to=email_to,
+                    email_type=email_type,
+                    last_sent_at=None,
+                    sent_count=0
+                )
+                session.add(state)
+
             oldest_email = emails[0]
             oldest_created = oldest_email.created_at
             oldest_created = ensure_utc(oldest_created)
 
-            if now - oldest_created >= debounce_limit:
-                if len(emails) == 1:
-                    subject = emails[0].subject
-                    html_body = emails[0].html_body
-                else:
-                    subject = f"[Bulk] {emails[0].subject}"
-                    html_body = combine_html_bodies([e.html_body for e in emails])
+            if state.last_sent_at is not None:
+                last_sent_utc = ensure_utc(state.last_sent_at)
+                reset_delta = timedelta(hours=settings.email_bulk_reset_hours)
+                if oldest_created - last_sent_utc > reset_delta:
+                    state.sent_count = 0
+                    state.last_sent_at = None
 
-                await send_email_direct(email_to, subject, html_body, email_type)
+            if state.sent_count < len(intervals):
+                debounce_minutes = intervals[state.sent_count]
+            else:
+                debounce_minutes = intervals[-1]
+            debounce_limit = timedelta(minutes=debounce_minutes)
+
+            if now - oldest_created >= debounce_limit:
+                event_count = len(emails)
+
+                next_index = state.sent_count + 1
+                if next_index < len(intervals):
+                    next_interval = intervals[next_index]
+                else:
+                    next_interval = intervals[-1]
+                next_email_text = f"The next bulk email will arrive in {next_interval} minutes if more events occur."
+
+                header_html = f"""
+<div style="background-color: #f4f5f7; border-left: 4px solid #0052cc; padding: 12px; margin-bottom: 20px; font-family: sans-serif; font-size: 14px; line-height: 1.5; color: #333;">
+    <strong>Bulk Notification Summary</strong><br/>
+    This email contains {event_count} bulk events.<br/>
+    {next_email_text}
+</div>
+"""
+                subject = f"[Bulk] {emails[0].subject}"
+                html_bodies = [e.html_body for e in emails]
+                combined_body = combine_html_bodies(html_bodies)
+
+                body_tag = '<body style="font-family: sans-serif; padding: 20px; line-height: 1.6; color: #333;">'
+                if body_tag in combined_body:
+                    combined_body = combined_body.replace(body_tag, f"{body_tag}{header_html}")
+                elif "<body>" in combined_body:
+                    combined_body = combined_body.replace("<body>", f"<body>{header_html}")
+                else:
+                    combined_body = header_html + combined_body
+
+                await send_email_direct(email_to, subject, combined_body, email_type)
+
+                state.sent_count += 1
+                state.last_sent_at = now
 
                 ids_to_delete = [e.id for e in emails]
                 await session.execute(
                     delete(QueuedEmail).where(QueuedEmail.id.in_(ids_to_delete))
                 )
                 await session.commit()
+
 
 
 async def process_email_queue_loop():

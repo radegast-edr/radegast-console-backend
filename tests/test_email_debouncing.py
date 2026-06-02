@@ -141,3 +141,137 @@ async def test_different_users_or_types_not_combined(db_session):
             assert "user2@example.com" in calls
     finally:
         settings.email_debounce_seconds = original_debounce
+
+
+@pytest.mark.asyncio
+async def test_email_bulking_progression_headers_and_limit(db_session):
+    from app.models.email_bulk_state import EmailBulkState
+
+    original_intervals = settings.email_bulk_intervals
+    original_reset = settings.email_bulk_reset_hours
+    # We can use the default settings (3, 3, 6, 16, 37, 62, 122, 193) and 24 hours
+    try:
+        with patch("app.services.email.send_email_direct", new_callable=AsyncMock) as mock_direct:
+            intervals = [3, 3, 6, 16, 37, 62, 122, 193]
+            
+            # We will send 8 batches and verify the interval/headers progression
+            for i, interval in enumerate(intervals):
+                # Queue one notification
+                await send_login_notification("test_bulk@example.com", f"10.0.0.{i}")
+
+                # Fetch it to modify created_at
+                result = await db_session.execute(select(QueuedEmail))
+                queued = result.scalars().all()
+                assert len(queued) == 1
+                
+                # Make it expire the current debounce limit (interval + 1 minute)
+                queued[0].created_at = datetime.now(tz=tz.utc) - timedelta(minutes=interval + 1)
+                await db_session.commit()
+
+                # Process the queue
+                mock_direct.reset_mock()
+                await process_email_queue()
+
+                # Check it was sent
+                mock_direct.assert_called_once()
+                to_email, subject, html_body, *rest = mock_direct.call_args[0]
+                assert to_email == "test_bulk@example.com"
+                assert "[Bulk]" in subject
+                assert f"10.0.0.{i}" in html_body
+                assert "This email contains 1 bulk events." in html_body
+                
+                # Check next interval text in the body
+                if i + 1 < len(intervals):
+                    next_int = intervals[i + 1]
+                else:
+                    next_int = intervals[-1]
+                assert f"The next bulk email will arrive in {next_int} minutes if more events occur." in html_body
+
+                # Verify queue is empty after sending
+                result = await db_session.execute(select(QueuedEmail))
+                assert len(result.scalars().all()) == 0
+
+                # Verify state in database
+                db_session.expire_all()
+                result_state = await db_session.execute(
+                    select(EmailBulkState).where(
+                        EmailBulkState.email_to == "test_bulk@example.com",
+                        EmailBulkState.email_type == "login"
+                    )
+                )
+                state = result_state.scalar_one()
+                assert state.sent_count == i + 1
+                assert state.last_sent_at is not None
+
+            # Now we are at state.sent_count = 8 (which is past the 8 predefined intervals).
+            # Queue 9th notification - it should be sent after the last interval (193 minutes)
+            await send_login_notification("test_bulk@example.com", "10.0.0.8")
+            result = await db_session.execute(select(QueuedEmail))
+            queued = result.scalars().all()
+            assert len(queued) == 1
+
+            # Make it look expired for 193 minutes (194 minutes ago)
+            queued[0].created_at = datetime.now(tz=tz.utc) - timedelta(minutes=194)
+            await db_session.commit()
+
+            mock_direct.reset_mock()
+            await process_email_queue()
+
+            # Ensure send_email_direct was called and the email was sent
+            mock_direct.assert_called_once()
+            to_email, subject, html_body, *rest = mock_direct.call_args[0]
+            assert "10.0.0.8" in html_body
+            assert "The next bulk email will arrive in 193 minutes if more events occur." in html_body
+            
+            result = await db_session.execute(select(QueuedEmail))
+            assert len(result.scalars().all()) == 0
+
+            # Verify sent_count is now 9
+            db_session.expire_all()
+            result_state = await db_session.execute(
+                select(EmailBulkState).where(
+                    EmailBulkState.email_to == "test_bulk@example.com",
+                    EmailBulkState.email_type == "login"
+                )
+            )
+            state = result_state.scalar_one()
+            assert state.sent_count == 9
+
+            # Queue 10th notification to test the reset logic
+            await send_login_notification("test_bulk@example.com", "10.0.0.9")
+            result = await db_session.execute(select(QueuedEmail))
+            queued = result.scalars().all()
+            assert len(queued) == 1
+
+            # Manually set the state's last_sent_at to 25 hours ago, and queued email to 4 minutes ago
+            state.last_sent_at = datetime.now(tz=tz.utc) - timedelta(hours=25)
+            queued[0].created_at = datetime.now(tz=tz.utc) - timedelta(minutes=4)
+            await db_session.commit()
+
+            # Process the queue - it should reset the sequence (sent_count becomes 0)
+            # and send the email with the first interval (3 minutes)
+            mock_direct.reset_mock()
+            await process_email_queue()
+
+            mock_direct.assert_called_once()
+            to_email, subject, html_body, *rest = mock_direct.call_args[0]
+            assert "10.0.0.9" in html_body
+            assert "The next bulk email will arrive in 3 minutes if more events occur." in html_body
+
+            # Check queue is empty and state reset correctly
+            result = await db_session.execute(select(QueuedEmail))
+            assert len(result.scalars().all()) == 0
+
+            db_session.expire_all()
+            result_state = await db_session.execute(
+                select(EmailBulkState).where(
+                    EmailBulkState.email_to == "test_bulk@example.com",
+                    EmailBulkState.email_type == "login"
+                )
+            )
+            state = result_state.scalar_one()
+            assert state.sent_count == 1
+
+    finally:
+        settings.email_bulk_intervals = original_intervals
+        settings.email_bulk_reset_hours = original_reset

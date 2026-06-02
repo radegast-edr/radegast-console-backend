@@ -11,6 +11,7 @@ from app.models.log import Log, LogSeen
 from app.models.associations import team_users, team_device_groups, device_group_devices
 from app.models.queued_email import QueuedEmail
 from app.models.hardware_token import HardwareToken
+from app.models.email_bulk_state import EmailBulkState
 
 __all__ = [
     "User",
@@ -29,4 +30,5 @@ __all__ = [
     "device_group_devices",
     "QueuedEmail",
     "HardwareToken",
+    "EmailBulkState",
 ]

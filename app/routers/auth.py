@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 
 import pyotp
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
+from fastapi.responses import RedirectResponse
 from sqlalchemy import func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -1151,10 +1152,32 @@ async def get_auth_config():
 
 @router.post("/unsubscribe")
 async def unsubscribe(
-    data: UnsubscribeRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
-    token_data = load_signed_token_without_age(data.token, salt="unsubscribe")
+    token = request.query_params.get("token")
+    if not token:
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                token = body.get("token")
+        except Exception:
+            pass
+
+    if not token:
+        try:
+            form = await request.form()
+            token = form.get("token")
+        except Exception:
+            pass
+
+    if not token:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid unsubscribe link."
+        )
+
+    token_data = load_signed_token_without_age(token, salt="unsubscribe")
     if not token_data:
         raise HTTPException(
             status_code=400,
@@ -1218,4 +1241,15 @@ async def unsubscribe(
         "message": f"Successfully unsubscribed from {pref_name.lower()}.",
         "preference_name": pref_name
     }
+
+
+@router.get("/unsubscribe")
+async def unsubscribe_get(
+    token: str | None = None
+):
+    ui_base = settings.web_ui_url.rstrip('/') if settings.web_ui_url else f"{settings.base_url.rstrip('/')}/ui"
+    url = f"{ui_base}/unsubscribe"
+    if token:
+        url += f"?token={token}"
+    return RedirectResponse(url=url)
 

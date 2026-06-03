@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -163,6 +165,8 @@ async def mark_log_seen(
 @router.get("/", response_model=list[LogResponse])
 async def list_logs(
     device_id: int | None = None,
+    from_time: datetime | None = None,
+    to_time: datetime | None = None,
     page: int = 1,
     limit: int = 100,
     user: User = Depends(get_current_user),
@@ -187,11 +191,20 @@ async def list_logs(
         return []
 
     offset = (page - 1) * limit
-    query = select(Log).where(Log.device_id.in_(visible_device_ids)).order_by(Log.time.desc()).offset(offset).limit(limit)
+    
     if device_id:
         if device_id not in visible_device_ids:
             raise HTTPException(status_code=403, detail="No log permission for this device")
-        query = select(Log).where(Log.device_id == device_id).order_by(Log.time.desc()).offset(offset).limit(limit)
+        query = select(Log).where(Log.device_id == device_id)
+    else:
+        query = select(Log).where(Log.device_id.in_(visible_device_ids))
+
+    if from_time:
+        query = query.where(Log.time >= from_time)
+    if to_time:
+        query = query.where(Log.time <= to_time)
+
+    query = query.order_by(Log.time.desc()).offset(offset).limit(limit)
 
     result = await db.execute(query)
     logs = result.scalars().all()

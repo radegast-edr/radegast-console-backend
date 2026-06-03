@@ -394,7 +394,10 @@ async def process_email_queue():
     {next_email_text}
 </div>
 """
-                subject = f"[Bulk] {emails[0].subject}"
+                if event_count > 1:
+                    subject = f"[Bulk] {emails[0].subject}"
+                else:
+                    subject = emails[0].subject
                 html_bodies = [e.html_body for e in emails]
                 combined_body = combine_html_bodies(html_bodies)
 

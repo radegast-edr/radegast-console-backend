@@ -176,7 +176,7 @@ async def test_email_bulking_progression_headers_and_limit(db_session):
                 mock_direct.assert_called_once()
                 to_email, subject, html_body, *rest = mock_direct.call_args[0]
                 assert to_email == "test_bulk@example.com"
-                assert "[Bulk]" in subject
+                assert "[Bulk]" not in subject
                 assert f"10.0.0.{i}" in html_body
                 assert "This email contains 1 bulk events." in html_body
                 
@@ -275,3 +275,45 @@ async def test_email_bulking_progression_headers_and_limit(db_session):
     finally:
         settings.email_bulk_intervals = original_intervals
         settings.email_bulk_reset_hours = original_reset
+
+
+@pytest.mark.asyncio
+async def test_bulk_subject_prefix_depends_on_count(db_session):
+    original_debounce = settings.email_debounce_seconds
+    settings.email_debounce_seconds = 180
+
+    try:
+        # 1. Single email in queue -> no [Bulk] prefix
+        with patch("app.services.email.send_email_direct", new_callable=AsyncMock) as mock_direct:
+            await send_login_notification("single@example.com", "192.168.1.1")
+            result = await db_session.execute(select(QueuedEmail))
+            queued = result.scalars().all()
+            assert len(queued) == 1
+            queued[0].created_at = datetime.now(tz=tz.utc) - timedelta(minutes=4)
+            await db_session.commit()
+
+            await process_email_queue()
+            mock_direct.assert_called_once()
+            to_email, subject, html_body, *rest = mock_direct.call_args[0]
+            assert to_email == "single@example.com"
+            assert "[Bulk]" not in subject
+
+        # 2. Multiple emails in queue -> [Bulk] prefix
+        with patch("app.services.email.send_email_direct", new_callable=AsyncMock) as mock_direct:
+            await send_login_notification("multi@example.com", "192.168.1.1")
+            await send_login_notification("multi@example.com", "192.168.1.2")
+            result = await db_session.execute(select(QueuedEmail))
+            queued = result.scalars().all()
+            assert len(queued) == 2
+            for q in queued:
+                q.created_at = datetime.now(tz=tz.utc) - timedelta(minutes=4)
+            await db_session.commit()
+
+            await process_email_queue()
+            mock_direct.assert_called_once()
+            to_email, subject, html_body, *rest = mock_direct.call_args[0]
+            assert to_email == "multi@example.com"
+            assert subject.startswith("[Bulk]")
+
+    finally:
+        settings.email_debounce_seconds = original_debounce

@@ -251,7 +251,8 @@ async def list_logs(
             time=log.time,
             content=log.content,
             signature=log.signature,
-            seen=log.id in seen_log_ids
+            seen=log.id in seen_log_ids,
+            severity=log.severity
         )
         for log in logs
     ]

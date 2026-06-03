@@ -89,6 +89,7 @@ class TestLogRetrieval:
             json={
                 "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                 "content": "test-log-data",
+                "severity": "critical",
             },
         )
 
@@ -100,6 +101,10 @@ class TestLogRetrieval:
         assert resp.status_code == 200
         logs = resp.json()
         assert len(logs) >= 1
+        
+        # Check that severity is returned correctly in log list
+        test_log = next(log for log in logs if log["content"] == "test-log-data")
+        assert test_log["severity"] == "critical"
 
     async def test_list_logs_unauthenticated(self, client: AsyncClient):
         resp = await client.get("/logs/")

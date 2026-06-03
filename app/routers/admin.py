@@ -125,7 +125,7 @@ async def list_all_packs(
     db: AsyncSession = Depends(get_db),
 ):
     _require_admin(user)
-    result = await db.execute(select(Pack))
+    result = await db.execute(select(Pack).options(selectinload(Pack.teams)))
     return result.scalars().all()
 
 

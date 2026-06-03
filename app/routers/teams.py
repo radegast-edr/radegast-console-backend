@@ -9,6 +9,7 @@ from app.models.associations import team_device_groups, team_users
 from app.models.device_group import DeviceGroup
 from app.models.team import Team
 from app.models.user import User
+from app.models.pack import Pack
 from app.schemas.team import (
     DeviceGroupCreate,
     DeviceGroupResponse,
@@ -128,6 +129,32 @@ async def get_team(
     return team
 
 
+async def verify_team_pack_constraint(
+    team_id: int,
+    new_permission_pack: str | None,
+    db: AsyncSession,
+) -> None:
+    if new_permission_pack == "write":
+        return
+
+    res = await db.execute(
+        select(Team)
+        .options(selectinload(Team.packs).selectinload(Pack.teams))
+        .where(Team.id == team_id)
+    )
+    team = res.scalar_one_or_none()
+    if not team:
+        return
+
+    for pack in team.packs:
+        other_write_teams = [t for t in pack.teams if t.id != team_id and t.permission_pack == "write"]
+        if not other_write_teams:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot change pack permission. Private pack '{pack.name}' must belong to at least one team with write permission.",
+            )
+
+
 @router.put("/{team_id}", response_model=TeamResponse)
 async def update_team(
     team_id: int,
@@ -163,6 +190,8 @@ async def update_team(
     if "name" in data.model_fields_set:
         team.name = data.name
     if "permission_pack" in data.model_fields_set:
+        if team.permission_pack == "write" and data.permission_pack != "write":
+            await verify_team_pack_constraint(team.id, data.permission_pack, db)
         team.permission_pack = data.permission_pack
     if "permission_invite" in data.model_fields_set:
         team.permission_invite = data.permission_invite

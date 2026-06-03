@@ -6,17 +6,21 @@ from pydantic import BaseModel
 class PackCreate(BaseModel):
     name: str
     description: str = ""
+    team_ids: list[int] | None = None
 
 
 class PackUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
+    team_ids: list[int] | None = None
 
 
 class PackResponse(BaseModel):
     id: int
     name: str
     description: str
+    creator_id: int | None = None
+    team_ids: list[int] = []
 
     model_config = {"from_attributes": True}
 

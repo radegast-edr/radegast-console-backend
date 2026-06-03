@@ -1,5 +1,10 @@
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from app.models.user import User, UserRole
+from app.services.auth import create_signed_token
 
 
 @pytest.mark.asyncio
@@ -455,3 +460,200 @@ class TestDevicePacks:
         enabled_packs = resp.json()
         assert len(enabled_packs) == 1
         assert enabled_packs[0]["pack_version_id"] == v1_id
+
+
+@pytest.mark.asyncio
+class TestPackPermissionsNew:
+    async def test_create_private_pack_as_regular_user_on_own_team(self, auth_client: AsyncClient):
+        # 1. Get user's own team
+        resp = await auth_client.get("/teams/")
+        team_id = resp.json()[0]["id"]
+
+        # 2. Create private pack
+        resp = await auth_client.post(
+            "/packs/",
+            json={"name": "User Private Pack", "description": "Private pack test", "team_ids": [team_id]},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["name"] == "User Private Pack"
+        assert resp.json()["team_ids"] == [team_id]
+
+    async def test_create_private_pack_as_regular_user_invalid_team_fails(self, auth_client: AsyncClient):
+        resp = await auth_client.post(
+            "/packs/",
+            json={"name": "User Fail Private Pack", "description": "Should fail", "team_ids": [99999]},
+        )
+        assert resp.status_code == 404
+
+    async def test_creator_can_update_delete_and_version(self, auth_client: AsyncClient):
+        resp = await auth_client.get("/teams/")
+        team_id = resp.json()[0]["id"]
+
+        resp = await auth_client.post(
+            "/packs/",
+            json={"name": "Creator Pack", "description": "Private pack", "team_ids": [team_id]},
+        )
+        assert resp.status_code == 200
+        pack_id = resp.json()["id"]
+
+        # Update description
+        resp = await auth_client.patch(
+            f"/packs/{pack_id}",
+            json={"description": "Updated description"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["description"] == "Updated description"
+
+        # Upload version
+        zip_content = b"PK\x03\x04" + b"\x00" * 100
+        resp = await auth_client.post(
+            f"/packs/{pack_id}/versions?version=1.0.0",
+            files={"file": ("pack.zip", zip_content, "application/zip")},
+        )
+        assert resp.status_code == 200
+
+        # Delete pack
+        resp = await auth_client.delete(f"/packs/{pack_id}")
+        assert resp.status_code == 200
+
+    async def test_non_member_cannot_access_private_pack(self, maintainer_client: AsyncClient):
+        # Maintainer creates a private pack on maintainer's own team
+        resp = await maintainer_client.get("/teams/")
+        m_team_id = resp.json()[0]["id"]
+
+        resp = await maintainer_client.post(
+            "/packs/",
+            json={"name": "Maintainer Private Pack", "description": "Private to maintainer", "team_ids": [m_team_id]},
+        )
+        assert resp.status_code == 200
+        pack_id = resp.json()["id"]
+
+        # Register and login as a new regular user (overwriting session on maintainer_client)
+        email = "otheruser@example.com"
+        password = "OtherPass123!"
+        await maintainer_client.post("/auth/register", json={"email": email, "password": password})
+        
+        # Verify email manually
+        token = create_signed_token({"email": email}, salt="email-verify")
+        await maintainer_client.get(f"/auth/verify?token={token}")
+
+        # Login as the new user
+        resp = await maintainer_client.post("/auth/login", json={"email": email, "password": password})
+        assert resp.status_code == 200
+
+        # Regular user tries to view it
+        resp = await maintainer_client.get(f"/packs/{pack_id}")
+        assert resp.status_code == 403
+
+        # Regular user tries to list all packs (should not see it)
+        resp = await maintainer_client.get("/packs/")
+        assert resp.status_code == 200
+        pack_ids = [p["id"] for p in resp.json()]
+        assert pack_id not in pack_ids
+
+        # Regular user tries to update it
+        resp = await maintainer_client.patch(
+            f"/packs/{pack_id}",
+            json={"description": "Hack description"},
+        )
+        assert resp.status_code == 403
+
+        # Regular user tries to upload version
+        zip_content = b"PK\x03\x04" + b"\x00" * 100
+        resp = await maintainer_client.post(
+            f"/packs/{pack_id}/versions?version=1.0.0",
+            files={"file": ("pack.zip", zip_content, "application/zip")},
+        )
+        assert resp.status_code == 403
+
+    async def test_deny_changing_team_pack_permission_if_would_break_constraint(self, maintainer_client: AsyncClient):
+        # Maintainer creates a private pack on maintainer's own team
+        resp = await maintainer_client.get("/teams/")
+        m_team_id = resp.json()[0]["id"]
+        m_team_name = resp.json()[0]["name"]
+
+        resp = await maintainer_client.post(
+            "/packs/",
+            json={"name": "Constraint Pack", "description": "Private pack", "team_ids": [m_team_id]},
+        )
+        assert resp.status_code == 200
+        pack_id = resp.json()["id"]
+
+        # Try to change maintainer team's permission_pack from 'write' to 'read'
+        # Since this pack only belongs to this team (which has write), changing it to 'read' should be blocked
+        resp = await maintainer_client.put(
+            f"/teams/{m_team_id}",
+            json={"name": m_team_name, "permission_pack": "read"},
+        )
+        assert resp.status_code == 400
+        assert "must belong to at least one team with write permission" in resp.json()["detail"]
+
+    async def test_admin_cannot_access_other_private_pack(self, auth_client: AsyncClient, db_engine):
+        # 1. Get auth_client user's own team
+        resp = await auth_client.get("/teams/")
+        team_id = resp.json()[0]["id"]
+
+        # 2. Create private pack as regular user
+        resp = await auth_client.post(
+            "/packs/",
+            json={"name": "Admin Hidden Private Pack", "description": "Hidden from admin", "team_ids": [team_id]},
+        )
+        assert resp.status_code == 200
+        pack_id = resp.json()["id"]
+
+        # 3. Create a pack version for it
+        zip_content = b"PK\x03\x04" + b"\x00" * 100
+        resp = await auth_client.post(
+            f"/packs/{pack_id}/versions?version=1.0.0",
+            files={"file": ("pack.zip", zip_content, "application/zip")},
+        )
+        assert resp.status_code == 200
+        version_id = resp.json()["id"]
+
+        # Now, register, verify, and promote an admin user, and login as admin on the same client
+        admin_email = "packadmin@example.com"
+        admin_password = "AdminPass123!"
+        await auth_client.post("/auth/register", json={"email": admin_email, "password": admin_password})
+
+        token = create_signed_token({"email": admin_email}, salt="email-verify")
+        await auth_client.get(f"/auth/verify?token={token}")
+
+        # Promote user to admin in DB
+        session_factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+        async with session_factory() as session:
+            result = await session.execute(select(User).where(User.email == admin_email))
+            user = result.scalar_one()
+            user.role = UserRole.admin
+            await session.commit()
+
+        # Login as the admin
+        resp = await auth_client.post("/auth/login", json={"email": admin_email, "password": admin_password})
+        assert resp.status_code == 200
+
+        # 4. Admin tries to view it
+        resp = await auth_client.get(f"/packs/{pack_id}")
+        assert resp.status_code == 403
+
+        # 5. Admin tries to list all packs (should not see it)
+        resp = await auth_client.get("/packs/")
+        assert resp.status_code == 200
+        pack_ids = [p["id"] for p in resp.json()]
+        assert pack_id not in pack_ids
+
+        # 6. Admin tries to update it
+        resp = await auth_client.patch(
+            f"/packs/{pack_id}",
+            json={"description": "Admin hacking"},
+        )
+        assert resp.status_code == 403
+
+        # 7. Admin tries to upload a version
+        resp = await auth_client.post(
+            f"/packs/{pack_id}/versions?version=2.0.0",
+            files={"file": ("pack.zip", zip_content, "application/zip")},
+        )
+        assert resp.status_code == 403
+
+        # 8. Admin tries to download version
+        resp = await auth_client.get(f"/packs/download/{version_id}")
+        assert resp.status_code == 403

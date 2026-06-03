@@ -15,20 +15,21 @@
 
 After completing each task, always run both validations in this order:
 
-1. Rebuild frontend:
+1. Rebuild frontend and fix all build/Svelte/a11y warnings:
 
 ```bash
 cd web
 npm run build
 ```
 
+Make sure the build output contains no compile, Svelte, or accessibility warnings. Any warnings must be fixed before ending the task.
+
 2. Run all backend tests:
 
 ```bash
 cd ..
 uv run pytest
-
-- Python code 
+```
 
 ## Python Tooling Requirement
 
@@ -43,3 +44,7 @@ When adding any new configuration value:
 1. Add it as a typed field in `app/config.py` under the `Settings` class.
 2. The field name must follow the `radegast_`-prefix convention so it maps automatically to a `RADEGAST_*` environment variable.
 3. Document the new `RADEGAST_*` variable in the configuration table in `README.md`.
+
+## Database Migrations
+
+If a database migration is needed (e.g. schema changes), the local SQLite database must be migrated, and the `DB_MIGRATION.md` file must be updated with the details of the migration in the format: `date - command - what was changed`.

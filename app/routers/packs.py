@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+import re
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.dependencies import get_current_device, get_current_user
+from app.dependencies import get_current_device, get_current_user, get_session
 from app.models.device import Device
-from app.utils import utc_now
 from app.models.device_group import DeviceGroup
 from app.models.pack import Pack
 from app.models.pack_enabled import PackEnabled
@@ -22,14 +24,54 @@ from app.schemas.pack import (
     PackVersionResponse,
 )
 from app.services.packs import get_upload_path, save_upload, delete_pack_files
+from app.services.permissions import (
+    get_user_team_ids_transitive,
+    is_user_member_of_team_transitive,
+)
+from app.utils import utc_now
 
 router = APIRouter(prefix="/packs", tags=["packs"])
 
 
+async def check_pack_write_permission(pack: Pack, user: User, db: AsyncSession) -> bool:
+    if not pack.teams:
+        if user.role in (UserRole.admin, UserRole.maintainer):
+            return True
+    if pack.creator_id == user.id:
+        return True
+    for team in pack.teams:
+        if team.permission_pack == "write":
+            if await is_user_member_of_team_transitive(team.id, user.id, db):
+                return True
+    return False
+
+
 @router.get("/", response_model=list[PackResponse])
-async def list_packs(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Pack))
-    return result.scalars().all()
+async def list_packs(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    user = None
+    try:
+        session = await get_session(request)
+        user = await get_current_user(request, session, db)
+    except HTTPException:
+        pass
+
+    result = await db.execute(select(Pack).options(selectinload(Pack.teams)))
+    packs = result.scalars().all()
+    if not user:
+        return [p for p in packs if not p.teams]
+
+    user_team_ids = await get_user_team_ids_transitive(user.id, db)
+    allowed_packs = []
+    for p in packs:
+        if not p.teams:
+            allowed_packs.append(p)
+        else:
+            if p.creator_id == user.id or any(t.id in user_team_ids for t in p.teams):
+                allowed_packs.append(p)
+    return allowed_packs
 
 
 @router.post("/", response_model=PackResponse)
@@ -38,26 +80,66 @@ async def create_pack(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if user.role not in (UserRole.maintainer, UserRole.admin):
-        raise HTTPException(status_code=403, detail="Maintainer or admin role required")
+    if not data.team_ids:
+        if user.role not in (UserRole.maintainer, UserRole.admin):
+            raise HTTPException(status_code=403, detail="Maintainer or admin role required to create public packs")
+    else:
+        for team_id in data.team_ids:
+            res_t = await db.execute(select(Team).where(Team.id == team_id))
+            team = res_t.scalar_one_or_none()
+            if not team:
+                raise HTTPException(status_code=404, detail=f"Team with ID {team_id} not found")
+            if user.role not in (UserRole.admin, UserRole.maintainer):
+                is_member = await is_user_member_of_team_transitive(team_id, user.id, db)
+                if not (is_member and team.permission_pack == "write"):
+                    raise HTTPException(status_code=403, detail=f"No pack write permission on team {team_id}")
 
     existing = await db.execute(select(Pack).where(Pack.name == data.name))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Pack with this name already exists")
 
-    pack = Pack(name=data.name, description=data.description)
+    pack = Pack(name=data.name, description=data.description, creator_id=user.id)
+    if data.team_ids:
+        res_teams = await db.execute(select(Team).where(Team.id.in_(data.team_ids)))
+        pack.teams = res_teams.scalars().all()
+
     db.add(pack)
     await db.commit()
     await db.refresh(pack)
+    result_ref = await db.execute(
+        select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack.id)
+    )
+    pack = result_ref.scalar_one()
     return pack
 
 
 @router.get("/{pack_id}", response_model=PackResponse)
-async def get_pack(pack_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Pack).where(Pack.id == pack_id))
+async def get_pack(
+    pack_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    user = None
+    try:
+        session = await get_session(request)
+        user = await get_current_user(request, session, db)
+    except HTTPException:
+        pass
+
+    result = await db.execute(
+        select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack_id)
+    )
     pack = result.scalar_one_or_none()
     if not pack:
         raise HTTPException(status_code=404, detail="Pack not found")
+
+    if pack.teams:
+        if not user:
+            raise HTTPException(status_code=403, detail="Access denied")
+        user_team_ids = await get_user_team_ids_transitive(user.id, db)
+        if pack.creator_id != user.id and not any(t.id in user_team_ids for t in pack.teams):
+            raise HTTPException(status_code=403, detail="Access denied")
+
     return pack
 
 
@@ -68,13 +150,15 @@ async def update_pack(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if user.role not in (UserRole.maintainer, UserRole.admin):
-        raise HTTPException(status_code=403, detail="Maintainer or admin role required")
-
-    result = await db.execute(select(Pack).where(Pack.id == pack_id))
+    result = await db.execute(
+        select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack_id)
+    )
     pack = result.scalar_one_or_none()
     if not pack:
         raise HTTPException(status_code=404, detail="Pack not found")
+
+    if not await check_pack_write_permission(pack, user, db):
+        raise HTTPException(status_code=403, detail="No write permission for this pack")
 
     if data.name is not None:
         if data.name != pack.name:
@@ -86,13 +170,61 @@ async def update_pack(
     if data.description is not None:
         pack.description = data.description
 
+    if data.team_ids is not None:
+        if not data.team_ids:
+            if user.role not in (UserRole.admin, UserRole.maintainer):
+                raise HTTPException(status_code=403, detail="Maintainer or admin role required to make pack public")
+            pack.teams = []
+        else:
+            for team_id in data.team_ids:
+                res_t = await db.execute(select(Team).where(Team.id == team_id))
+                team = res_t.scalar_one_or_none()
+                if not team:
+                    raise HTTPException(status_code=404, detail=f"Team with ID {team_id} not found")
+                if user.role not in (UserRole.admin, UserRole.maintainer):
+                    is_member = await is_user_member_of_team_transitive(team_id, user.id, db)
+                    if not (is_member and team.permission_pack == "write"):
+                        raise HTTPException(status_code=403, detail=f"No pack write permission on team {team_id}")
+            
+            res_teams = await db.execute(select(Team).where(Team.id.in_(data.team_ids)))
+            pack.teams = res_teams.scalars().all()
+
     await db.commit()
     await db.refresh(pack)
+    result_ref = await db.execute(
+        select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack.id)
+    )
+    pack = result_ref.scalar_one()
     return pack
 
 
 @router.get("/{pack_id}/versions", response_model=list[PackVersionResponse])
-async def list_versions(pack_id: int, db: AsyncSession = Depends(get_db)):
+async def list_versions(
+    pack_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    user = None
+    try:
+        session = await get_session(request)
+        user = await get_current_user(request, session, db)
+    except HTTPException:
+        pass
+
+    result_p = await db.execute(
+        select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack_id)
+    )
+    pack = result_p.scalar_one_or_none()
+    if not pack:
+        raise HTTPException(status_code=404, detail="Pack not found")
+
+    if pack.teams:
+        if not user:
+            raise HTTPException(status_code=403, detail="Access denied")
+        user_team_ids = await get_user_team_ids_transitive(user.id, db)
+        if pack.creator_id != user.id and not any(t.id in user_team_ids for t in pack.teams):
+            raise HTTPException(status_code=403, detail="Access denied")
+
     result = await db.execute(
         select(PackVersion).where(PackVersion.pack_id == pack_id).order_by(PackVersion.released.desc())
     )
@@ -109,8 +241,15 @@ async def upload_version(
     db: AsyncSession = Depends(get_db),
 ):
     import re
-    if user.role not in (UserRole.maintainer, UserRole.admin):
-        raise HTTPException(status_code=403, detail="Maintainer or admin role required")
+    result = await db.execute(
+        select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack_id)
+    )
+    pack = result.scalar_one_or_none()
+    if not pack:
+        raise HTTPException(status_code=404, detail="Pack not found")
+
+    if not await check_pack_write_permission(pack, user, db):
+        raise HTTPException(status_code=403, detail="No write permission for this pack")
 
     # Validate semantic versioning format major.minor.patch
     if not re.match(r"^\d+\.\d+\.\d+$", version):
@@ -119,9 +258,6 @@ async def upload_version(
             detail="Invalid version format. Version must be in major.minor.patch format (e.g., 1.0.0)"
         )
     new_ver = tuple(map(int, version.split(".")))
-
-    result = await db.execute(select(Pack).where(Pack.id == pack_id))
-    pack = result.scalar_one_or_none()
     if not pack:
         raise HTTPException(status_code=404, detail="Pack not found")
 
@@ -180,7 +316,6 @@ async def enable_pack_for_group(
     if not group:
         raise HTTPException(status_code=404, detail="Device group not found")
 
-    from app.services.permissions import is_user_member_of_team_transitive
     has_write = False
     for team in group.teams:
         if await is_user_member_of_team_transitive(team.id, user.id, db) and team.permission_pack == "write":
@@ -231,7 +366,6 @@ async def list_enabled_packs(
     if not group:
         raise HTTPException(status_code=404, detail="Device group not found")
 
-    from app.services.permissions import is_user_member_of_team_transitive
     has_read = False
     for team in group.teams:
         if await is_user_member_of_team_transitive(team.id, user.id, db) and team.permission_pack is not None:
@@ -276,7 +410,6 @@ async def disable_pack(
     if not group:
         raise HTTPException(status_code=404, detail="Device group not found")
 
-    from app.services.permissions import is_user_member_of_team_transitive
     has_write = False
     for team in group.teams:
         if await is_user_member_of_team_transitive(team.id, user.id, db) and team.permission_pack == "write":
@@ -303,13 +436,15 @@ async def delete_pack(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if user.role not in (UserRole.maintainer, UserRole.admin):
-        raise HTTPException(status_code=403, detail="Maintainer or admin role required")
-
-    result = await db.execute(select(Pack).where(Pack.id == pack_id))
+    result = await db.execute(
+        select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack_id)
+    )
     pack = result.scalar_one_or_none()
     if not pack:
         raise HTTPException(status_code=404, detail="Pack not found")
+
+    if not await check_pack_write_permission(pack, user, db):
+        raise HTTPException(status_code=403, detail="No write permission for this pack")
 
     delete_pack_files(pack_id)
     await db.delete(pack)
@@ -360,11 +495,18 @@ async def download_pack_for_user(
     from fastapi.responses import FileResponse
 
     result = await db.execute(
-        select(PackVersion).where(PackVersion.id == version_id)
+        select(PackVersion)
+        .options(selectinload(PackVersion.pack).selectinload(Pack.teams))
+        .where(PackVersion.id == version_id)
     )
     pv = result.scalar_one_or_none()
     if not pv:
         raise HTTPException(status_code=404, detail="Pack version not found")
+
+    if pv.pack.teams:
+        user_team_ids = await get_user_team_ids_transitive(user.id, db)
+        if pv.pack.creator_id != user.id and not any(t.id in user_team_ids for t in pv.pack.teams):
+            raise HTTPException(status_code=403, detail="Access denied")
 
     return FileResponse(pv.zip_path, media_type="application/zip")
 
@@ -375,13 +517,26 @@ async def download_pack(
     device: Device = Depends(get_current_device),
     db: AsyncSession = Depends(get_db),
 ):
-    from fastapi.responses import FileResponse
 
     result = await db.execute(
-        select(PackVersion).where(PackVersion.id == version_id)
+        select(PackVersion)
+        .options(selectinload(PackVersion.pack).selectinload(Pack.teams))
+        .where(PackVersion.id == version_id)
     )
     pv = result.scalar_one_or_none()
     if not pv:
         raise HTTPException(status_code=404, detail="Pack version not found")
+
+    if pv.pack.teams:
+        result_d = await db.execute(
+            select(Device)
+            .options(selectinload(Device.groups).selectinload(DeviceGroup.teams))
+            .where(Device.id == device.id)
+        )
+        dev = result_d.scalar_one()
+        device_team_ids = {t.id for g in dev.groups for t in g.teams}
+        pack_team_ids = {t.id for t in pv.pack.teams}
+        if not (device_team_ids & pack_team_ids):
+            raise HTTPException(status_code=403, detail="Device not authorized to download this pack")
 
     return FileResponse(pv.zip_path, media_type="application/zip")

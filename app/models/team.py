@@ -4,7 +4,7 @@ from sqlalchemy import Enum, Integer, String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.models.associations import team_device_groups, team_users
+from app.models.associations import pack_teams, team_device_groups, team_users
 
 
 class PermissionPack(str, enum.Enum):
@@ -52,3 +52,4 @@ class Team(Base):
     managing_team: Mapped["Team | None"] = relationship(
         "Team", remote_side=[id], backref="managed_teams"
     )
+    packs = relationship("Pack", secondary=pack_teams, back_populates="teams")

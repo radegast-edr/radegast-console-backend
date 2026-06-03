@@ -610,10 +610,21 @@ async def update_notifications(
     user.notify_keys_transferred = data.notify_keys_transferred
     user.notify_device_log = data.notify_device_log
     user.notify_downtime_maintenance = data.notify_downtime_maintenance
+
+    severity_changed = False
+    old_level = user.notification_level
+    if old_level != data.notification_level:
+        user.notification_level = data.notification_level
+        severity_changed = True
+
     await db.commit()
 
     if disabled_features:
         await send_notification_disabled_alert(user.email, disabled_features)
+
+    if severity_changed:
+        from app.services.email import send_severity_changed_email
+        await send_severity_changed_email(user.email, old_level, data.notification_level)
 
     return NotificationSettings.model_validate(user)
 

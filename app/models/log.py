@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, Text, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -16,6 +16,7 @@ class Log(Base):
     time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     signature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    severity: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     device = relationship("Device", back_populates="logs")
 

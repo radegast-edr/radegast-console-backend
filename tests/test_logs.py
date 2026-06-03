@@ -26,10 +26,37 @@ class TestLogSubmission:
                 "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                 "content": "encrypted-log-content-here",
                 "signature": "sig-data",
+                "severity": "low",
             },
         )
         assert resp.status_code == 200
         assert resp.json()["content"] == "encrypted-log-content-here"
+        assert resp.json()["severity"] == "low"
+
+    async def test_submit_log_invalid_severity(self, auth_client: AsyncClient, client: AsyncClient):
+        # Get default group
+        resp = await auth_client.get("/teams/")
+        team_id = resp.json()[0]["id"]
+        resp = await auth_client.get(f"/teams/{team_id}/groups")
+        group_id = resp.json()[0]["id"]
+
+        # Create device
+        resp = await auth_client.post("/devices/", json={"name": "Logger-01b", "group_id": group_id})
+        token = resp.json()["token"]
+
+        # Login as device
+        await client.post("/auth/device/login", json={"token": token})
+
+        # Submit log with invalid severity
+        resp = await client.post(
+            "/logs/",
+            json={
+                "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+                "content": "encrypted-log-content-here",
+                "severity": "invalid-severity",
+            },
+        )
+        assert resp.status_code == 422
 
     async def test_submit_log_requires_device_session(self, auth_client: AsyncClient):
         resp = await auth_client.post(

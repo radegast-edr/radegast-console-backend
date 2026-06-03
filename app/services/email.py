@@ -88,10 +88,21 @@ KEYS_TRANSFERRED_TEMPLATE = Template("""
 DEVICE_LOG_TEMPLATE = Template("""
 <html>
 <body>
-<h2>New Alert — Radegast EDR</h2>
-<p>A new alert was submitted by device <strong>{{ device_name }}</strong> (ID: {{ device_id }}).</p>
+<h2>New Alert{% if severity %} [{{ severity|upper }}]{% endif %} — Radegast EDR</h2>
+<p>A new alert was submitted by device <strong>{{ device_name }}</strong> (ID: {{ device_id }}).{% if severity %} Severity: <strong>{{ severity }}</strong>.{% endif %}</p>
 <p><strong>Time:</strong> {{ time }} UTC</p>
 <p><a href="{{ base_url }}/alerts">View Alerts</a></p>
+</body>
+</html>
+""")
+
+SEVERITY_CHANGED_TEMPLATE = Template("""
+<html>
+<body>
+<h2>Notification Severity Level Changed — Radegast EDR</h2>
+<p>Your alert notification severity preference has been changed from <strong>{{ old_level }}</strong> to <strong>{{ new_level }}</strong>.</p>
+<p><strong>Time:</strong> {{ time }} UTC</p>
+<p>If you did not make this change, please review your account settings immediately.</p>
 </body>
 </html>
 """)
@@ -251,15 +262,26 @@ async def send_keys_transferred_notification(email: str, ip: str):
     await send_email(email, "Encryption Keys Transferred — Radegast EDR", html, email_type="keys_transferred")
 
 
-async def send_device_log_notification(email: str, device_name: str, device_id: int):
+async def send_device_log_notification(email: str, device_name: str, device_id: int, severity: str | None = None):
     ui_base = get_web_ui_base()
     html = DEVICE_LOG_TEMPLATE.render(
         device_name=device_name,
         device_id=device_id,
         time=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
         base_url=ui_base,
+        severity=severity,
     )
-    await send_email(email, f"New Alert from {device_name} — Radegast EDR", html, email_type="device_log")
+    subject = f"New Alert [{severity.upper()}] from {device_name} — Radegast EDR" if severity else f"New Alert from {device_name} — Radegast EDR"
+    await send_email(email, subject, html, email_type="device_log")
+
+
+async def send_severity_changed_email(email: str, old_level: str, new_level: str):
+    html = SEVERITY_CHANGED_TEMPLATE.render(
+        old_level=old_level,
+        new_level=new_level,
+        time=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
+    )
+    await send_email(email, "Notification Severity Preference Changed — Radegast EDR", html, email_type="severity_changed")
 
 
 async def send_notification_disabled_alert(email: str, disabled_features: list[str]):

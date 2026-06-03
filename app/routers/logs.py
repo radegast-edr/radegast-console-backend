@@ -21,6 +21,23 @@ from app.services.email import send_device_log_notification
 router = APIRouter(prefix="/logs", tags=["logs"])
 
 
+SIGMA_LEVELS = {
+    "informational": 1,
+    "low": 2,
+    "medium": 3,
+    "high": 4,
+    "critical": 5,
+}
+
+
+def is_sufficient_severity(alert_severity: str | None, user_level: str) -> bool:
+    if not alert_severity:
+        return True
+    alert_val = SIGMA_LEVELS.get(alert_severity.lower(), 1)
+    user_val = SIGMA_LEVELS.get(user_level.lower(), 3)
+    return alert_val >= user_val
+
+
 @router.post("/", response_model=LogResponse)
 async def submit_log(
     data: LogCreate,
@@ -33,13 +50,14 @@ async def submit_log(
         time=ensure_utc(data.time),
         content=data.content,
         signature=data.signature,
+        severity=data.severity,
     )
     db.add(log)
     await db.commit()
     await db.refresh(log)
 
-    # Notify users with log-read permission on this device who opted in
-    notif_result = await db.execute(
+    # Fetch all users with log-read permission on this device
+    result = await db.execute(
         select(User)
         .join(team_users, User.id == team_users.c.user_id)
         .join(Team, Team.id == team_users.c.team_id)
@@ -51,12 +69,21 @@ async def submit_log(
         .where(
             device_group_devices.c.device_id == device.id,
             Team.permission_logs == "read",
-            User.notify_device_log.is_(True),
         )
         .distinct()
     )
-    for u in notif_result.scalars().all():
-        background_tasks.add_task(send_device_log_notification, u.email, device.name, device.id)
+    users = result.scalars().all()
+
+    for u in users:
+        if log.severity and not is_sufficient_severity(log.severity, u.notification_level):
+            db.add(LogSeen(user_id=u.id, log_id=log.id))
+        else:
+            if u.notify_device_log:
+                background_tasks.add_task(
+                    send_device_log_notification, u.email, device.name, device.id, log.severity
+                )
+
+    await db.commit()
 
     return log
 

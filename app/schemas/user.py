@@ -104,6 +104,8 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 
+from app.schemas.common import SigmaLevel
+
 class NotificationSettings(BaseModel):
     notify_login: bool
     notify_new_keys: bool
@@ -111,6 +113,7 @@ class NotificationSettings(BaseModel):
     notify_keys_transferred: bool
     notify_device_log: bool
     notify_downtime_maintenance: bool
+    notification_level: SigmaLevel = "medium"
 
     model_config = {"from_attributes": True}
 

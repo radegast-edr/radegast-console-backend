@@ -395,3 +395,30 @@ class TestNotificationDisabledAlert:
         assert len(disabled_emails) == 1
         body = disabled_emails[0][2]
         assert "Platform downtime and maintenance emails" in body
+
+    async def test_notification_level_change_sends_email(self, client: AsyncClient):
+        email = "notif_level_change@example.com"
+        password = "Password123!"
+        await _register_and_verify(client, email, password)
+        await _login(client, email, password)
+
+        payload = {
+            "notify_login": True,
+            "notify_new_keys": True,
+            "notify_recovery_used": True,
+            "notify_keys_transferred": True,
+            "notify_device_log": True,
+            "notify_downtime_maintenance": True,
+            "notification_level": "high",
+        }
+        with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
+            resp = await client.put("/auth/notifications", json=payload)
+            assert resp.status_code == 200
+
+        calls = mock_send.call_args_list
+        assert len(calls) > 0
+        changed_emails = [call.args for call in calls if "Notification Severity Preference Changed" in call.args[1]]
+        assert len(changed_emails) == 1
+        body = changed_emails[0][2]
+        assert "medium" in body
+        assert "high" in body

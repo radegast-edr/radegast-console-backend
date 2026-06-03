@@ -112,7 +112,7 @@ async def get_current_device(
     return device
 
 
-async def require_role(role: str):
+def require_role(role: str):
     """Factory for role-based dependencies."""
 
     async def _check(user: User = Depends(get_current_user)) -> User:

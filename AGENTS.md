@@ -11,6 +11,32 @@
 - In Python, all imports are on the top of the file. stdlib first, 3rd party packages after a new line, local imports after than
 - Cover all new features with new tests so that the test coverage does not decrease.
 
+## API Type Generation
+
+The frontend TypeScript types in `web/src/lib/openapi.d.ts` are auto-generated from the backend's OpenAPI schema. Whenever you modify the backend API (add/change/remove endpoints or Pydantic models), regenerate the types:
+
+1. Make sure the backend is running locally:
+
+```bash
+uv run uvicorn app.main:app --port 8000
+```
+
+2. In a separate terminal, regenerate the types:
+
+```bash
+uv run gen-openapi.py
+cd web
+npm run generate
+```
+
+3. Rebuild the frontend to verify no type errors were introduced:
+
+```bash
+npm run build
+```
+
+The `generate` script fetches `http://localhost:8000/openapi.json` and writes `src/lib/openapi.d.ts`. Do **not** edit `openapi.d.ts` by hand — it will be overwritten on the next run.
+
 ## Required Post-Task Validation
 
 After completing each task, always run all validations in this order:

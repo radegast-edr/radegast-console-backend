@@ -13,7 +13,7 @@
 
 ## Required Post-Task Validation
 
-After completing each task, always run both validations in this order:
+After completing each task, always run all validations in this order:
 
 1. Rebuild frontend and fix all build/Svelte/a11y warnings:
 
@@ -24,7 +24,13 @@ npm run build
 
 Make sure the build output contains no compile, Svelte, or accessibility warnings. Any warnings must be fixed before ending the task.
 
-2. Run all backend tests:
+2. Run all frontend tests:
+
+```bash
+npm run test
+```
+
+3. Run all backend tests:
 
 ```bash
 cd ..

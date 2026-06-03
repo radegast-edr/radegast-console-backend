@@ -105,6 +105,7 @@ All settings are controlled via environment variables prefixed with `RADEGAST_` 
 
 | Environment Variable                     | Required | Default                             | Description                                                                                                                                        |
 |------------------------------------------|----------|-------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
+| `RADEGAST_ENVIRONMENT`                   | N        | `prod`                              | The deployment environment. Valid values: `dev`, `prod`. If `dev`, skips default secret key warning.                                               |
 | `RADEGAST_SECRET_KEY`                    | Y        | `change-me-in-production`           | Secret key used for session signing — **must be changed in production**                                                                            |
 | `RADEGAST_DATABASE_URL`                  | N        | `sqlite+aiosqlite:///./radegast.db` | Async SQLAlchemy database URL                                                                                                                      |
 | `RADEGAST_CORS_ORIGINS`                  | N        | `http://localhost:5173,...`         | Comma-separated list of allowed CORS origins                                                                                                       |

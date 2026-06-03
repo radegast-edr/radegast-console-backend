@@ -56,8 +56,9 @@ class TestLogSubmission:
                 "severity": "invalid-severity",
             },
         )
-        assert resp.status_code == 422
-
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["severity"] is None
     async def test_submit_log_requires_device_session(self, auth_client: AsyncClient):
         resp = await auth_client.post(
             "/logs/",

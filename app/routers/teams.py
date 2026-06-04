@@ -10,6 +10,7 @@ from app.models.device_group import DeviceGroup
 from app.models.team import Team
 from app.models.user import User
 from app.models.pack import Pack
+from pydantic import BaseModel
 from app.schemas.team import (
     DeviceGroupCreate,
     DeviceGroupResponse,
@@ -17,7 +18,13 @@ from app.schemas.team import (
     TeamInvite,
     TeamResponse,
     TeamUpdate,
+    TeamMemberResponse,
 )
+from app.schemas.user import UserResponse
+from app.schemas.device import DeviceResponse
+
+class MessageResponse(BaseModel):
+    message: str
 from app.services.email import send_invite_email
 
 from app.services.permissions import (
@@ -207,7 +214,7 @@ async def update_team(
     return team
 
 
-@router.post("/{team_id}/invite")
+@router.post("/{team_id}/invite", response_model=MessageResponse)
 async def invite_to_team(
     team_id: int,
     data: TeamInvite,
@@ -223,7 +230,7 @@ async def invite_to_team(
     return {"message": f"Invitation sent to {data.email}"}
 
 
-@router.get("/{team_id}/members", response_model=list[dict])
+@router.get("/{team_id}/members", response_model=list[TeamMemberResponse])
 async def list_members(
     team_id: int,
     user: User = Depends(get_current_user),
@@ -233,7 +240,7 @@ async def list_members(
     return [{"id": u.id, "email": u.email, "role": u.role.value} for u in team.users]
 
 
-@router.delete("/{team_id}/members/{user_id}")
+@router.delete("/{team_id}/members/{user_id}", response_model=MessageResponse)
 async def remove_member(
     team_id: int,
     user_id: int,
@@ -294,7 +301,7 @@ async def create_team_group(
     return group
 
 
-@router.post("/{team_id}/groups/{group_id}/link")
+@router.post("/{team_id}/groups/{group_id}/link", response_model=MessageResponse)
 async def link_group_to_team(
     team_id: int,
     group_id: int,
@@ -332,7 +339,7 @@ async def link_group_to_team(
     return {"message": "Group linked to team"}
 
 
-@router.get("/{team_id}/devices")
+@router.get("/{team_id}/devices", response_model=list[DeviceResponse])
 async def list_team_devices(
     team_id: int,
     user: User = Depends(get_current_user),

@@ -53,3 +53,11 @@ class DeviceGroupDetailResponse(BaseModel):
     # devices imported lazily to avoid circular import — built manually in router
 
     model_config = {"from_attributes": True}
+
+
+class TeamMemberResponse(BaseModel):
+    id: int
+    email: str
+    role: str
+
+    model_config = {"from_attributes": True}

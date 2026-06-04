@@ -1,5 +1,6 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.team import Team
 from app.models.associations import team_users
@@ -114,3 +115,38 @@ async def has_device_admin_permission(device_id: int, user_id: int, db: AsyncSes
             break
     return has_access
 
+
+async def get_device_encryption_keys_list(device_id: int, db: AsyncSession) -> list[dict]:
+    """
+    Shared utility: returns all public keys of users who have log-read permission
+    for the given device (via any group/team chain).
+    This is used both by the device-facing and user-facing encryption-key endpoints.
+    """
+    from app.models.device import Device
+    from app.models.device_group import DeviceGroup
+    from app.models.public_key import PublicKey
+
+    result = await db.execute(
+        select(Device)
+        .options(selectinload(Device.groups).selectinload(DeviceGroup.teams).selectinload(Team.users))
+        .where(Device.id == device_id)
+    )
+    device = result.scalar_one_or_none()
+    if not device:
+        return []
+
+    user_ids: set[int] = set()
+    for group in device.groups:
+        for team in group.teams:
+            if team.permission_logs == "read":
+                team_user_ids = await get_team_members_transitive(team.id, db)
+                user_ids.update(team_user_ids)
+
+    if not user_ids:
+        return []
+
+    result = await db.execute(
+        select(PublicKey).where(PublicKey.user_id.in_(list(user_ids)))
+    )
+    keys = result.scalars().all()
+    return [{"user_id": k.user_id, "public_key": k.public_key, "key_type": k.key_type} for k in keys]

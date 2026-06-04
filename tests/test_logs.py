@@ -166,3 +166,312 @@ class TestEncryptionKeys:
     async def test_encryption_keys_requires_device_session(self, auth_client: AsyncClient):
         resp = await auth_client.get("/logs/encryption-keys")
         assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+class TestLogSeenAndResolution:
+    async def test_seen_and_resolution_basic_vs_extended(self, auth_client: AsyncClient, client: AsyncClient):
+        # 1. Get default group first
+        resp = await auth_client.get("/teams/")
+        team_id = resp.json()[0]["id"]
+        resp = await auth_client.get(f"/teams/{team_id}/groups")
+        group_id = resp.json()[0]["id"]
+
+        # 2. Create device
+        resp = await auth_client.post("/devices/", json={"name": "Logger-SeenTest", "group_id": group_id})
+        token = resp.json()["token"]
+
+        # 3. Login as device and submit log
+        await client.post("/auth/device/login", json={"token": token})
+        resp = await client.post(
+            "/logs/",
+            json={
+                "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+                "content": "seen-test-log",
+                "severity": "high",
+            },
+        )
+        assert resp.status_code == 200
+        log_id = resp.json()["id"]
+
+        # 4. Re-login as user (default: basic mode, extended_edr_enabled=False)
+        await client.post("/auth/login", json={"email": "test@example.com", "password": "TestPass123!"})
+
+        # Check logs initially
+        resp = await auth_client.get("/logs/")
+        assert resp.status_code == 200
+        logs = resp.json()
+        log = next(l for l in logs if l["id"] == log_id)
+        assert log["seen"] is False
+
+        # Unread count should be >= 1 for this test log
+        resp = await auth_client.get("/logs/unread-count")
+        assert resp.status_code == 200
+        initial_unread = resp.json()["unread_count"]
+        assert initial_unread >= 1
+
+        # Mark seen (basic mode: seeing = reading, no resolution required)
+        resp = await auth_client.post(f"/logs/{log_id}/seen")
+        assert resp.status_code == 200
+
+        # Now seen should be True
+        resp = await auth_client.get("/logs/")
+        log = next(l for l in resp.json() if l["id"] == log_id)
+        assert log["seen"] is True
+
+        # In basic mode, marking seen immediately removes the log from the active count
+        # (basic mode does NOT require a resolution, seeing the alert is enough).
+        resp = await auth_client.get("/logs/unread-count")
+        assert resp.json()["unread_count"] == initial_unread - 1
+        after_seen_unread = resp.json()["unread_count"]
+
+        # Resolve log
+        resp = await auth_client.patch(
+            f"/logs/{log_id}/resolve",
+            json={"alert_resolution": "true_positive", "triage_note": "A note"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["seen"] is True
+
+        # Seen status should remain True after resolution
+        resp = await auth_client.get("/logs/")
+        log = next(l for l in resp.json() if l["id"] == log_id)
+        assert log["seen"] is True
+
+        # Unread count should remain the same (log was already removed when seen)
+        resp = await auth_client.get("/logs/unread-count")
+        assert resp.json()["unread_count"] == after_seen_unread
+
+        # 5. Enable Extended EDR Mode
+        resp = await auth_client.put("/auth/extended-edr", json={"extended_edr_enabled": True})
+        assert resp.status_code == 200
+        assert resp.json()["extended_edr_enabled"] is True
+
+        # In extended EDR, the resolved log should NOT be counted as active
+        resp = await auth_client.get("/logs/unread-count")
+        edr_after_resolved = resp.json()["unread_count"]
+
+        # Clear resolution (set to None) — in extended EDR, this should re-activate the log
+        resp = await auth_client.patch(
+            f"/logs/{log_id}/resolve",
+            json={"alert_resolution": None, "triage_note": ""},
+        )
+        assert resp.status_code == 200
+        # Clearing resolution in extended EDR mode should NOT mark as seen
+        assert resp.json()["seen"] is True  # was already seen before; stays seen
+
+        # Unread count in extended EDR should increase by 1 (log is now unresolved)
+        resp = await auth_client.get("/logs/unread-count")
+        assert resp.json()["unread_count"] == edr_after_resolved + 1
+
+        resp = await auth_client.get("/logs/")
+        log = next(l for l in resp.json() if l["id"] == log_id)
+        assert log["seen"] is True
+
+        # Resolve again
+        resp = await auth_client.patch(
+            f"/logs/{log_id}/resolve",
+            json={"alert_resolution": "false_positive", "triage_note": "FP note"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["seen"] is True
+
+        resp = await auth_client.get("/logs/")
+        log = next(l for l in resp.json() if l["id"] == log_id)
+        assert log["seen"] is True
+
+        # After resolving in extended EDR, unread count should go back down
+        resp = await auth_client.get("/logs/unread-count")
+        assert resp.json()["unread_count"] == edr_after_resolved
+
+        # Cleanup: restore basic EDR mode
+        await auth_client.put("/auth/extended-edr", json={"extended_edr_enabled": False})
+
+    async def test_basic_mode_unread_count_tracks_seen_not_resolution(
+        self, auth_client: AsyncClient, client: AsyncClient
+    ):
+        """In basic mode the unread counter tracks 'seen' status only.
+        A log that has been seen but not resolved should NOT appear in the count."""
+        resp = await auth_client.get("/teams/")
+        team_id = resp.json()[0]["id"]
+        resp = await auth_client.get(f"/teams/{team_id}/groups")
+        group_id = resp.json()[0]["id"]
+
+        resp = await auth_client.post("/devices/", json={"name": "Logger-BasicCount", "group_id": group_id})
+        token = resp.json()["token"]
+
+        await client.post("/auth/device/login", json={"token": token})
+        resp = await client.post(
+            "/logs/",
+            json={
+                "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+                "content": "basic-count-test-log",
+                "severity": "medium",
+            },
+        )
+        log_id = resp.json()["id"]
+
+        await client.post("/auth/login", json={"email": "test@example.com", "password": "TestPass123!"})
+
+        # Initial unread count
+        resp = await auth_client.get("/logs/unread-count")
+        before = resp.json()["unread_count"]
+
+        # Mark seen (NO resolution)
+        await auth_client.post(f"/logs/{log_id}/seen")
+
+        # Count should decrease immediately — basic mode only tracks seen status
+        resp = await auth_client.get("/logs/unread-count")
+        assert resp.json()["unread_count"] == before - 1
+
+    async def test_extended_edr_unread_count_tracks_resolution_not_seen(
+        self, auth_client: AsyncClient, client: AsyncClient
+    ):
+        """In extended EDR mode the unread counter tracks resolution status.
+        A log that has been seen but not resolved should STILL appear in the count."""
+        resp = await auth_client.get("/teams/")
+        team_id = resp.json()[0]["id"]
+        resp = await auth_client.get(f"/teams/{team_id}/groups")
+        group_id = resp.json()[0]["id"]
+
+        resp = await auth_client.post("/devices/", json={"name": "Logger-EDRCount", "group_id": group_id})
+        token = resp.json()["token"]
+
+        await client.post("/auth/device/login", json={"token": token})
+        resp = await client.post(
+            "/logs/",
+            json={
+                "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+                "content": "edr-count-test-log",
+                "severity": "high",
+            },
+        )
+        log_id = resp.json()["id"]
+
+        await client.post("/auth/login", json={"email": "test@example.com", "password": "TestPass123!"})
+
+        # Enable extended EDR
+        await auth_client.put("/auth/extended-edr", json={"extended_edr_enabled": True})
+
+        resp = await auth_client.get("/logs/unread-count")
+        before = resp.json()["unread_count"]
+
+        # Mark seen (NO resolution) — in extended EDR, count must NOT change
+        await auth_client.post(f"/logs/{log_id}/seen")
+
+        resp = await auth_client.get("/logs/unread-count")
+        assert resp.json()["unread_count"] == before  # unchanged
+
+        # Now resolve — count should decrease
+        await auth_client.patch(
+            f"/logs/{log_id}/resolve",
+            json={"alert_resolution": "true_positive", "triage_note": ""},
+        )
+
+        resp = await auth_client.get("/logs/unread-count")
+        assert resp.json()["unread_count"] == before - 1
+
+        # Cleanup
+        await auth_client.put("/auth/extended-edr", json={"extended_edr_enabled": False})
+
+    async def test_get_log_encryption_keys_for_user(self, auth_client: AsyncClient, client: AsyncClient):
+        # 1. Get default group first
+        resp = await auth_client.get("/teams/")
+        team_id = resp.json()[0]["id"]
+        resp = await auth_client.get(f"/teams/{team_id}/groups")
+        group_id = resp.json()[0]["id"]
+
+        # 2. Create device
+        resp = await auth_client.post("/devices/", json={"name": "Logger-KeysTest", "group_id": group_id})
+        token = resp.json()["token"]
+
+        # 3. Login as device and submit log
+        await client.post("/auth/device/login", json={"token": token})
+        resp = await client.post(
+            "/logs/",
+            json={
+                "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+                "content": "key-test-log",
+            },
+        )
+        assert resp.status_code == 200
+        log_id = resp.json()["id"]
+
+        # 4. Re-login as user
+        await client.post("/auth/login", json={"email": "test@example.com", "password": "TestPass123!"})
+
+        # 5. Fetch keys as user
+        resp = await auth_client.get(f"/logs/{log_id}/encryption-keys")
+        assert resp.status_code == 200
+        keys = resp.json()
+        assert isinstance(keys, list)
+
+    async def test_get_log_device_keys_for_triage(self, auth_client: AsyncClient, client: AsyncClient):
+        """The new /device-keys endpoint (used for triage note encryption) should return
+        the same set of device-based public keys as the existing /encryption-keys endpoint,
+        because both use the shared get_device_encryption_keys_list utility."""
+        # 1. Get default group
+        resp = await auth_client.get("/teams/")
+        team_id = resp.json()[0]["id"]
+        resp = await auth_client.get(f"/teams/{team_id}/groups")
+        group_id = resp.json()[0]["id"]
+
+        # 2. Create device
+        resp = await auth_client.post("/devices/", json={"name": "Logger-DeviceKeys", "group_id": group_id})
+        token = resp.json()["token"]
+
+        # 3. Login as device and submit log
+        await client.post("/auth/device/login", json={"token": token})
+        resp = await client.post(
+            "/logs/",
+            json={
+                "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+                "content": "device-keys-test-log",
+            },
+        )
+        assert resp.status_code == 200
+        log_id = resp.json()["id"]
+
+        # 4. Re-login as user
+        await client.post("/auth/login", json={"email": "test@example.com", "password": "TestPass123!"})
+
+        # 5. Fetch via new /device-keys endpoint
+        resp = await auth_client.get(f"/logs/{log_id}/device-keys")
+        assert resp.status_code == 200
+        device_keys = resp.json()
+        assert isinstance(device_keys, list)
+
+        # 6. Fetch via existing /encryption-keys endpoint and compare
+        resp2 = await auth_client.get(f"/logs/{log_id}/encryption-keys")
+        assert resp2.status_code == 200
+        enc_keys = resp2.json()
+
+        # Both endpoints share the same utility and must return identical results
+        assert sorted(device_keys, key=lambda k: k["user_id"]) == sorted(enc_keys, key=lambda k: k["user_id"])
+
+    async def test_device_keys_requires_authentication(self, auth_client: AsyncClient, client: AsyncClient):
+        """The /device-keys endpoint must reject unauthenticated users."""
+        # 1. Get default group
+        resp = await auth_client.get("/teams/")
+        team_id = resp.json()[0]["id"]
+        resp = await auth_client.get(f"/teams/{team_id}/groups")
+        group_id = resp.json()[0]["id"]
+
+        # 2. Create device and submit a log
+        resp = await auth_client.post("/devices/", json={"name": "Logger-DeviceKeys-Auth", "group_id": group_id})
+        token = resp.json()["token"]
+        await client.post("/auth/device/login", json={"token": token})
+        resp = await client.post(
+            "/logs/",
+            json={
+                "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+                "content": "auth-test-log",
+            },
+        )
+        assert resp.status_code == 200
+        log_id = resp.json()["id"]
+
+        # 3. Access without a user session (still has device session) must be rejected
+        resp = await client.get(f"/logs/{log_id}/device-keys")
+        assert resp.status_code in (401, 403)
+

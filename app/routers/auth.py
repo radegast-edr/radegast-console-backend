@@ -560,6 +560,7 @@ async def me(user: User = Depends(get_current_user), db: AsyncSession = Depends(
         mfa_required_level=required_level,
         mfa_setup_missing=mfa_setup_missing,
         mfa_configured_level=conf_level,
+        extended_edr_enabled=user.extended_edr_enabled,
     )
 
 
@@ -628,6 +629,18 @@ async def update_notifications(
 
     return NotificationSettings.model_validate(user)
 
+
+from app.schemas.user import ExtendedEdrSettings
+
+@router.put("/extended-edr", response_model=ExtendedEdrSettings)
+async def update_extended_edr(
+    data: ExtendedEdrSettings,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user.extended_edr_enabled = data.extended_edr_enabled
+    await db.commit()
+    return ExtendedEdrSettings.model_validate(user)
 
 @router.post("/keys/transfer/initiate", response_model=KeyTransferInitiateResponse)
 async def initiate_key_transfer(

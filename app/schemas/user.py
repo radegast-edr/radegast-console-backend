@@ -24,6 +24,7 @@ class UserResponse(BaseModel):
     mfa_required_level: str = "none"
     mfa_setup_missing: bool = False
     mfa_configured_level: str = "none"
+    extended_edr_enabled: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -114,6 +115,12 @@ class NotificationSettings(BaseModel):
     notify_device_log: bool
     notify_downtime_maintenance: bool
     notification_level: SigmaLevel = "medium"
+
+    model_config = {"from_attributes": True}
+
+
+class ExtendedEdrSettings(BaseModel):
+    extended_edr_enabled: bool
 
     model_config = {"from_attributes": True}
 

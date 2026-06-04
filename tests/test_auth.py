@@ -709,6 +709,28 @@ class TestNotificationSettings:
         resp = await client.get("/auth/notifications")
         assert resp.status_code in (401, 403)
 
+    async def test_update_extended_edr(self, client: AsyncClient):
+        await self._setup(client)
+        payload = {"extended_edr_enabled": True}
+        resp = await client.put("/auth/extended-edr", json=payload)
+        assert resp.status_code == 200
+        assert resp.json()["extended_edr_enabled"] is True
+
+        # Check in DB / status endpoint if any
+        resp2 = await client.get("/auth/me")
+        assert resp2.json()["extended_edr_enabled"] is True
+
+        # Disable it
+        payload = {"extended_edr_enabled": False}
+        resp3 = await client.put("/auth/extended-edr", json=payload)
+        assert resp3.status_code == 200
+        assert resp3.json()["extended_edr_enabled"] is False
+
+    async def test_extended_edr_requires_auth(self, client: AsyncClient):
+        resp = await client.put("/auth/extended-edr", json={"extended_edr_enabled": True})
+        assert resp.status_code in (401, 403)
+
+
 
 def test_client_ip_headers():
     from fastapi import Request

@@ -29,5 +29,22 @@ class LogResponse(BaseModel):
     signature: str | None
     seen: bool = False
     severity: SigmaLevel | None = None
+    alert_resolution: str | None = None
+    triage_note: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class LogResolveRequest(BaseModel):
+    alert_resolution: str | None = None
+    triage_note: str | None = None
+
+
+class LogCountResponse(BaseModel):
+    total_count: int
+
+
+class DevicePublicKeyResponse(BaseModel):
+    user_id: int
+    public_key: str
+    key_type: str

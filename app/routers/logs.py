@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -15,8 +15,9 @@ from app.models.log import Log, LogSeen
 from app.models.public_key import PublicKey
 from app.models.team import Team
 from app.models.user import User
-from app.schemas.log import LogCreate, LogResponse
+from app.schemas.log import LogCreate, LogResponse, LogCountResponse
 from app.services.email import send_device_log_notification
+from app.services.permissions import get_device_encryption_keys_list
 
 router = APIRouter(prefix="/logs", tags=["logs"])
 
@@ -111,10 +112,23 @@ async def get_unread_logs_count(
         return {"unread_count": 0}
 
     seen_subquery = select(LogSeen.log_id).where(LogSeen.user_id == user.id)
-    count_query = select(func.count(Log.id)).where(
-        Log.device_id.in_(visible_device_ids),
-        Log.id.not_in(seen_subquery)
-    )
+    if user.extended_edr_enabled:
+        # Extended EDR: a log is "active" until it has an explicit resolution.
+        # Seen status alone does not close an alert.
+        count_query = select(func.count(Log.id)).where(
+            Log.device_id.in_(visible_device_ids),
+            or_(
+                Log.alert_resolution.is_(None),
+                Log.alert_resolution == "none"
+            )
+        )
+    else:
+        # Basic mode: a log is "active" until the user has seen it.
+        # Resolution is not required in basic mode — seeing the alert is enough.
+        count_query = select(func.count(Log.id)).where(
+            Log.device_id.in_(visible_device_ids),
+            Log.id.not_in(seen_subquery)
+        )
     unread_res = await db.execute(count_query)
     count = unread_res.scalar_one()
     return {"unread_count": count}
@@ -189,6 +203,47 @@ async def mark_log_seen(
     return {"message": "Log marked as seen"}
 
 
+@router.get("/count", response_model=LogCountResponse)
+async def get_logs_count(
+    device_id: int | None = None,
+    from_time: datetime | None = None,
+    to_time: datetime | None = None,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Team)
+        .options(selectinload(Team.groups).selectinload(DeviceGroup.devices))
+        .where(Team.users.any(User.id == user.id), Team.permission_logs == "read")
+    )
+    teams = result.scalars().all()
+
+    visible_device_ids = set()
+    for team in teams:
+        for group in team.groups:
+            for device in group.devices:
+                visible_device_ids.add(device.id)
+
+    if not visible_device_ids:
+        return LogCountResponse(total_count=0)
+
+    if device_id:
+        if device_id not in visible_device_ids:
+            raise HTTPException(status_code=403, detail="No log permission for this device")
+        query = select(func.count(Log.id)).where(Log.device_id == device_id)
+    else:
+        query = select(func.count(Log.id)).where(Log.device_id.in_(visible_device_ids))
+
+    if from_time:
+        query = query.where(Log.time >= ensure_utc(from_time).replace(tzinfo=None))
+    if to_time:
+        query = query.where(Log.time <= ensure_utc(to_time).replace(tzinfo=None))
+
+    count_res = await db.execute(query)
+    count = count_res.scalar_one()
+    return LogCountResponse(total_count=count)
+
+
 @router.get("/", response_model=list[LogResponse])
 async def list_logs(
     device_id: int | None = None,
@@ -227,9 +282,9 @@ async def list_logs(
         query = select(Log).where(Log.device_id.in_(visible_device_ids))
 
     if from_time:
-        query = query.where(Log.time >= from_time)
+        query = query.where(Log.time >= ensure_utc(from_time).replace(tzinfo=None))
     if to_time:
-        query = query.where(Log.time <= to_time)
+        query = query.where(Log.time <= ensure_utc(to_time).replace(tzinfo=None))
 
     query = query.order_by(Log.time.desc()).offset(offset).limit(limit)
 
@@ -244,18 +299,75 @@ async def list_logs(
         )
         seen_log_ids = set(seen_res.scalars().all())
 
-    return [
-        LogResponse(
-            id=log.id,
-            device_id=log.device_id,
-            time=log.time,
-            content=log.content,
-            signature=log.signature,
-            seen=log.id in seen_log_ids,
-            severity=log.severity
+    response_logs = []
+    for log in logs:
+        seen = (log.id in seen_log_ids)
+
+        response_logs.append(
+            LogResponse(
+                id=log.id,
+                device_id=log.device_id,
+                time=log.time,
+                content=log.content,
+                signature=log.signature,
+                seen=seen,
+                severity=log.severity,
+                alert_resolution=log.alert_resolution,
+                triage_note=log.triage_note
+            )
         )
-        for log in logs
-    ]
+    return response_logs
+
+
+from app.schemas.log import LogResolveRequest
+
+@router.patch("/{log_id}/resolve", response_model=LogResponse)
+async def resolve_log(
+    log_id: int,
+    data: LogResolveRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Log).where(Log.id == log_id))
+    log = result.scalar_one_or_none()
+    if not log:
+        raise HTTPException(status_code=404, detail="Log not found")
+
+    log.alert_resolution = data.alert_resolution
+    log.triage_note = data.triage_note
+
+    # Auto-mark as seen only when an actual resolution is being set.
+    # In extended EDR mode, clearing the resolution (setting it to None/none)
+    # should NOT mark the log as seen so it remains visually "active" until triaged.
+    has_real_resolution = data.alert_resolution and data.alert_resolution != "none"
+    if not user.extended_edr_enabled or has_real_resolution:
+        seen_result = await db.execute(
+            select(LogSeen).where(LogSeen.user_id == user.id, LogSeen.log_id == log_id)
+        )
+        if not seen_result.scalar_one_or_none():
+            log_seen = LogSeen(user_id=user.id, log_id=log_id)
+            db.add(log_seen)
+
+    await db.commit()
+    await db.refresh(log)
+
+    # Determine seen status for response
+    seen_result = await db.execute(
+        select(LogSeen).where(LogSeen.user_id == user.id, LogSeen.log_id == log_id)
+    )
+    seen = seen_result.scalar_one_or_none() is not None
+
+    return LogResponse(
+        id=log.id,
+        device_id=log.device_id,
+        time=log.time,
+        content=log.content,
+        signature=log.signature,
+        seen=seen,
+        severity=log.severity,
+        alert_resolution=log.alert_resolution,
+        triage_note=log.triage_note
+    )
 
 
 @router.get("/encryption-keys")
@@ -264,26 +376,77 @@ async def get_encryption_keys(
     db: AsyncSession = Depends(get_db),
 ):
     """Returns all public keys of users with log read permission for this device's groups."""
-    result = await db.execute(
-        select(Device)
-        .options(selectinload(Device.groups).selectinload(DeviceGroup.teams).selectinload(Team.users))
-        .where(Device.id == device.id)
+    return await get_device_encryption_keys_list(device.id, db)
+
+
+@router.get("/{log_id}/encryption-keys")
+async def get_log_encryption_keys_for_user(
+    log_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Returns all public keys for users with access to encrypt/decrypt this log's device."""
+    # 1. Fetch log
+    result = await db.execute(select(Log).where(Log.id == log_id))
+    log = result.scalar_one_or_none()
+    if not log:
+        raise HTTPException(status_code=404, detail="Log not found")
+
+    # 2. Get user's visible devices to verify permission
+    teams_res = await db.execute(
+        select(Team)
+        .options(selectinload(Team.groups).selectinload(DeviceGroup.devices))
+        .where(Team.users.any(User.id == user.id), Team.permission_logs == "read")
     )
-    device = result.scalar_one()
+    teams = teams_res.scalars().all()
 
-    from app.services.permissions import get_team_members_transitive
-    user_ids = set()
-    for group in device.groups:
-        for team in group.teams:
-            if team.permission_logs == "read":
-                team_user_ids = await get_team_members_transitive(team.id, db)
-                user_ids.update(team_user_ids)
+    visible_device_ids = set()
+    for team in teams:
+        for group in team.groups:
+            for device in group.devices:
+                visible_device_ids.add(device.id)
 
-    if not user_ids:
-        return []
+    if log.device_id not in visible_device_ids:
+        raise HTTPException(status_code=403, detail="No log permission for this device")
 
-    result = await db.execute(
-        select(PublicKey).where(PublicKey.user_id.in_(list(user_ids)))
+    # 3. Call shared utility
+    return await get_device_encryption_keys_list(log.device_id, db)
+
+
+@router.get("/{log_id}/device-keys")
+async def get_log_device_keys_for_triage(
+    log_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    User-accessible endpoint: returns all public keys of users with log-read access
+    on the device associated with this log.  Used by the frontend to encrypt triage notes
+    so that every analyst who can see the log can also decrypt the note.
+    Uses the same shared utility as the device-facing encryption-keys endpoint.
+    """
+    # 1. Fetch log
+    result = await db.execute(select(Log).where(Log.id == log_id))
+    log = result.scalar_one_or_none()
+    if not log:
+        raise HTTPException(status_code=404, detail="Log not found")
+
+    # 2. Verify the requesting user has log-read access to this device
+    teams_res = await db.execute(
+        select(Team)
+        .options(selectinload(Team.groups).selectinload(DeviceGroup.devices))
+        .where(Team.users.any(User.id == user.id), Team.permission_logs == "read")
     )
-    keys = result.scalars().all()
-    return [{"user_id": k.user_id, "public_key": k.public_key, "key_type": k.key_type} for k in keys]
+    teams = teams_res.scalars().all()
+
+    visible_device_ids = set()
+    for team in teams:
+        for group in team.groups:
+            for device in group.devices:
+                visible_device_ids.add(device.id)
+
+    if log.device_id not in visible_device_ids:
+        raise HTTPException(status_code=403, detail="No log permission for this device")
+
+    # 3. Return all public keys of all users with log-read access for this device's groups
+    return await get_device_encryption_keys_list(log.device_id, db)

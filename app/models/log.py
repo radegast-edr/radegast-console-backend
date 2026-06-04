@@ -17,7 +17,8 @@ class Log(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     signature: Mapped[str | None] = mapped_column(Text, nullable=True)
     severity: Mapped[str | None] = mapped_column(String(50), nullable=True)
-
+    triage_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    alert_resolution: Mapped[str | None] = mapped_column(String(50), default=None, server_default=None, nullable=True)
     device = relationship("Device", back_populates="logs")
 
 

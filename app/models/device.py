@@ -16,6 +16,8 @@ class Device(Base):
     token_change: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     signature_public_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    agent_version: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    rustinel_version: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     groups = relationship(
         "DeviceGroup", secondary=device_group_devices, back_populates="devices"

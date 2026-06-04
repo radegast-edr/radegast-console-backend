@@ -13,6 +13,8 @@ class DeviceResponse(BaseModel):
     name: str
     signature_public_key: str | None
     last_seen: datetime | None = None
+    agent_version: str | None = None
+    rustinel_version: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -22,6 +24,8 @@ class DeviceDetailResponse(BaseModel):
     name: str
     signature_public_key: str | None
     last_seen: datetime | None = None
+    agent_version: str | None = None
+    rustinel_version: str | None = None
     groups: list[DeviceGroupResponse]
 
     model_config = {"from_attributes": True}

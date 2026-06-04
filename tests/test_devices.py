@@ -128,7 +128,28 @@ class TestDeviceDetail:
         data = resp.json()
         assert data["id"] == device_id
         assert data["name"] == "Detail-01"
+        assert "agent_version" in data
+        assert "rustinel_version" in data
         assert any(g["id"] == group_id for g in data["groups"])
+
+    async def test_device_checkin_updates_versions(self, auth_client: AsyncClient, client: AsyncClient):
+        group_id = await _get_default_group_id(auth_client)
+        resp = await auth_client.post("/devices/", json={"name": "Checkin-01", "group_id": group_id})
+        device_id = resp.json()["id"]
+        token = resp.json()["token"]
+
+        device_client = AsyncClient(transport=client._transport, base_url="http://test")
+        resp = await device_client.post("/auth/device/login", json={"token": token})
+        assert resp.status_code == 200
+
+        resp = await device_client.get("/packs/device/available?agent_version=2.0.1&rustinel_version=1.4.2")
+        assert resp.status_code == 200
+
+        resp = await auth_client.get(f"/devices/{device_id}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["agent_version"] == "2.0.1"
+        assert data["rustinel_version"] == "1.4.2"
 
     async def test_get_device_detail_not_found(self, auth_client: AsyncClient):
         resp = await auth_client.get("/devices/99999")

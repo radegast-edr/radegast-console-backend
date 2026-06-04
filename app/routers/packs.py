@@ -455,6 +455,8 @@ async def delete_pack(
 # Device wrapper endpoints
 @router.get("/device/available")
 async def device_available_packs(
+    agent_version: str | None = None,
+    rustinel_version: str | None = None,
     device: Device = Depends(get_current_device),
     db: AsyncSession = Depends(get_db),
 ):
@@ -470,6 +472,10 @@ async def device_available_packs(
     )
     device = result.scalar_one()
     device.last_seen = utc_now()
+    if agent_version is not None:
+        device.agent_version = agent_version
+    if rustinel_version is not None:
+        device.rustinel_version = rustinel_version
     await db.commit()
 
     packs = []

@@ -95,7 +95,14 @@ async def list_devices(
                 devices.add(device)
 
     return [
-        DeviceResponse(id=d.id, name=d.name, signature_public_key=d.signature_public_key, last_seen=d.last_seen)
+        DeviceResponse(
+            id=d.id,
+            name=d.name,
+            signature_public_key=d.signature_public_key,
+            last_seen=d.last_seen,
+            agent_version=d.agent_version,
+            rustinel_version=d.rustinel_version,
+        )
         for d in devices
     ]
 
@@ -132,6 +139,8 @@ async def get_device(
         name=device.name,
         signature_public_key=device.signature_public_key,
         last_seen=device.last_seen,
+        agent_version=device.agent_version,
+        rustinel_version=device.rustinel_version,
         groups=[{"id": g.id, "name": g.name} for g in device.groups],
     )
 
@@ -240,7 +249,14 @@ async def rename_device(
 
     device.name = data.name
     await db.commit()
-    return DeviceResponse(id=device.id, name=device.name, signature_public_key=device.signature_public_key, last_seen=device.last_seen)
+    return DeviceResponse(
+        id=device.id,
+        name=device.name,
+        signature_public_key=device.signature_public_key,
+        last_seen=device.last_seen,
+        agent_version=device.agent_version,
+        rustinel_version=device.rustinel_version,
+    )
 
 
 @router.post("/signing-key")

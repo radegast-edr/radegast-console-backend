@@ -25,6 +25,7 @@ class UserResponse(BaseModel):
     mfa_setup_missing: bool = False
     mfa_configured_level: str = "none"
     extended_edr_enabled: bool = False
+    notification_level: str = "medium"
 
     model_config = {"from_attributes": True}
 

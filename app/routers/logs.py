@@ -111,6 +111,12 @@ async def get_unread_logs_count(
     if not visible_device_ids:
         return {"unread_count": 0}
 
+    # If the user has configured minimal alert severity, count all with lower severity as read.
+    sufficient_severities = []
+    for sev, val in SIGMA_LEVELS.items():
+        if val >= SIGMA_LEVELS.get(user.notification_level.lower(), 3):
+            sufficient_severities.extend([sev, sev.upper(), sev.capitalize()])
+
     seen_subquery = select(LogSeen.log_id).where(LogSeen.user_id == user.id)
     if user.extended_edr_enabled:
         # Extended EDR: a log is "active" until it has an explicit resolution.
@@ -120,6 +126,10 @@ async def get_unread_logs_count(
             or_(
                 Log.alert_resolution.is_(None),
                 Log.alert_resolution == "none"
+            ),
+            or_(
+                Log.severity.is_(None),
+                Log.severity.in_(sufficient_severities)
             )
         )
     else:
@@ -127,7 +137,11 @@ async def get_unread_logs_count(
         # Resolution is not required in basic mode — seeing the alert is enough.
         count_query = select(func.count(Log.id)).where(
             Log.device_id.in_(visible_device_ids),
-            Log.id.not_in(seen_subquery)
+            Log.id.not_in(seen_subquery),
+            or_(
+                Log.severity.is_(None),
+                Log.severity.in_(sufficient_severities)
+            )
         )
     unread_res = await db.execute(count_query)
     count = unread_res.scalar_one()

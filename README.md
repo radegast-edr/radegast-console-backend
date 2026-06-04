@@ -91,6 +91,28 @@ uv run uvicorn app.main:app --reload --port 8000
 
 The server runs on [http://localhost:8000](http://localhost:8000). Interactive Swagger docs are available at [http://localhost:8000/docs](http://localhost:8000/docs).
 
+### Running with the CLI
+
+You can run the application directly via the CLI interface. In development, use:
+
+```bash
+uv run radegast-console run --host=127.0.0.1 --port=8000 --workers=4
+```
+
+Alternatively, you can install the tool globally using `uv`:
+
+```bash
+uv tool install radegast-edr-backend
+```
+
+Once installed, start the console using:
+
+```bash
+radegast-console run --host=127.0.0.1 --port=8000 --workers=4
+```
+
+You can pass any configuration variable (e.g., `--database-url`, `--enable-email-worker`) to override defaults. Run `radegast-console run --help` to see a full list of options.
+
 ### Running Tests
 
 ```bash

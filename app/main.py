@@ -80,6 +80,9 @@ async def health():
 async def favicon() -> FileResponse:
     file_favicon = Path("web") / "static" / "favicon.ico"
     if not file_favicon.exists():
+        from app.routers.ui import dir_web
+        file_favicon = dir_web / "favicon.ico"
+    if not file_favicon.exists():
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(file_favicon, media_type="image/x-icon")
 

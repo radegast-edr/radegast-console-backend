@@ -10,3 +10,16 @@ agent/releases
 !agent/releases/.gitkeep
 .certs
 .vscode/settings.json
+dist/
+app/web_build/
+app/agent_config/
+web/node_modules/
+web/.svelte-kit/
+web/build/
+web/.env
+web/.env*
+.pytest_cache/
+.ruff_cache/
+*.pyc
+*.pyo
+*.pyd

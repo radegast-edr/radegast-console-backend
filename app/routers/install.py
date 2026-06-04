@@ -11,7 +11,9 @@ from app.config import settings
 install_router = APIRouter(prefix="/device", tags=["device"])
 
 ROOT_DIR = Path(__file__).parent.parent.parent
-AGENT_DIR = ROOT_DIR / "agent"
+AGENT_CONFIG_DIR = Path(__file__).parent.parent / "agent_config"
+if not AGENT_CONFIG_DIR.exists():
+    AGENT_CONFIG_DIR = ROOT_DIR / "agent" / "config"
 RELEASES_DIR = Path(settings.releases_dir)
 
 
@@ -118,10 +120,10 @@ async def get_install_script(
     backend_url = settings.base_url.rstrip("/")
 
     if os_name == "linux":
-        config_tmpl = AGENT_DIR / "config" / "linux" / "config.toml"
-        rustinel_service_tmpl = AGENT_DIR / "config" / "linux" / "rustinel.service"
-        radegast_service_tmpl = AGENT_DIR / "config" / "linux" / "radegast-agent.service"
-        install_script_tmpl = AGENT_DIR / "config" / "linux" / "install.sh"
+        config_tmpl = AGENT_CONFIG_DIR / "linux" / "config.toml"
+        rustinel_service_tmpl = AGENT_CONFIG_DIR / "linux" / "rustinel.service"
+        radegast_service_tmpl = AGENT_CONFIG_DIR / "linux" / "radegast-agent.service"
+        install_script_tmpl = AGENT_CONFIG_DIR / "linux" / "install.sh"
 
         if not (
             config_tmpl.exists()
@@ -157,9 +159,9 @@ async def get_install_script(
         return PlainTextResponse(rendered_script, media_type="text/plain")
 
     else:
-        config_tmpl = AGENT_DIR / "config" / "windows" / "config.toml"
-        install_service_tmpl = AGENT_DIR / "config" / "windows" / "install-service.py"
-        install_bat_tmpl = AGENT_DIR / "config" / "windows" / "install.bat"
+        config_tmpl = AGENT_CONFIG_DIR / "windows" / "config.toml"
+        install_service_tmpl = AGENT_CONFIG_DIR / "windows" / "install-service.py"
+        install_bat_tmpl = AGENT_CONFIG_DIR / "windows" / "install.bat"
 
         if not (
             config_tmpl.exists()

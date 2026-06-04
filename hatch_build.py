@@ -15,22 +15,31 @@ class CustomBuildHook(BuildHookInterface):
 
         is_git_repo = os.path.exists(os.path.join(root_dir, ".git"))
         if is_git_repo:
-            # 1. Build the web frontend
-            try:
-                subprocess.run(["npm", "run", "build"], cwd=web_dir, check=True)
-            except Exception as e:
-                print(f"Error building frontend: {e}")
-                raise e
+            # 1. Build the web frontend if Node dependencies and npm are available
+            has_node_modules = os.path.exists(os.path.join(web_dir, "node_modules"))
+            has_npm = shutil.which("npm") is not None
 
-            # 2. Copy the build output to app/web_build
-            src_dir = os.path.join(web_dir, "build")
-            dest_dir = os.path.join(root_dir, "app", "web_build")
+            if has_node_modules and has_npm:
+                try:
+                    subprocess.run(["npm", "run", "build"], cwd=web_dir, check=True)
+                    
+                    # 2. Copy the build output to app/web_build
+                    src_dir = os.path.join(web_dir, "build")
+                    dest_dir = os.path.join(root_dir, "app", "web_build")
 
-            if os.path.exists(dest_dir):
-                shutil.rmtree(dest_dir)
+                    if os.path.exists(dest_dir):
+                        shutil.rmtree(dest_dir)
 
-            shutil.copytree(src_dir, dest_dir)
-            print(f"Copied built frontend files to {dest_dir}")
+                    if os.path.exists(src_dir):
+                        shutil.copytree(src_dir, dest_dir)
+                        print(f"Copied built frontend files to {dest_dir}")
+                    else:
+                        print(f"Warning: web build output directory {src_dir} not found after successful build.")
+                except Exception as e:
+                    print(f"Error building frontend: {e}")
+                    raise e
+            else:
+                print("Skipping frontend compilation: npm or web/node_modules not found (using existing build if present).")
 
             # 3. Copy agent/config to app/agent_config
             agent_config_src = os.path.join(root_dir, "agent", "config")
@@ -39,8 +48,9 @@ class CustomBuildHook(BuildHookInterface):
             if os.path.exists(agent_config_dest):
                 shutil.rmtree(agent_config_dest)
 
-            shutil.copytree(agent_config_src, agent_config_dest)
-            print(f"Copied agent config templates to {agent_config_dest}")
+            if os.path.exists(agent_config_src):
+                shutil.copytree(agent_config_src, agent_config_dest)
+                print(f"Copied agent config templates to {agent_config_dest}")
         else:
             print("Not in git repository. Skipping frontend build (using packaged files).")
 

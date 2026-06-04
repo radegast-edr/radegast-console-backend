@@ -29,6 +29,7 @@ COPY --from=frontend-builder /web/build ./web/build
 # Copy the rest of the backend files
 COPY app ./app
 COPY agent/config ./agent/config
+COPY hatch_build.py ./
 
 # Install the project itself
 RUN uv sync --frozen --no-dev

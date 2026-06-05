@@ -123,6 +123,35 @@ NOTIFICATION_DISABLED_TEMPLATE = Template("""
 </html>
 """)
 
+API_KEY_CREATED_TEMPLATE = Template("""
+<html>
+<body>
+<h2>New API Key Created — Radegast EDR</h2>
+<p>A new API key has been created for your account.</p>
+<p><strong>Name:</strong> {{ name }}</p>
+<p><strong>Allowed Scopes:</strong></p>
+<ul>
+    {% for scope, val in scopes.items() %}
+    <li><strong>{{ scope|capitalize }}:</strong> {{ val }}</li>
+    {% endfor %}
+</ul>
+<p><strong>Time:</strong> {{ time }} UTC</p>
+<p>If you did not generate this key, please revoke it immediately and review your account security.</p>
+</body>
+</html>
+""")
+
+API_KEYS_TOGGLED_TEMPLATE = Template("""
+<html>
+<body>
+<h2>API Keys Support Preferences Updated — Radegast EDR</h2>
+<p>API keys support has been <strong>{{ status }}</strong> for your account.</p>
+<p><strong>Time:</strong> {{ time }} UTC</p>
+<p>If you did not make this change, please review your account settings immediately.</p>
+</body>
+</html>
+""")
+
 
 def get_web_ui_base() -> str:
     if settings.web_ui_url:
@@ -137,6 +166,7 @@ EMAIL_TYPE_TO_PREFERENCE = {
     "keys_transferred": ("notify_keys_transferred", "Encryption keys transferred alerts"),
     "device_log": ("notify_device_log", "New device alerts"),
     "downtime_maintenance": ("notify_downtime_maintenance", "Platform downtime and maintenance emails"),
+    "api_key_modification": ("notify_api_key_modification", "API key modification alerts"),
 }
 
 
@@ -290,6 +320,33 @@ async def send_notification_disabled_alert(email: str, disabled_features: list[s
         time=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
     )
     await send_email(email, "Notification Settings Disabled — Radegast EDR", html, email_type="notification_disabled")
+
+
+async def send_api_key_created_notification(email: str, name: str, scopes: dict):
+    # Format scopes for display
+    formatted_scopes = {}
+    for scope, val in scopes.items():
+        if isinstance(val, list):
+            if val:
+                formatted_scopes[scope] = ", ".join(val)
+        elif val and val != "none":
+            formatted_scopes[scope] = val
+
+    html = API_KEY_CREATED_TEMPLATE.render(
+        name=name,
+        scopes=formatted_scopes,
+        time=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
+    )
+    await send_email(email, f"New API Key Created: {name} — Radegast EDR", html, email_type="api_key_modification")
+
+
+async def send_api_keys_toggled_notification(email: str, enabled: bool):
+    status_str = "enabled" if enabled else "disabled"
+    html = API_KEYS_TOGGLED_TEMPLATE.render(
+        status=status_str,
+        time=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
+    )
+    await send_email(email, f"API Keys Support {status_str.capitalize()} — Radegast EDR", html, email_type="api_key_modification")
 
 
 async def send_password_reset_email(email: str, new_password: str):

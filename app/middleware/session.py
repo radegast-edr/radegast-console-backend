@@ -9,11 +9,13 @@ _serializer = URLSafeTimedSerializer(settings.secret_key)
 
 
 class SessionData:
-    def __init__(self, scope: str, id: int, issued_at: float, mfa_level: str = "none"):
+    def __init__(self, scope: str, id: int, issued_at: float, mfa_level: str = "none", api_key_id: int | None = None, api_key_scopes: dict | None = None):
         self.scope = scope
         self.id = id
         self.issued_at = datetime.fromtimestamp(issued_at, tz=timezone.utc)
         self.mfa_level = mfa_level
+        self.api_key_id = api_key_id
+        self.api_key_scopes = api_key_scopes or {}
 
 
 def create_session_cookie(scope: str, id: int, mfa_level: str = "none") -> str:

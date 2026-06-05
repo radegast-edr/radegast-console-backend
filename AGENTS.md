@@ -80,3 +80,10 @@ When adding any new configuration value:
 ## Database Migrations
 
 If a database migration is needed (e.g. schema changes), the local SQLite database must be migrated, and the `DB_MIGRATION.md` file must be updated with the details of the migration in the format: `date - command - what was changed`.
+
+## UI Styling & Theme Guidelines
+
+- **Theme Compatibility**: Do not hardcode light or dark background/text classes (e.g., `bg-light`, `text-dark`) on dynamic/interactive components. Use theme-aware Bootstrap classes instead (e.g., `bg-body-secondary`, `text-body`).
+- **Global Modal Component**: Always use the predefined global `Modal` component (`import Modal from '$lib/components/Modal.svelte'`) for rendering dialog popups. Do not write custom inline modal layouts, overlay backdrops, or manual positioning.
+- **Interactive Component State**: Do not rely on native Bootstrap JavaScript components (like dropdown toggle library handlers) inside Svelte templates. Bootstrap's bundle JavaScript is not imported. Always manage the open/collapsed state of dropdowns, popups, and accordions reactively using Svelte state variables (e.g., `{dropdownOpen ? 'show' : ''}`).
+- **Sharp Design System**: Respect the application's sharp design token rules in `app.html` (e.g., `border-radius: 3px !important` is applied globally). Do not specify arbitrary inline curves or border radius styles (like `border-radius: 12px;` or `border-radius: 16px;`) on cards, tables, modals, or buttons.

@@ -5,11 +5,11 @@ from fastapi.responses import FileResponse
 
 router = APIRouter(tags=["ui"])
 
-# First check if app/web_build exists (as packaged in PyPI wheel)
-dir_web = (Path(__file__).parent.parent / "web_build").resolve()
+
+dir_web = (Path(__file__).parent.parent.parent / "web" / "build").resolve()
 if not dir_web.exists():
-    # Fallback to the development repository path
-    dir_web = (Path(__file__).parent.parent.parent / "web" / "build").resolve()
+    # Fallback to the in-built Pypi package web
+    dir_web = (Path(__file__).parent.parent / "web_build").resolve()
 
 
 @router.get("/{full_path:path}")

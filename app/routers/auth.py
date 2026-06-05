@@ -3,9 +3,11 @@ import json
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
+import httpx
 import pyotp
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -21,6 +23,7 @@ from app.dependencies import (
     rate_limit_login,
     rate_limit_mfa,
     rate_limit_mfa_otp,
+    rate_limit_token,
     user_has_required_mfa_setup,
 )
 from app.middleware.session import create_session_cookie
@@ -34,7 +37,9 @@ from app.models.team import Team
 from app.models.user import User
 from app.schemas.device import DeviceLogin
 from app.schemas.user import (
+    ApiKeysEnabledSettings,
     ChangePasswordRequest,
+    ExtendedEdrSettings,
     KeyRecoverResponse,
     KeySecondarySetupRequest,
     KeySetupRequest,
@@ -74,7 +79,9 @@ from app.services.email import (
     send_new_keys_notification,
     send_notification_disabled_alert,
     send_recovery_used_notification,
+    send_severity_changed_email,
     send_verification_email,
+    send_api_keys_toggled_notification,
     EMAIL_TYPE_TO_PREFERENCE,
 )
 from app.utils import ensure_utc, utc_now
@@ -140,7 +147,6 @@ async def _verify_turnstile(token: str | None, remote_ip: str) -> None:
     if not token:
         raise HTTPException(status_code=400, detail="Turnstile verification token is required")
 
-    import httpx
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
@@ -230,6 +236,39 @@ async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     return {"message": "Email verified successfully"}
+
+
+@router.post("/token")
+async def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db),
+    _rate_limit = Depends(rate_limit_token),
+):
+    result = await db.execute(
+        select(User).options(selectinload(User.hardware_tokens)).where(User.email == form_data.username)
+    )
+    user = result.scalar_one_or_none()
+    if not user or not verify_password(form_data.password, user.password):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not user.verified:
+        raise HTTPException(status_code=403, detail="Email not verified")
+
+    # Check if they have MFA configured
+    has_otp = user.otp_enabled and user.otp_secret is not None
+    has_token = len(user.hardware_tokens) > 0
+
+    if has_otp or has_token:
+        raise HTTPException(
+            status_code=403,
+            detail="MFA is required for this user. OAuth2 password login in OpenAPI docs is only supported for users without MFA. Please use API key authentication instead."
+        )
+
+    # Generate a standard signed session token
+    token = create_session_cookie("user", user.id, mfa_level="none")
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+    }
 
 
 @router.post("/login")
@@ -561,6 +600,7 @@ async def me(user: User = Depends(get_current_user), db: AsyncSession = Depends(
         mfa_setup_missing=mfa_setup_missing,
         mfa_configured_level=conf_level,
         extended_edr_enabled=user.extended_edr_enabled,
+        api_keys_enabled=user.api_keys_enabled,
     )
 
 
@@ -604,6 +644,8 @@ async def update_notifications(
         disabled_features.append("New alert notification")
     if user.notify_downtime_maintenance and not data.notify_downtime_maintenance:
         disabled_features.append("Platform downtime and maintenance emails")
+    if user.notify_api_key_modification and not data.notify_api_key_modification:
+        disabled_features.append("API key modification")
 
     user.notify_login = data.notify_login
     user.notify_new_keys = data.notify_new_keys
@@ -611,6 +653,7 @@ async def update_notifications(
     user.notify_keys_transferred = data.notify_keys_transferred
     user.notify_device_log = data.notify_device_log
     user.notify_downtime_maintenance = data.notify_downtime_maintenance
+    user.notify_api_key_modification = data.notify_api_key_modification
 
     severity_changed = False
     old_level = user.notification_level
@@ -624,13 +667,12 @@ async def update_notifications(
         await send_notification_disabled_alert(user.email, disabled_features)
 
     if severity_changed:
-        from app.services.email import send_severity_changed_email
         await send_severity_changed_email(user.email, old_level, data.notification_level)
 
     return NotificationSettings.model_validate(user)
 
 
-from app.schemas.user import ExtendedEdrSettings
+
 
 @router.put("/extended-edr", response_model=ExtendedEdrSettings)
 async def update_extended_edr(
@@ -641,6 +683,26 @@ async def update_extended_edr(
     user.extended_edr_enabled = data.extended_edr_enabled
     await db.commit()
     return ExtendedEdrSettings.model_validate(user)
+
+@router.put("/api-keys-enabled", response_model=ApiKeysEnabledSettings)
+async def update_api_keys_enabled(
+    data: ApiKeysEnabledSettings,
+    background_tasks: BackgroundTasks,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    changed = user.api_keys_enabled != data.api_keys_enabled
+    user.api_keys_enabled = data.api_keys_enabled
+    await db.commit()
+
+    if changed and user.notify_api_key_modification:
+        background_tasks.add_task(
+            send_api_keys_toggled_notification,
+            user.email,
+            data.api_keys_enabled
+        )
+
+    return ApiKeysEnabledSettings.model_validate(user)
 
 @router.post("/keys/transfer/initiate", response_model=KeyTransferInitiateResponse)
 async def initiate_key_transfer(

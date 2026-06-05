@@ -785,3 +785,52 @@ def test_client_ip_headers():
     })
     assert _client_ip(req5) == "unknown"
 
+
+@pytest.mark.asyncio
+class TestTokenAuth:
+    async def test_token_auth_success(self, client: AsyncClient, registered_user):
+        # Authenticate via form data on /auth/token
+        resp = await client.post(
+            "/auth/token",
+            data={"username": registered_user["email"], "password": registered_user["password"]}
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "access_token" in data
+        assert data["token_type"] == "bearer"
+
+        # Try to use this access token to authenticate subsequent requests
+        access_token = data["access_token"]
+        resp_me = await client.get(
+            "/auth/me",
+            headers={"Authorization": f"Bearer {access_token}"}
+        )
+        assert resp_me.status_code == 200
+        assert resp_me.json()["email"] == registered_user["email"]
+
+    async def test_token_auth_invalid_credentials(self, client: AsyncClient, registered_user):
+        resp = await client.post(
+            "/auth/token",
+            data={"username": registered_user["email"], "password": "wrongpassword"}
+        )
+        assert resp.status_code == 401
+
+    async def test_token_auth_mfa_enabled_fails(self, client: AsyncClient, registered_user, db_session):
+        # Find the user in the database and enable OTP MFA
+        from app.models.user import User
+        from sqlalchemy import select
+        res = await db_session.execute(select(User).where(User.email == registered_user["email"]))
+        user = res.scalar_one()
+        user.otp_enabled = True
+        user.otp_secret = "JBSWY3DPEHPK3PXP"
+        await db_session.commit()
+
+        # Try to login via /auth/token
+        resp = await client.post(
+            "/auth/token",
+            data={"username": registered_user["email"], "password": registered_user["password"]}
+        )
+        assert resp.status_code == 403
+        assert "MFA is required" in resp.json()["detail"]
+
+

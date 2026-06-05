@@ -1,3 +1,4 @@
+import random
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
@@ -94,11 +95,31 @@ async def create_pack(
                 if not (is_member and team.permission_pack == "write"):
                     raise HTTPException(status_code=403, detail=f"No pack write permission on team {team_id}")
 
+    # Validate or generate pack_id
+    if not data.pack_id:
+        pack_id = re.sub(r'[^a-zA-Z0-9_-]+', '-', data.name.lower()).strip('-')
+        if not pack_id:
+            pack_id = "pack"
+    else:
+        pack_id = data.pack_id
+
+    # Validate characters
+    if not re.match(r'^[a-zA-Z0-9_-]+$', pack_id):
+        raise HTTPException(status_code=400, detail="pack_id must only contain alphanumeric characters, dashes, and underscores")
+
+    # Check for uniqueness
+    existing_id = await db.execute(select(Pack).where(Pack.pack_id == pack_id))
+    if existing_id.scalar_one_or_none():
+        if data.pack_id:
+            raise HTTPException(status_code=400, detail="Pack with this pack_id already exists")
+        else:
+            pack_id = f"{pack_id}-{random.randint(1000, 9999)}"
+
     existing = await db.execute(select(Pack).where(Pack.name == data.name))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Pack with this name already exists")
 
-    pack = Pack(name=data.name, description=data.description, creator_id=user.id)
+    pack = Pack(name=data.name, pack_id=pack_id, description=data.description, creator_id=user.id)
     if data.team_ids:
         res_teams = await db.execute(select(Team).where(Team.id.in_(data.team_ids)))
         pack.teams = res_teams.scalars().all()
@@ -166,6 +187,15 @@ async def update_pack(
             if existing.scalar_one_or_none():
                 raise HTTPException(status_code=400, detail="Pack with this name already exists")
         pack.name = data.name
+
+    if data.pack_id is not None:
+        if data.pack_id != pack.pack_id:
+            if not re.match(r'^[a-zA-Z0-9_-]+$', data.pack_id):
+                raise HTTPException(status_code=400, detail="pack_id must only contain alphanumeric characters, dashes, and underscores")
+            existing = await db.execute(select(Pack).where(Pack.pack_id == data.pack_id))
+            if existing.scalar_one_or_none():
+                raise HTTPException(status_code=400, detail="Pack with this pack_id already exists")
+        pack.pack_id = data.pack_id
 
     if data.description is not None:
         pack.description = data.description
@@ -240,7 +270,6 @@ async def upload_version(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    import re
     result = await db.execute(
         select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack_id)
     )
@@ -346,6 +375,7 @@ async def enable_pack_for_group(
         pack_version_id=pe.pack_version_id,
         autoupdate=pe.autoupdate,
         pack_name=pv.pack.name,
+        pack_id=pv.pack.pack_id,
         version=pv.version,
     )
 
@@ -387,6 +417,7 @@ async def list_enabled_packs(
             pack_version_id=pe.pack_version_id,
             autoupdate=pe.autoupdate,
             pack_name=pe.pack_version.pack.name,
+            pack_id=pe.pack_version.pack.pack_id,
             version=pe.pack_version.version,
         )
         for pe in enabled
@@ -483,6 +514,7 @@ async def device_available_packs(
         for pe in group.packs:
             packs.append({
                 "enabled_id": pe.id,
+                "pack_id": pe.pack_version.pack.pack_id,
                 "pack_name": pe.pack_version.pack.name,
                 "version": pe.pack_version.version,
                 "pack_version_id": pe.pack_version_id,
@@ -498,8 +530,6 @@ async def download_pack_for_user(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from fastapi.responses import FileResponse
-
     result = await db.execute(
         select(PackVersion)
         .options(selectinload(PackVersion.pack).selectinload(Pack.teams))

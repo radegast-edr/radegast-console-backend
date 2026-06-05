@@ -8,6 +8,7 @@ from app.models.pack import Pack
 from app.models.pack_version import PackVersion
 from app.models.pack_enabled import PackEnabled
 from app.models.log import Log, LogSeen
+from app.models.api_key import APIKey
 from app.models.associations import team_users, team_device_groups, device_group_devices
 from app.models.queued_email import QueuedEmail
 from app.models.hardware_token import HardwareToken
@@ -25,6 +26,7 @@ __all__ = [
     "PackEnabled",
     "Log",
     "LogSeen",
+    "APIKey",
     "team_users",
     "team_device_groups",
     "device_group_devices",

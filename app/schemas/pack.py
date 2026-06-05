@@ -5,18 +5,21 @@ from pydantic import BaseModel
 
 class PackCreate(BaseModel):
     name: str
+    pack_id: str | None = None
     description: str = ""
     team_ids: list[int] | None = None
 
 
 class PackUpdate(BaseModel):
     name: str | None = None
+    pack_id: str | None = None
     description: str | None = None
     team_ids: list[int] | None = None
 
 
 class PackResponse(BaseModel):
     id: int
+    pack_id: str
     name: str
     description: str
     creator_id: int | None = None
@@ -45,6 +48,7 @@ class PackEnabledResponse(BaseModel):
     pack_version_id: int
     autoupdate: bool
     pack_name: str | None = None
+    pack_id: str | None = None
     version: str | None = None
 
     model_config = {"from_attributes": True}

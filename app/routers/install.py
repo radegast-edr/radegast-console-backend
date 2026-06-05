@@ -11,9 +11,9 @@ from app.config import settings
 install_router = APIRouter(prefix="/device", tags=["device"])
 
 ROOT_DIR = Path(__file__).parent.parent.parent
-AGENT_CONFIG_DIR = Path(__file__).parent.parent / "agent_config"
+AGENT_CONFIG_DIR = ROOT_DIR / "agent" / "config"
 if not AGENT_CONFIG_DIR.exists():
-    AGENT_CONFIG_DIR = ROOT_DIR / "agent" / "config"
+    AGENT_CONFIG_DIR = Path(__file__).parent.parent / "agent_config"
 RELEASES_DIR = Path(settings.releases_dir)
 
 

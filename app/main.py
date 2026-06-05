@@ -11,7 +11,7 @@ import uvicorn
 from app.config import settings
 from app.database import init_db
 from app.middleware.request_logging import RequestLoggingMiddleware
-from app.routers import admin, auth, devices, groups, install, logs, packs, releases, teams, ui
+from app.routers import admin, auth, apikeys, devices, groups, install, logs, packs, releases, teams, ui
 from app.services.email import process_email_queue_loop
 
 
@@ -64,6 +64,7 @@ app.include_router(prefix=f"/api/v{api_version}", router=devices.router)
 app.include_router(prefix=f"/api/v{api_version}", router=install.install_router)
 app.include_router(prefix=f"/api/v{api_version}", router=groups.router)
 app.include_router(prefix=f"/api/v{api_version}", router=packs.router)
+app.include_router(prefix=f"/api/v{api_version}", router=apikeys.router)
 app.include_router(prefix=f"/api/v{api_version}", router=logs.router)
 app.include_router(prefix=f"/api/v{api_version}", router=admin.router)
 app.include_router(prefix=f"/api/v{api_version}", router=releases.router)
@@ -80,8 +81,7 @@ async def health():
 async def favicon() -> FileResponse:
     file_favicon = Path("web") / "static" / "favicon.ico"
     if not file_favicon.exists():
-        from app.routers.ui import dir_web
-        file_favicon = dir_web / "favicon.ico"
+        file_favicon = ui.dir_web / "favicon.ico"
     if not file_favicon.exists():
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(file_favicon, media_type="image/x-icon")

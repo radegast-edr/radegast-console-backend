@@ -15,7 +15,7 @@ import app.routers.auth as auth_router
 import app.routers.install as install_router
 from app.config import settings
 from app.database import Base, get_db
-from app.dependencies import rate_limit_login, rate_limit_mfa, rate_limit_mfa_otp
+from app.dependencies import rate_limit_login, rate_limit_mfa, rate_limit_mfa_otp, rate_limit_token
 from app.main import app
 from app.models.user import User, UserRole
 from app.services.auth import create_signed_token
@@ -102,6 +102,7 @@ async def client(db_engine):
     app.dependency_overrides[rate_limit_login] = lambda: None
     app.dependency_overrides[rate_limit_mfa] = lambda: None
     app.dependency_overrides[rate_limit_mfa_otp] = lambda: None
+    app.dependency_overrides[rate_limit_token] = lambda: None
 
     class TestAPIPrefixMiddleware:
         def __init__(self, app):

@@ -54,7 +54,7 @@ async def list_packs(
 ):
     user = None
     try:
-        session = await get_session(request)
+        session = await get_session(request, db)
         user = await get_current_user(request, session, db)
     except HTTPException:
         pass
@@ -142,7 +142,7 @@ async def get_pack(
 ):
     user = None
     try:
-        session = await get_session(request)
+        session = await get_session(request, db)
         user = await get_current_user(request, session, db)
     except HTTPException:
         pass
@@ -236,7 +236,7 @@ async def list_versions(
 ):
     user = None
     try:
-        session = await get_session(request)
+        session = await get_session(request, db)
         user = await get_current_user(request, session, db)
     except HTTPException:
         pass

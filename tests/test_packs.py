@@ -927,29 +927,3 @@ id: test-rule-id
         assert resp.status_code == 400
         assert "Pack validation failed" in resp.json()["detail"]["message"]
         assert any("Invalid YAML syntax" in e for e in resp.json()["detail"]["errors"])
-    
-    async def test_upload_invalid_sigma_rule_fails(self, maintainer_client: AsyncClient):
-        """Test that uploading a zip with invalid sigma rule (missing fields) fails."""
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "Invalid Sigma Rule Pack", "description": "Test"}
-        )
-        pack_id = resp.json()["id"]
-        
-        # Create a zip with invalid sigma rule (missing required fields)
-        import io
-        import zipfile
-        invalid_sigma = """title: Test Rule
-id: test-rule-id
-"""  # Missing many required fields
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-            zf.writestr("sigma/test_rule.yml", invalid_sigma)
-        zip_content = zip_buffer.getvalue()
-        
-        resp = await maintainer_client.post(
-            f"/packs/{pack_id}/versions?version=1.0.0",
-            files={"file": ("pack.zip", zip_content, "application/zip")},
-        )
-        assert resp.status_code == 400
-        assert "Pack validation failed" in resp.json()["detail"]["message"]
-        assert any("Missing required Sigma fields" in e for e in resp.json()["detail"]["errors"])

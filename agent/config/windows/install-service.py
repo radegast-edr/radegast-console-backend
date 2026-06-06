@@ -5,7 +5,20 @@ import platform
 import urllib.request
 import zipfile
 import subprocess
+import shutil
+import time
 from pathlib import Path
+
+
+def run_cmd(cmd, check=True, show_output=False):
+    """Helper to run shell commands. Shows output if explicitly requested."""
+    stdout_dest = None if show_output else subprocess.DEVNULL
+    stderr_dest = None if show_output else subprocess.DEVNULL
+    try:
+        subprocess.run(cmd, check=check, stdout=stdout_dest, stderr=stderr_dest)
+    except subprocess.CalledProcessError as e:
+        print(f"WARNING/ERROR executing {' '.join(cmd)}: {e}")
+
 
 def main():
     print("=== Starting Radegast EDR Agent & Rustinel Windows Installation ===")
@@ -32,10 +45,9 @@ def main():
     token = os.environ.get("RADEGAST_TOKEN")
     if not token:
         print("ERROR: RADEGAST_TOKEN environment variable is not set.", file=sys.stderr)
-        print("Please run: set RADEGAST_TOKEN=your_token and then run the installer.", file=sys.stderr)
         sys.exit(1)
 
-    # 1. Setup Directories
+    # Define core paths
     program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
     radegast_dir = Path(program_files) / "Radegast"
     rustinel_dir = radegast_dir / "rustinel"
@@ -47,22 +59,47 @@ def main():
     tools_dir = radegast_dir / ".tools"
     agent_src_dir = radegast_dir / "agent-src"
 
+    python_exe_path = Path(sys.executable)
+    python_dir = python_exe_path.parent
+    rustinel_service_exe = radegast_dir / "radegast-rustinel-service.exe"
+    agent_service_exe = radegast_dir / "radegast-agent-service.exe"
+
+    # 1. Pre-Installation Cleanup (Unlock Files)
+    print("Checking for existing services to stop and unlock files...")
+    if rustinel_service_exe.exists():
+        run_cmd([str(rustinel_service_exe), "stop"], check=False)
+        run_cmd([str(rustinel_service_exe), "uninstall"], check=False)
+    else:
+        run_cmd(["net", "stop", "RadegastRustinel"], check=False)
+
+    if agent_service_exe.exists():
+        run_cmd([str(agent_service_exe), "stop"], check=False)
+        run_cmd([str(agent_service_exe), "uninstall"], check=False)
+    else:
+        run_cmd(["net", "stop", "RadegastAgent"], check=False)
+
+    run_cmd(["taskkill", "/f", "/im", "rustinel.exe"], check=False)
+    run_cmd(["taskkill", "/f", "/im", "radegast-agent.exe"], check=False)
+    time.sleep(2)
+
+    # 2. Setup Directories
     print(f"Creating directories under {radegast_dir}...")
     for d in [radegast_dir, rustinel_dir, rules_dir, ioc_dir, logs_dir, state_dir, cache_dir, tools_dir, agent_src_dir]:
         d.mkdir(parents=True, exist_ok=True)
 
-    # Pre-create IOC text files
     for filename in ["hashes.txt", "ips.txt", "domains.txt", "paths_regex.txt"]:
         file_path = ioc_dir / filename
         if not file_path.exists():
             file_path.write_text("", encoding="utf-8")
 
-    # 2. Get architecture and download rustinel
+    # 3. Get architecture and download rustinel
     machine = platform.machine().lower()
     if machine in ("amd64", "x86_64"):
         arch = "amd64"
+        winsw_url = "https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe"
     elif machine in ("arm64", "aarch64"):
         arch = "arm64"
+        winsw_url = "https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-arm64.exe"
     else:
         print(f"ERROR: Unsupported architecture: {machine}", file=sys.stderr)
         sys.exit(1)
@@ -71,117 +108,134 @@ def main():
     download_url = f"{backend_url}/api/v1/device/agent/download?os=windows&arch={arch}"
     zip_path = rustinel_dir / "rustinel.zip"
 
-    print(f"Downloading rustinel from {download_url}...")
+    print("Downloading rustinel...")
     try:
-        # Use urllib.request with a proper User-Agent to avoid issues
-        req = urllib.request.Request(
-            download_url,
-            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-        )
+        req = urllib.request.Request(download_url, headers={'User-Agent': 'Mozilla/5.0'})
         import ssl
         ssl_context = ssl._create_unverified_context() if hasattr(ssl, '_create_unverified_context') else None
-        with urllib.request.urlopen(req, context=ssl_context) as response:
-            with open(zip_path, 'wb') as out_file:
-                out_file.write(response.read())
-    except Exception as e:
-        print(f"ERROR: Failed to download rustinel: {e}", file=sys.stderr)
-        sys.exit(1)
+        with urllib.request.urlopen(req, context=ssl_context) as response, open(zip_path, 'wb') as out_file:
+            out_file.write(response.read())
 
-    print("Extracting rustinel...")
-    try:
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(rustinel_dir)
-    except Exception as e:
-        print(f"ERROR: Failed to extract rustinel: {e}", file=sys.stderr)
-        sys.exit(1)
-    finally:
         if zip_path.exists():
-            try:
-                zip_path.unlink()
-            except Exception:
-                pass
+            zip_path.unlink()
+    except Exception as e:
+        print(f"ERROR: Failed to download/extract rustinel: {e}", file=sys.stderr)
+        sys.exit(1)
 
-    # 3. Write configuration file config.toml
+    # 4. Write configuration file config.toml
     config_b64 = "{{ config_b64 }}"
     config_content = base64.b64decode(config_b64.encode("utf-8")).decode("utf-8")
-    config_path = rustinel_dir / "config.toml"
-    print(f"Writing configuration to {config_path}...")
-    config_path.write_text(config_content, encoding="utf-8")
+    (rustinel_dir / "config.toml").write_text(config_content, encoding="utf-8")
 
-    # 4. Install radegast-agent-python by downloading and extracting ZIP, then running uv pip install
+    # 5. Install radegast-agent-python
     agent_zip_url = "https://github.com/radegast-edr/radegast-agent-python/archive/refs/heads/main.zip"
     agent_zip_path = agent_src_dir / "agent.zip"
-    
-    print(f"Downloading agent source from {agent_zip_url}...")
-    try:
-        req = urllib.request.Request(
-            agent_zip_url,
-            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-        )
-        import ssl
-        ssl_context = ssl._create_unverified_context() if hasattr(ssl, '_create_unverified_context') else None
-        with urllib.request.urlopen(req, context=ssl_context) as response:
-            with open(agent_zip_path, 'wb') as out_file:
-                out_file.write(response.read())
-    except Exception as e:
-        print(f"ERROR: Failed to download agent source: {e}", file=sys.stderr)
-        sys.exit(1)
 
-    print("Extracting agent source...")
+    print("Downloading and installing Python agent...")
     try:
+        req = urllib.request.Request(agent_zip_url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, context=ssl_context) as response, open(agent_zip_path, 'wb') as out_file:
+            out_file.write(response.read())
         with zipfile.ZipFile(agent_zip_path, 'r') as zip_ref:
             zip_ref.extractall(agent_src_dir)
     except Exception as e:
-        print(f"ERROR: Failed to extract agent source: {e}", file=sys.stderr)
+        print(f"ERROR: Failed to download/extract agent source: {e}", file=sys.stderr)
         sys.exit(1)
-    finally:
-        if agent_zip_path.exists():
-            try:
-                agent_zip_path.unlink()
-            except Exception:
-                pass
 
-    print("Installing radegast-agent-python into Python environment...")
-    python_exe = Path(sys.executable)
-    uv_exe = python_exe.parent / "Scripts" / "uv.exe"
+    uv_exe = python_dir / "Scripts" / "uv.exe"
+    agent_exe = python_dir / "Scripts" / "radegast-agent.exe"
+
+    subprocess.run([str(uv_exe), "pip", "install", "--python", str(python_exe_path),
+                    str(agent_src_dir / "radegast-agent-python-main")], check=True)
+    shutil.rmtree(agent_src_dir, ignore_errors=True)
+
+    # 6. Download WinSW and Setup Service XMLs
+    print("Downloading WinSW Wrapper...")
+    winsw_bin = tools_dir / "winsw.exe"
     try:
-        subprocess.run([
-            str(uv_exe), "pip", "install", 
-            "--python", str(python_exe), 
-            str(agent_src_dir / "radegast-agent-python-main")
-        ], check=True)
+        req = urllib.request.Request(winsw_url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, context=ssl_context) as response, open(winsw_bin, 'wb') as out_file:
+            out_file.write(response.read())
     except Exception as e:
-        print(f"ERROR: Failed to install agent: {e}", file=sys.stderr)
+        print(f"ERROR: Failed to download WinSW: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # Clean up agent source folder
-    import shutil
-    try:
-        shutil.rmtree(agent_src_dir)
-    except Exception:
-        pass
+    shutil.copy(winsw_bin, rustinel_service_exe)
+    shutil.copy(winsw_bin, agent_service_exe)
 
-    # 5. Create wrapper batch scripts
-    run_rustinel_bat = radegast_dir / "run-rustinel.bat"
-    run_rustinel_content = f'@echo off\r\ncd /d "{rustinel_dir}"\r\n"{rustinel_dir}\\rustinel.exe" run > "{logs_dir}\\rustinel_stdout.log" 2> "{logs_dir}\\rustinel_stderr.log"\r\n'
-    print(f"Writing {run_rustinel_bat}...")
-    run_rustinel_bat.write_text(run_rustinel_content, encoding="utf-8")
+    # 7. Setup service XMLs
+    rustinel_xml = f"""<service>
+      <id>RadegastRustinel</id>
+      <name>Radegast Rustinel Sensor</name>
+      <description>Low-level sensor for the Radegast EDR.</description>
+      <executable>{rustinel_dir}\\rustinel.exe</executable>
+      <arguments>run</arguments>
+      <workingdirectory>{rustinel_dir}</workingdirectory>
+      <log mode="roll" logpath="{logs_dir}" />
+      <onfailure action="restart" delay="5000" />
+      <stopparentfirst>true</stopparentfirst>
+      <serviceaccount>
+        <domain>NT AUTHORITY</domain>
+        <user>SYSTEM</user>
+      </serviceaccount>
+    </service>"""
+    (radegast_dir / "radegast-rustinel-service.xml").write_text(rustinel_xml, encoding="utf-8")
 
-    run_agent_bat = radegast_dir / "run-agent.bat"
-    run_agent_content = (
-        f'@echo off\r\n'
-        f'set PYTHONUNBUFFERED=1\r\n'
-        f'set RADEGAST_AGENT_BACKEND_URL={backend_url}/api/v1\r\n'
-        f'set RADEGAST_AGENT_DEVICE_TOKEN={token}\r\n'
-        f'set RADEGAST_AGENT_RUSTINEL_BINARY={rustinel_dir}\\rustinel.exe\r\n'
-        f'set RADEGAST_AGENT_RULES_DIR={rules_dir}\\\r\n'
-        f'set RADEGAST_AGENT_ALERTS_DIR={logs_dir}\\\r\n'
-        f'set RADEGAST_AGENT_STATE_DIR={state_dir}\\\r\n'
-        f'"{python_exe.parent}\\Scripts\\radegast-agent.exe" > "{logs_dir}\\agent_stdout.log" 2> "{logs_dir}\\agent_stderr.log"\r\n'
-    )
-    print(f"Writing {run_agent_bat}...")
-    run_agent_bat.write_text(run_agent_content, encoding="utf-8")
+    agent_xml = f"""<service>
+      <id>RadegastAgent</id>
+      <name>Radegast EDR Agent</name>
+      <description>Management agent for Radegast EDR communications.</description>
+      <executable>{python_exe_path}</executable>
+      <arguments>"{python_dir}\\Lib\\site-packages\\agent\\cli.py"</arguments>
+      <workingdirectory>{radegast_dir}</workingdirectory>
+      <env name="PYTHONUNBUFFERED" value="1" />
+      <env name="RADEGAST_AGENT_BACKEND_URL" value="{backend_url}/api/v1" />
+      <env name="RADEGAST_AGENT_DEVICE_TOKEN" value="{token}" />
+      <env name="RADEGAST_AGENT_RUSTINEL_BINARY" value="{rustinel_dir}\\rustinel.exe" />
+      <env name="RADEGAST_AGENT_RULES_DIR" value="{rules_dir}\\" />
+      <env name="RADEGAST_AGENT_ALERTS_DIR" value="{logs_dir}\\" />
+      <env name="RADEGAST_AGENT_STATE_DIR" value="{state_dir}\\" />
+      <onfailure action="restart" delay="5000" />
+      <stopparentfirst>true</stopparentfirst>
+      <log mode="roll" logpath="{logs_dir}" />
+      <serviceaccount>
+        <domain>NT AUTHORITY</domain>
+        <user>SYSTEM</user>
+      </serviceaccount>
+    </service>"""
+    (radegast_dir / "radegast-agent-service.xml").write_text(agent_xml, encoding="utf-8")
 
+    # 8. Install Services FIRST
+    print("Registering Windows Services...")
+    subprocess.run([str(rustinel_service_exe), "install"], check=True)
+    subprocess.run([str(agent_service_exe), "install"], check=True)
+
+    print("Waiting for Service Manager to register identities...")
+    time.sleep(3)
+
+    # 9. Unblock Files
+    print("Clearing Mark of the Web attributes from all files...")
+    subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                    f"Get-ChildItem -Path '{radegast_dir}' -Recurse | Unblock-File"], check=True)
+
+    # 10. Apply Strict NTFS ACLs via icacls
+    print("Securing directories with strict ACLs...")
+    vsa_account = r"NT SERVICE\RadegastAgent"
+
+    run_cmd(["icacls", str(radegast_dir), "/inheritance:r", "/grant:r", "Administrators:(OI)(CI)F", "/grant:r",
+             "SYSTEM:(OI)(CI)F"], show_output=True)
+    run_cmd(["icacls", str(radegast_dir), "/grant:r", f"{vsa_account}:(OI)(CI)RX"], show_output=True)
+
+    for folder in [rules_dir, state_dir, logs_dir, cache_dir, python_dir]:
+        if folder.exists():
+            run_cmd(["icacls", str(folder), "/reset", "/T", "/Q"], show_output=True)
+            run_cmd(["icacls", str(folder), "/grant:r", f"{vsa_account}:(OI)(CI)F", "/T", "/Q"], show_output=True)
+
+    run_cmd(["icacls", str(rustinel_dir), "/deny", f"{vsa_account}:(OI)(CI)W"], show_output=True)
+
+    # 11. Create Uninstaller Script
     uninstall_bat = radegast_dir / "uninstall.bat"
     uninstall_content = (
         "@echo off\r\n"
@@ -193,98 +247,31 @@ def main():
         ")\r\n"
         "echo WARNING: The signing key cannot be changed and must be backed-up manually if moving to another device.\r\n"
         "set /p \"confirm=Have you backed-up your device signing key manually? (y/n): \"\r\n"
-        "if /i \"%confirm%\" neq \"y\" (\r\n"
-        "    echo Uninstallation cancelled.\r\n"
-        "    exit /b 1\r\n"
-        ")\r\n"
-        "echo === Starting Radegast EDR Agent and Rustinel Windows Uninstallation ===\r\n"
-        "schtasks /query /tn \"RadegastRustinel\" >nul 2>&1\r\n"
-        "if not errorlevel 1 (\r\n"
-        "    schtasks /end /tn \"RadegastRustinel\" >nul 2>&1\r\n"
-        "    schtasks /delete /tn \"RadegastRustinel\" /f >nul 2>&1\r\n"
-        ")\r\n"
-        "schtasks /query /tn \"RadegastAgent\" >nul 2>&1\r\n"
-        "if not errorlevel 1 (\r\n"
-        "    schtasks /end /tn \"RadegastAgent\" >nul 2>&1\r\n"
-        "    schtasks /delete /tn \"RadegastAgent\" /f >nul 2>&1\r\n"
-        ")\r\n"
+        "if /i \"%confirm%\" neq \"y\" exit /b 1\r\n"
+        "echo === Uninstalling Radegast Services ===\r\n"
+        f"\"{radegast_dir}\\radegast-agent-service.exe\" stop >nul 2>&1\r\n"
+        f"\"{radegast_dir}\\radegast-rustinel-service.exe\" stop >nul 2>&1\r\n"
+        f"\"{radegast_dir}\\radegast-agent-service.exe\" uninstall >nul 2>&1\r\n"
+        f"\"{radegast_dir}\\radegast-rustinel-service.exe\" uninstall >nul 2>&1\r\n"
         "taskkill /f /im rustinel.exe >nul 2>&1\r\n"
         "reg delete HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Radegast /f >nul 2>&1\r\n"
-        "rmdir /s /q \"" + str(radegast_dir) + "\\rustinel\" >nul 2>&1\r\n"
-        "rmdir /s /q \"" + str(radegast_dir) + "\\rules\" >nul 2>&1\r\n"
-        "rmdir /s /q \"" + str(radegast_dir) + "\\logs\" >nul 2>&1\r\n"
-        "rmdir /s /q \"" + str(radegast_dir) + "\\state\" >nul 2>&1\r\n"
-        "rmdir /s /q \"" + str(radegast_dir) + "\\.cache\" >nul 2>&1\r\n"
-        "rmdir /s /q \"" + str(radegast_dir) + "\\.tools\" >nul 2>&1\r\n"
-        "rmdir /s /q \"" + str(radegast_dir) + "\\python\" >nul 2>&1\r\n"
-        "del /f /q \"" + str(radegast_dir) + "\\run-rustinel.bat\" >nul 2>&1\r\n"
-        "del /f /q \"" + str(radegast_dir) + "\\run-agent.bat\" >nul 2>&1\r\n"
-        "echo === Radegast EDR Agent and Rustinel uninstalled successfully ===\r\n"
-        "start /b \"\" cmd /c \"timeout /t 2 >nul & del /f /q \"%~f0\" & rmdir /s /q \"" + str(radegast_dir) + "\" >nul 2>&1\"\r\n"
+        "echo === Removing Files ===\r\n"
+        f"start /b \"\" cmd /c \"timeout /t 3 >nul & rmdir /s /q \"{radegast_dir}\" >nul 2>&1\"\r\n"
     )
-    print(f"Writing {uninstall_bat}...")
     uninstall_bat.write_text(uninstall_content, encoding="utf-8")
 
-    # 6. Setup Windows Scheduled Tasks using PowerShell (to configure power and duration settings)
-    ps_script = """
-    # Unblock all files recursively to prevent SmartScreen/Mark of the Web silent hangs
-    Get-ChildItem -Path '{radegast_dir}' -Recurse | Unblock-File
-
-    # Unregister existing tasks if they exist
-    if (Get-ScheduledTask -TaskName 'RadegastRustinel' -ErrorAction SilentlyContinue) {
-        Unregister-ScheduledTask -TaskName 'RadegastRustinel' -Confirm:$false -ErrorAction SilentlyContinue
-    }
-    if (Get-ScheduledTask -TaskName 'RadegastAgent' -ErrorAction SilentlyContinue) {
-        Unregister-ScheduledTask -TaskName 'RadegastAgent' -Confirm:$false -ErrorAction SilentlyContinue
-    }
-
-    # Register RadegastRustinel task via cmd.exe
-    $action1 = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c ""{run_rustinel_bat}""'
-    $trigger1 = New-ScheduledTaskTrigger -AtStartup
-    $settings1 = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
-    Register-ScheduledTask -TaskName 'RadegastRustinel' -Action $action1 -Trigger $trigger1 -Settings $settings1 -User 'SYSTEM' -Force
-
-    # Register RadegastAgent task via cmd.exe
-    $action2 = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c ""{run_agent_bat}""'
-    $trigger2 = New-ScheduledTaskTrigger -AtStartup
-    $settings2 = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
-    Register-ScheduledTask -TaskName 'RadegastAgent' -Action $action2 -Trigger $trigger2 -Settings $settings2 -User 'SYSTEM' -Force
-
-    # Start tasks immediately
-    Start-ScheduledTask -TaskName 'RadegastRustinel'
-    Start-ScheduledTask -TaskName 'RadegastAgent'
-    """.replace("{radegast_dir}", str(radegast_dir)).replace("{run_rustinel_bat}", str(run_rustinel_bat)).replace("{run_agent_bat}", str(run_agent_bat))
-
-    print("Configuring and starting tasks via PowerShell...")
+    # 12. Start Services
+    print("Starting Windows Services...")
     try:
-        encoded_ps = base64.b64encode(ps_script.encode('utf-16-le')).decode('ascii')
-        subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded_ps], check=True)
-        print("Scheduled Tasks registered and started successfully.")
+        subprocess.run([str(rustinel_service_exe), "start"], check=True)
+        subprocess.run([str(agent_service_exe), "start"], check=True)
+        print("Services started successfully.")
     except Exception as e:
-        print(f"ERROR: Failed to configure tasks via PowerShell: {e}", file=sys.stderr)
+        print(f"ERROR: Failed to start services: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # 7. Register Radegast in Add/Remove Programs
-    print("Registering Radegast in Add/Remove Programs...")
-    try:
-        registry_entries = [
-            ("DisplayName", "REG_SZ", "Radegast EDR Agent"),
-            ("UninstallString", "REG_SZ", f'"{uninstall_bat}"'),
-            ("InstallLocation", "REG_SZ", str(radegast_dir)),
-            ("Publisher", "REG_SZ", "Radegast"),
-            ("NoModify", "REG_DWORD", "1"),
-            ("NoRepair", "REG_DWORD", "1")
-        ]
-        for val_name, val_type, val_data in registry_entries:
-            subprocess.run([
-                "reg", "add", r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Radegast",
-                "/v", val_name, "/t", val_type, "/d", val_data, "/f"
-            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        print("Registered successfully in Add/Remove Programs.")
-    except Exception as e:
-        print(f"WARNING: Failed to register in Add/Remove Programs: {e}")
-
     print("=== Radegast agent & rustinel Windows setup completed successfully ===")
+
 
 if __name__ == "__main__":
     main()

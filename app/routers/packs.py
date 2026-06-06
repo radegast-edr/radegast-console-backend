@@ -25,6 +25,7 @@ from app.schemas.pack import (
     PackVersionResponse,
 )
 from app.services.packs import get_upload_path, save_upload, delete_pack_files
+from app.services.pack_validation import validate_zip_contents
 from app.services.permissions import (
     get_user_team_ids_transitive,
     is_user_member_of_team_transitive,
@@ -32,6 +33,17 @@ from app.services.permissions import (
 from app.utils import utc_now
 
 router = APIRouter(prefix="/packs", tags=["packs"])
+
+
+async def get_latest_version(pack: Pack, db: AsyncSession) -> PackVersion | None:
+    """Get the latest version for a pack."""
+    result = await db.execute(
+        select(PackVersion)
+        .where(PackVersion.pack_id == pack.id)
+        .order_by(PackVersion.released.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
 
 
 async def check_pack_write_permission(pack: Pack, user: User, db: AsyncSession) -> bool:
@@ -62,17 +74,43 @@ async def list_packs(
     result = await db.execute(select(Pack).options(selectinload(Pack.teams)))
     packs = result.scalars().all()
     if not user:
-        return [p for p in packs if not p.teams]
-
-    user_team_ids = await get_user_team_ids_transitive(user.id, db)
-    allowed_packs = []
-    for p in packs:
-        if not p.teams:
-            allowed_packs.append(p)
-        else:
-            if p.creator_id == user.id or any(t.id in user_team_ids for t in p.teams):
-                allowed_packs.append(p)
-    return allowed_packs
+        packs = [p for p in packs if not p.teams]
+    else:
+        user_team_ids = await get_user_team_ids_transitive(user.id, db)
+        packs = [
+            p for p in packs
+            if not p.teams or p.creator_id == user.id or any(t.id in user_team_ids for t in p.teams)
+        ]
+    
+    # Load latest versions for all packs
+    pack_ids = [p.id for p in packs]
+    if pack_ids:
+        result = await db.execute(
+            select(PackVersion)
+            .where(PackVersion.pack_id.in_(pack_ids))
+            .order_by(PackVersion.pack_id, PackVersion.released.desc())
+        )
+        versions = result.scalars().all()
+        # Group by pack_id and get the latest
+        latest_map = {}
+        for v in versions:
+            if v.pack_id not in latest_map:
+                latest_map[v.pack_id] = v
+    else:
+        latest_map = {}
+    
+    return [
+        PackResponse(
+            id=p.id,
+            pack_id=p.pack_id,
+            name=p.name,
+            description=p.description,
+            creator_id=p.creator_id,
+            team_ids=p.team_ids,
+            latest=latest_map.get(p.id)
+        )
+        for p in packs
+    ]
 
 
 @router.post("/", response_model=PackResponse)
@@ -131,7 +169,15 @@ async def create_pack(
         select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack.id)
     )
     pack = result_ref.scalar_one()
-    return pack
+    return PackResponse(
+        id=pack.id,
+        pack_id=pack.pack_id,
+        name=pack.name,
+        description=pack.description,
+        creator_id=pack.creator_id,
+        team_ids=pack.team_ids,
+        latest=None
+    )
 
 
 @router.get("/{pack_id}", response_model=PackResponse)
@@ -161,7 +207,18 @@ async def get_pack(
         if pack.creator_id != user.id and not any(t.id in user_team_ids for t in pack.teams):
             raise HTTPException(status_code=403, detail="Access denied")
 
-    return pack
+    # Get latest version
+    latest = await get_latest_version(pack, db)
+    
+    return PackResponse(
+        id=pack.id,
+        pack_id=pack.pack_id,
+        name=pack.name,
+        description=pack.description,
+        creator_id=pack.creator_id,
+        team_ids=pack.team_ids,
+        latest=latest
+    )
 
 
 @router.patch("/{pack_id}", response_model=PackResponse)
@@ -225,7 +282,19 @@ async def update_pack(
         select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack.id)
     )
     pack = result_ref.scalar_one()
-    return pack
+    
+    # Get latest version
+    latest = await get_latest_version(pack, db)
+    
+    return PackResponse(
+        id=pack.id,
+        pack_id=pack.pack_id,
+        name=pack.name,
+        description=pack.description,
+        creator_id=pack.creator_id,
+        team_ids=pack.team_ids,
+        latest=latest
+    )
 
 
 @router.get("/{pack_id}/versions", response_model=list[PackVersionResponse])
@@ -304,12 +373,30 @@ async def upload_version(
                 detail=f"Uploaded version {version} must be higher than existing version {pv.version}"
             )
 
+    # Read and validate the zip file contents
     content = await file.read()
+    
+    # Validate the zip contents
+    validation_result = await validate_zip_contents(content)
+    if not validation_result["valid"]:
+        error_details = validation_result["errors"]
+        # Return a properly formatted error response
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Pack validation failed",
+                "errors": error_details
+            }
+        )
+
     filename = "pack.zip"
     path = get_upload_path(pack_id, version, filename)
     await save_upload(content, path)
 
-    pv = PackVersion(pack_id=pack_id, version=version, zip_path=path, release_notes=release_notes)
+    # Save meta from pack.yml if present
+    meta = validation_result.get("meta")
+    
+    pv = PackVersion(pack_id=pack_id, version=version, zip_path=path, release_notes=release_notes, meta=meta)
     db.add(pv)
     await db.flush()
 

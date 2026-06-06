@@ -22,6 +22,7 @@ dependencies = [
     "webauthn>=2.7.1",
     "filelock>=3.29.0",
     "httpx>=0.28.1",
+    "pyyaml>=6.0.0",
 ]
 
 [project.scripts]

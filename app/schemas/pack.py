@@ -17,6 +17,17 @@ class PackUpdate(BaseModel):
     team_ids: list[int] | None = None
 
 
+class PackVersionResponse(BaseModel):
+    id: int
+    pack_id: int
+    version: str
+    released: datetime
+    release_notes: str | None = None
+    meta: dict | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class PackResponse(BaseModel):
     id: int
     pack_id: str
@@ -24,16 +35,7 @@ class PackResponse(BaseModel):
     description: str
     creator_id: int | None = None
     team_ids: list[int] = []
-
-    model_config = {"from_attributes": True}
-
-
-class PackVersionResponse(BaseModel):
-    id: int
-    pack_id: int
-    version: str
-    released: datetime
-    release_notes: str | None = None
+    latest: PackVersionResponse | None = None
 
     model_config = {"from_attributes": True}
 

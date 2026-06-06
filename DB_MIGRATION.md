@@ -14,5 +14,6 @@ Format: `Date - Command - What was changed`
 - 2026-06-05 - `ALTER TABLE packs ADD COLUMN pack_id VARCHAR(255); ALTER TABLE users ADD COLUMN api_keys_enabled BOOLEAN NOT NULL DEFAULT 0; CREATE TABLE api_keys (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, name VARCHAR(255) NOT NULL, key_hash VARCHAR(255) NOT NULL UNIQUE, prefix VARCHAR(16) NOT NULL, scopes TEXT NOT NULL, created_at DATETIME NOT NULL, expires_at DATETIME);` - Added pack_id to packs, api_keys_enabled to users, and created api_keys table.
 - 2026-06-05 - `ALTER TABLE users ADD COLUMN notify_api_key_modification BOOLEAN NOT NULL DEFAULT 1;` - Added notify_api_key_modification column to users table.
 - 2026-06-05 - `ALTER TABLE api_keys ADD COLUMN last_used DATETIME;` - Added last_used column to api_keys table to track programmatic usage.
+- 2026-06-06 - `ALTER TABLE pack_versions ADD COLUMN meta JSON;` - Added meta JSON column to pack_versions table for storing pack.yml metadata.
 
 

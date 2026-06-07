@@ -24,6 +24,8 @@ set SCRIPTS_DIR=%PYTHON_DIR%\Scripts
 set PYTHON_ZIP=%TEMP%\winpython_3_13.zip
 set INSTALL_SCRIPT=%TEMP%\install_inline.py
 set INSTALL_B64=%TEMP%\install_inline.b64
+set "EXPECTED_HASH=d48f56ce9bd928f51a4485972e37816c0d0a69ef07846fc182b26d2d0ca63722"
+
 echo.
 
 if exist "%PYTHON_EXE%" (
@@ -33,7 +35,7 @@ if exist "%PYTHON_EXE%" (
 
 echo.
 echo Downloading portable Python...
-powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://cdn.adamhlavacek.com/winpython_3_13.zip' -OutFile $env:PYTHON_ZIP"
+powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://esoadamo.gitlab.io/windows-python-bat-installer/winpython_3_13_uv.zip' -OutFile $env:PYTHON_ZIP"
 if errorlevel 1 (
     echo ERROR: Failed to download Python
     PAUSE
@@ -41,6 +43,17 @@ if errorlevel 1 (
 )
 echo Download complete.
 echo.
+
+echo Verifying file integrity...
+powershell -Command "$computedHash = (Get-FileHash -Path $env:PYTHON_ZIP -Algorithm SHA256).Hash; if ($computedHash -ne '%EXPECTED_HASH%') { write-host 'HASH MISMATCH!'; exit 1 } else { write-host 'Hash verified successfully.' }"
+if errorlevel 1 (
+    echo ERROR: Hash verification failed! The downloaded file may be corrupted or tampered with.
+    if exist "%PYTHON_ZIP%" del "%PYTHON_ZIP%"
+    PAUSE
+    exit /b 1
+)
+echo.
+
 echo Extracting Python to %APP_DIR%...
 if not exist "%APP_DIR%" mkdir "%APP_DIR%"
 powershell -Command "Expand-Archive -Path $env:PYTHON_ZIP -DestinationPath $env:APP_DIR -Force"
@@ -75,10 +88,6 @@ if not exist "%UV_EXE%" (
 ) else (
     echo uv is already installed.
 )
-
-
-
-
 
 :install_app
 echo.

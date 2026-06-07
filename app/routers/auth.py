@@ -86,7 +86,7 @@ from app.services.email import (
 )
 from app.utils import ensure_utc, utc_now
 
-SECURE_COOKIE = True
+SECURE_COOKIE = settings.environment != "dev"
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 

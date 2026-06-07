@@ -4,9 +4,9 @@
 # 1. Feature Toggles & Rules
 [scanner]
 sigma_enabled = true
-sigma_rules_path = "C:\\Program Files\\Radegast\\rules\\sigma"
+sigma_rules_path = "C:\\Program Files\\Radegast\\agent\\rules\\sigma"
 yara_enabled = true
-yara_rules_path = "C:\\Program Files\\Radegast\\rules\\yara"
+yara_rules_path = "C:\\Program Files\\Radegast\\agent\\rules\\yara"
 
 [reload]
 enabled = true
@@ -27,14 +27,14 @@ debounce_ms = 2000          # poll cadence is max(debounce_ms, 2000)
 [logging]
 level = "info"              # trace, debug, info, warn, error
 directory = "logs"
-filename = "C:\\Program Files\\Radegast\\logs\\rustinel.log"
+filename = "C:\\Program Files\\Radegast\\agent\\logs\\rustinel.log"
 console_output = true       # If true, duplicate logs to stdout (dev mode)
 
 # 3. Security Alerts (The Detection Output)
 #    Writes to: {directory}/{filename}.<date>
 [alerts]
 directory = "logs"
-filename = "C:\\Program Files\\Radegast\\logs\\alerts.json"    # Will contain newline-delimited JSON (NDJSON)
+filename = "C:\\Program Files\\Radegast\\agent\\logs\\alerts.json"    # Will contain newline-delimited JSON (NDJSON)
 match_debug = "off"         # off | summary | full (attach match details to alerts.json)
 
 # 4. Active Response (Optional Prevention)
@@ -47,9 +47,9 @@ channel_capacity = 128
 # 5. Atomic IOC Detection (Hashes, IPs, Domains, Path Regex)
 [ioc]
 enabled = true
-hashes_path = "C:\\Program Files\\Radegast\\rules\\ioc\\hashes.txt"
-ips_path = "C:\\Program Files\\Radegast\\rules\\ioc\\ips.txt"
-domains_path = "C:\\Program Files\\Radegast\\rules\\ioc\\domains.txt"
-paths_regex_path = "C:\\Program Files\\Radegast\\rules\\ioc\\paths_regex.txt"
+hashes_path = "C:\\Program Files\\Radegast\\agent\\rules\\ioc\\hashes.txt"
+ips_path = "C:\\Program Files\\Radegast\\agent\\rules\\ioc\\ips.txt"
+domains_path = "C:\\Program Files\\Radegast\\agent\\rules\\ioc\\domains.txt"
+paths_regex_path = "C:\\Program Files\\Radegast\\agent\\rules\\ioc\\paths_regex.txt"
 default_severity = "high"
 max_file_size_mb = 50

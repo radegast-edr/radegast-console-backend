@@ -47,22 +47,31 @@ def main():
         print("ERROR: RADEGAST_TOKEN environment variable is not set.", file=sys.stderr)
         sys.exit(1)
 
-    # Define core paths
+    # Base directory setup
     program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
     radegast_dir = Path(program_files) / "Radegast"
-    rustinel_dir = radegast_dir / "rustinel"
-    rules_dir = radegast_dir / "rules"
-    ioc_dir = rules_dir / "ioc"
-    logs_dir = radegast_dir / "logs"
-    state_dir = radegast_dir / "state"
-    cache_dir = radegast_dir / ".cache"
     tools_dir = radegast_dir / ".tools"
-    agent_src_dir = radegast_dir / "agent-src"
 
+    # New Agent Layout Subdirectories
+    agent_dir = radegast_dir / "agent"
+    agent_service_dir = agent_dir / "service"
+    rules_dir = agent_dir / "rules"
+    ioc_dir = rules_dir / "ioc"
+    logs_dir = agent_dir / "logs"
+    state_dir = agent_dir / "state"
+    cache_dir = agent_dir / ".cache"
+    agent_src_dir = agent_dir / "agent-src"
+
+    # New Rustinel Layout Subdirectories
+    rustinel_dir = radegast_dir / "rustinel"
+    rustinel_core_dir = rustinel_dir / "rustinel"
+    rustinel_service_dir = rustinel_dir / "service"
+
+    # Executable Target Paths
     python_exe_path = Path(sys.executable)
     python_dir = python_exe_path.parent
-    rustinel_service_exe = radegast_dir / "radegast-rustinel-service.exe"
-    agent_service_exe = radegast_dir / "radegast-agent-service.exe"
+    rustinel_service_exe = rustinel_service_dir / "radegast-rustinel-service.exe"
+    agent_service_exe = agent_service_dir / "radegast-agent-service.exe"
 
     # 1. Pre-Installation Cleanup (Unlock Files)
     print("Checking for existing services to stop and unlock files...")
@@ -83,8 +92,13 @@ def main():
     time.sleep(2)
 
     # 2. Setup Directories
-    print(f"Creating directories under {radegast_dir}...")
-    for d in [radegast_dir, rustinel_dir, rules_dir, ioc_dir, logs_dir, state_dir, cache_dir, tools_dir, agent_src_dir]:
+    print(f"Creating specialized application directory trees under {radegast_dir}...")
+    dirs_to_create = [
+        radegast_dir, tools_dir,
+        agent_dir, agent_service_dir, rules_dir, ioc_dir, logs_dir, state_dir, cache_dir, agent_src_dir,
+        rustinel_dir, rustinel_core_dir, rustinel_service_dir
+    ]
+    for d in dirs_to_create:
         d.mkdir(parents=True, exist_ok=True)
 
     for filename in ["hashes.txt", "ips.txt", "domains.txt", "paths_regex.txt"]:
@@ -106,7 +120,7 @@ def main():
 
     backend_url = "{{ backend_url }}"
     download_url = f"{backend_url}/api/v1/device/agent/download?os=windows&arch={arch}"
-    zip_path = rustinel_dir / "rustinel.zip"
+    zip_path = rustinel_core_dir / "rustinel.zip"
 
     print("Downloading rustinel...")
     try:
@@ -117,7 +131,7 @@ def main():
             out_file.write(response.read())
 
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(rustinel_dir)
+            zip_ref.extractall(rustinel_core_dir)
         if zip_path.exists():
             zip_path.unlink()
     except Exception as e:
@@ -127,7 +141,7 @@ def main():
     # 4. Write configuration file config.toml
     config_b64 = "{{ config_b64 }}"
     config_content = base64.b64decode(config_b64.encode("utf-8")).decode("utf-8")
-    (rustinel_dir / "config.toml").write_text(config_content, encoding="utf-8")
+    (rustinel_core_dir / "config.toml").write_text(config_content, encoding="utf-8")
 
     # 5. Install radegast-agent-python
     agent_zip_url = "https://github.com/radegast-edr/radegast-agent-python/archive/refs/heads/main.zip"
@@ -145,8 +159,6 @@ def main():
         sys.exit(1)
 
     uv_exe = python_dir / "Scripts" / "uv.exe"
-    agent_exe = python_dir / "Scripts" / "radegast-agent.exe"
-
     subprocess.run([str(uv_exe), "pip", "install", "--python", str(python_exe_path),
                     str(agent_src_dir / "radegast-agent-python-main")], check=True)
     shutil.rmtree(agent_src_dir, ignore_errors=True)
@@ -170,9 +182,9 @@ def main():
       <id>RadegastRustinel</id>
       <name>Radegast Rustinel Sensor</name>
       <description>Low-level sensor for the Radegast EDR.</description>
-      <executable>{rustinel_dir}\\rustinel.exe</executable>
+      <executable>{rustinel_core_dir}\\rustinel.exe</executable>
       <arguments>run</arguments>
-      <workingdirectory>{rustinel_dir}</workingdirectory>
+      <workingdirectory>{rustinel_core_dir}</workingdirectory>
       <log mode="roll" logpath="{logs_dir}" />
       <onfailure action="restart" delay="5000" />
       <stopparentfirst>true</stopparentfirst>
@@ -181,7 +193,7 @@ def main():
         <user>SYSTEM</user>
       </serviceaccount>
     </service>"""
-    (radegast_dir / "radegast-rustinel-service.xml").write_text(rustinel_xml, encoding="utf-8")
+    (rustinel_service_dir / "radegast-rustinel-service.xml").write_text(rustinel_xml, encoding="utf-8")
 
     agent_xml = f"""<service>
       <id>RadegastAgent</id>
@@ -189,11 +201,11 @@ def main():
       <description>Management agent for Radegast EDR communications.</description>
       <executable>{python_exe_path}</executable>
       <arguments>"{python_dir}\\Lib\\site-packages\\agent\\cli.py"</arguments>
-      <workingdirectory>{radegast_dir}</workingdirectory>
+      <workingdirectory>{agent_dir}</workingdirectory>
       <env name="PYTHONUNBUFFERED" value="1" />
       <env name="RADEGAST_AGENT_BACKEND_URL" value="{backend_url}/api/v1" />
       <env name="RADEGAST_AGENT_DEVICE_TOKEN" value="{token}" />
-      <env name="RADEGAST_AGENT_RUSTINEL_BINARY" value="{rustinel_dir}\\rustinel.exe" />
+      <env name="RADEGAST_AGENT_RUSTINEL_BINARY" value="{rustinel_core_dir}\\rustinel.exe" />
       <env name="RADEGAST_AGENT_RULES_DIR" value="{rules_dir}\\" />
       <env name="RADEGAST_AGENT_ALERTS_DIR" value="{logs_dir}\\" />
       <env name="RADEGAST_AGENT_STATE_DIR" value="{state_dir}\\" />
@@ -201,11 +213,11 @@ def main():
       <stopparentfirst>true</stopparentfirst>
       <log mode="roll" logpath="{logs_dir}" />
       <serviceaccount>
-        <domain>NT AUTHORITY</domain>
-        <user>SYSTEM</user>
+        <domain>NT SERVICE</domain>
+        <user>RadegastAgent</user>
       </serviceaccount>
     </service>"""
-    (radegast_dir / "radegast-agent-service.xml").write_text(agent_xml, encoding="utf-8")
+    (agent_service_dir / "radegast-agent-service.xml").write_text(agent_xml, encoding="utf-8")
 
     # 8. Install Services FIRST
     print("Registering Windows Services...")
@@ -221,19 +233,29 @@ def main():
                     f"Get-ChildItem -Path '{radegast_dir}' -Recurse | Unblock-File"], check=True)
 
     # 10. Apply Strict NTFS ACLs via icacls
-    print("Securing directories with strict ACLs...")
+    print("Securing directories with strict layout isolation...")
     vsa_account = r"NT SERVICE\RadegastAgent"
 
+    # A. Lock root directory exclusively to Administrators and SYSTEM
     run_cmd(["icacls", str(radegast_dir), "/inheritance:r", "/grant:r", "Administrators:(OI)(CI)F", "/grant:r",
              "SYSTEM:(OI)(CI)F"], show_output=True)
-    run_cmd(["icacls", str(radegast_dir), "/grant:r", f"{vsa_account}:(OI)(CI)RX"], show_output=True)
 
-    for folder in [rules_dir, state_dir, logs_dir, cache_dir, python_dir]:
-        if folder.exists():
-            run_cmd(["icacls", str(folder), "/reset", "/T", "/Q"], show_output=True)
-            run_cmd(["icacls", str(folder), "/grant:r", f"{vsa_account}:(OI)(CI)F", "/T", "/Q"], show_output=True)
+    # B.Grant the VSA traverse/read rights to the root folder ONLY (No inheritance)
+    # Leaving out (OI)(CI) means this rule applies ONLY to the Radegast folder itself.
+    # This allows the agent to resolve paths like \Radegast\rustinel\... without being blocked at the root.
+    run_cmd(["icacls", str(radegast_dir), "/grant:r", f"{vsa_account}:RX"], show_output=True)
 
-    run_cmd(["icacls", str(rustinel_dir), "/deny", f"{vsa_account}:(OI)(CI)W"], show_output=True)
+    # C. Grant Full Control exclusively to the requested Agent directory ecosystem
+    run_cmd(["icacls", str(agent_dir), "/grant:r", f"{vsa_account}:(OI)(CI)F"], show_output=True)
+
+    # D. Grant Read & Execute (RX) to the Rustinel folder tree AND force it recursively (/T)
+    # The /T flag ensures that the *already extracted* rustinel.exe binary instantly receives the RX permission.
+    run_cmd(["icacls", str(rustinel_dir), "/grant:r", f"{vsa_account}:(OI)(CI)RX", "/T", "/Q"], show_output=True)
+
+    # Secure global Python directory context to Read & Execute only for the VSA account
+    if python_dir.exists():
+        run_cmd(["icacls", str(python_dir), "/reset", "/T", "/Q"], show_output=True)
+        run_cmd(["icacls", str(python_dir), "/grant:r", f"{vsa_account}:(OI)(CI)RX", "/T", "/Q"], show_output=True)
 
     # 11. Create Uninstaller Script
     uninstall_bat = radegast_dir / "uninstall.bat"
@@ -249,10 +271,10 @@ def main():
         "set /p \"confirm=Have you backed-up your device signing key manually? (y/n): \"\r\n"
         "if /i \"%confirm%\" neq \"y\" exit /b 1\r\n"
         "echo === Uninstalling Radegast Services ===\r\n"
-        f"\"{radegast_dir}\\radegast-agent-service.exe\" stop >nul 2>&1\r\n"
-        f"\"{radegast_dir}\\radegast-rustinel-service.exe\" stop >nul 2>&1\r\n"
-        f"\"{radegast_dir}\\radegast-agent-service.exe\" uninstall >nul 2>&1\r\n"
-        f"\"{radegast_dir}\\radegast-rustinel-service.exe\" uninstall >nul 2>&1\r\n"
+        f"\"{agent_service_exe}\" stop >nul 2>&1\r\n"
+        f"\"{rustinel_service_exe}\" stop >nul 2>&1\r\n"
+        f"\"{agent_service_exe}\" uninstall >nul 2>&1\r\n"
+        f"\"{rustinel_service_exe}\" uninstall >nul 2>&1\r\n"
         "taskkill /f /im rustinel.exe >nul 2>&1\r\n"
         "reg delete HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Radegast /f >nul 2>&1\r\n"
         "echo === Removing Files ===\r\n"

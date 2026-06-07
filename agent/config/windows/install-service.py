@@ -54,13 +54,13 @@ def main():
 
     # New Agent Layout Subdirectories
     agent_dir = radegast_dir / "agent"
+    agent_home_dir = agent_dir / "home"
     agent_service_dir = agent_dir / "service"
     rules_dir = agent_dir / "rules"
     ioc_dir = rules_dir / "ioc"
     logs_dir = agent_dir / "logs"
     state_dir = agent_dir / "state"
     cache_dir = agent_dir / ".cache"
-    agent_src_dir = agent_dir / "agent-src"
 
     # New Rustinel Layout Subdirectories
     rustinel_dir = radegast_dir / "rustinel"
@@ -95,7 +95,7 @@ def main():
     print(f"Creating specialized application directory trees under {radegast_dir}...")
     dirs_to_create = [
         radegast_dir, tools_dir,
-        agent_dir, agent_service_dir, rules_dir, ioc_dir, logs_dir, state_dir, cache_dir, agent_src_dir,
+        agent_dir, agent_service_dir, rules_dir, ioc_dir, logs_dir, state_dir, cache_dir, agent_home_dir,
         rustinel_dir, rustinel_core_dir, rustinel_service_dir
     ]
     for d in dirs_to_create:
@@ -144,24 +144,15 @@ def main():
     (rustinel_core_dir / "config.toml").write_text(config_content, encoding="utf-8")
 
     # 5. Install radegast-agent-python
-    agent_zip_url = "https://github.com/radegast-edr/radegast-agent-python/archive/refs/heads/main.zip"
-    agent_zip_path = agent_src_dir / "agent.zip"
-
-    print("Downloading and installing Python agent...")
-    try:
-        req = urllib.request.Request(agent_zip_url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, context=ssl_context) as response, open(agent_zip_path, 'wb') as out_file:
-            out_file.write(response.read())
-        with zipfile.ZipFile(agent_zip_path, 'r') as zip_ref:
-            zip_ref.extractall(agent_src_dir)
-    except Exception as e:
-        print(f"ERROR: Failed to download/extract agent source: {e}", file=sys.stderr)
-        sys.exit(1)
-
     uv_exe = python_dir / "Scripts" / "uv.exe"
-    subprocess.run([str(uv_exe), "pip", "install", "--python", str(python_exe_path),
-                    str(agent_src_dir / "radegast-agent-python-main")], check=True)
-    shutil.rmtree(agent_src_dir, ignore_errors=True)
+    agent_pyproject = agent_home_dir / "pyproject.toml"
+    if agent_pyproject.exists():
+        agent_pyproject.unlink()
+    subprocess.run(
+        [str(uv_exe), "init",  ".", "--python", python_exe_path],
+        check=True,
+        cwd=agent_home_dir
+    )
 
     # 6. Download WinSW and Setup Service XMLs
     print("Downloading WinSW Wrapper...")
@@ -199,9 +190,9 @@ def main():
       <id>RadegastAgent</id>
       <name>Radegast EDR Agent</name>
       <description>Management agent for Radegast EDR communications.</description>
-      <executable>{python_exe_path}</executable>
-      <arguments>"{python_dir}\\Lib\\site-packages\\agent\\cli.py"</arguments>
-      <workingdirectory>{agent_dir}</workingdirectory>
+      <executable>{uv_exe}</executable>
+      <arguments>run --with radegast-edr-agent --python "{python_exe_path}" radegast-edr-agent</arguments>
+      <workingdirectory>{agent_home_dir}</workingdirectory>
       <env name="PYTHONUNBUFFERED" value="1" />
       <env name="RADEGAST_AGENT_BACKEND_URL" value="{backend_url}/api/v1" />
       <env name="RADEGAST_AGENT_DEVICE_TOKEN" value="{token}" />
@@ -246,7 +237,7 @@ def main():
     run_cmd(["icacls", str(radegast_dir), "/grant:r", f"{vsa_account}:RX"], show_output=True)
 
     # C. Grant Full Control exclusively to the requested Agent directory ecosystem
-    run_cmd(["icacls", str(agent_dir), "/grant:r", f"{vsa_account}:(OI)(CI)F"], show_output=True)
+    run_cmd(["icacls", str(agent_dir), "/grant:r", f"{vsa_account}:(OI)(CI)F", "/T", "/Q"], show_output=True)
 
     # D. Grant Read & Execute (RX) to the Rustinel folder tree AND force it recursively (/T)
     # The /T flag ensures that the *already extracted* rustinel.exe binary instantly receives the RX permission.

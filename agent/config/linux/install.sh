@@ -142,13 +142,7 @@ echo "uv found at: $UV_BIN"
 
 # 5. Install radegast-agent via uv
 echo "Installing radegast-agent tool..."
-if command -v git >/dev/null 2>&1; then
-    echo "git is installed, installing via git..."
-    sudo -u radegast-agent -i "$UV_BIN" tool install git+https://github.com/radegast-edr/radegast-agent-python
-else
-    echo "git is not installed, installing via ZIP archive..."
-    sudo -u radegast-agent -i "$UV_BIN" tool install "https://github.com/radegast-edr/radegast-agent-python/archive/refs/heads/main.zip"
-fi
+sudo -u radegast-agent -i "$UV_BIN" tool install radegast-edr-agent
 
 # Verify agent executable exists
 if [ ! -f "/opt/radegast/home/.local/bin/radegast-agent" ]; then

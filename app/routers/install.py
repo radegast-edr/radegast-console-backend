@@ -140,8 +140,8 @@ async def get_install_script(
 
         # Prefill service
         radegast_service_content = radegast_service_content.replace(
-            "<fix this to the actual absolute path AI>radegast-agent",
-            "/opt/radegast/home/.local/bin/radegast-agent"
+            "{{RADEGAST_AGENT_PATH}}",
+            "/opt/radegast/home/.local/bin/radegast-edr-agent"
         ).replace(
             "{{RADEGAST_AGENT_BACKEND_URL}}",
             backend_url

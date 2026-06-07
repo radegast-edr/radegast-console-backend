@@ -4,7 +4,7 @@ Documentation=https://github.com/radegast-edr/radegast-agent-python
 After=network.target
 
 [Service]
-ExecStart=<fix this to the actual absolute path AI>radegast-agent
+ExecStart={{RADEGAST_AGENT_PATH}}
 WorkingDirectory=/opt/radegast/home
 Restart=on-failure
 RestartSec=5

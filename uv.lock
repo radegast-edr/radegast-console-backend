@@ -1100,7 +1100,7 @@ wheels = [
 ]
 
 [[package]]
-name = "radegast-edr-backend"
+name = "radegast-edr-console"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
@@ -1134,7 +1134,7 @@ dev = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "radegast-edr-backend", extra = ["dev"] },
+    { name = "radegast-edr-console", extra = ["dev"] },
 ]
 
 [package.metadata]
@@ -1165,7 +1165,7 @@ requires-dist = [
 provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "radegast-edr-backend", extras = ["dev"] }]
+dev = [{ name = "radegast-edr-console", extras = ["dev"] }]
 
 [[package]]
 name = "requests"

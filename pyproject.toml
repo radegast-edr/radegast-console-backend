@@ -1,7 +1,7 @@
 [project]
-name = "radegast-edr-backend"
+name = "radegast-edr-console"
 version = "0.1.0"
-description = "Backend for Radegast - EDR management platform"
+description = "Backend & WebUI for Radegast - EDR management platform"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",
@@ -37,7 +37,7 @@ dev = [
 ]
 
 [dependency-groups]
-dev = ["radegast-edr-backend[dev]"]
+dev = ["radegast-edr-console[dev]"]
 
 [build-system]
 requires = ["hatchling"]

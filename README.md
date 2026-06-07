@@ -102,7 +102,7 @@ uv run radegast-console run --host=127.0.0.1 --port=8000 --workers=4
 Alternatively, you can install the tool globally using `uv`:
 
 ```bash
-uv tool install radegast-edr-backend
+uv tool install radegast-edr-console
 ```
 
 Once installed, start the console using:

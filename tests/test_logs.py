@@ -205,9 +205,9 @@ class TestLogSeenAndResolution:
         assert log["seen"] is False
 
         # Unread count should be >= 1 for this test log
-        resp = await auth_client.get("/logs/unread-count")
+        resp = await auth_client.get("/logs/count?unread_only=true")
         assert resp.status_code == 200
-        initial_unread = resp.json()["unread_count"]
+        initial_unread = resp.json()["total_count"]
         assert initial_unread >= 1
 
         # Mark seen (basic mode: seeing = reading, no resolution required)
@@ -221,9 +221,9 @@ class TestLogSeenAndResolution:
 
         # In basic mode, marking seen immediately removes the log from the active count
         # (basic mode does NOT require a resolution, seeing the alert is enough).
-        resp = await auth_client.get("/logs/unread-count")
-        assert resp.json()["unread_count"] == initial_unread - 1
-        after_seen_unread = resp.json()["unread_count"]
+        resp = await auth_client.get("/logs/count?unread_only=true")
+        assert resp.json()["total_count"] == initial_unread - 1
+        after_seen_unread = resp.json()["total_count"]
 
         # Resolve log
         resp = await auth_client.patch(
@@ -239,8 +239,8 @@ class TestLogSeenAndResolution:
         assert log["seen"] is True
 
         # Unread count should remain the same (log was already removed when seen)
-        resp = await auth_client.get("/logs/unread-count")
-        assert resp.json()["unread_count"] == after_seen_unread
+        resp = await auth_client.get("/logs/count?unread_only=true")
+        assert resp.json()["total_count"] == after_seen_unread
 
         # 5. Enable Extended EDR Mode
         resp = await auth_client.put("/auth/extended-edr", json={"extended_edr_enabled": True})
@@ -248,8 +248,8 @@ class TestLogSeenAndResolution:
         assert resp.json()["extended_edr_enabled"] is True
 
         # In extended EDR, the resolved log should NOT be counted as active
-        resp = await auth_client.get("/logs/unread-count")
-        edr_after_resolved = resp.json()["unread_count"]
+        resp = await auth_client.get("/logs/count?unread_only=true")
+        edr_after_resolved = resp.json()["total_count"]
 
         # Clear resolution (set to None) — in extended EDR, this should re-activate the log
         resp = await auth_client.patch(
@@ -261,8 +261,8 @@ class TestLogSeenAndResolution:
         assert resp.json()["seen"] is True  # was already seen before; stays seen
 
         # Unread count in extended EDR should increase by 1 (log is now unresolved)
-        resp = await auth_client.get("/logs/unread-count")
-        assert resp.json()["unread_count"] == edr_after_resolved + 1
+        resp = await auth_client.get("/logs/count?unread_only=true")
+        assert resp.json()["total_count"] == edr_after_resolved + 1
 
         resp = await auth_client.get("/logs/")
         log = next(l for l in resp.json() if l["id"] == log_id)
@@ -281,8 +281,8 @@ class TestLogSeenAndResolution:
         assert log["seen"] is True
 
         # After resolving in extended EDR, unread count should go back down
-        resp = await auth_client.get("/logs/unread-count")
-        assert resp.json()["unread_count"] == edr_after_resolved
+        resp = await auth_client.get("/logs/count?unread_only=true")
+        assert resp.json()["total_count"] == edr_after_resolved
 
         # Cleanup: restore basic EDR mode
         await auth_client.put("/auth/extended-edr", json={"extended_edr_enabled": False})
@@ -314,15 +314,15 @@ class TestLogSeenAndResolution:
         await client.post("/auth/login", json={"email": "test@example.com", "password": "TestPass123!"})
 
         # Initial unread count
-        resp = await auth_client.get("/logs/unread-count")
-        before = resp.json()["unread_count"]
+        resp = await auth_client.get("/logs/count?unread_only=true")
+        before = resp.json()["total_count"]
 
         # Mark seen (NO resolution)
         await auth_client.post(f"/logs/{log_id}/seen")
 
         # Count should decrease immediately — basic mode only tracks seen status
-        resp = await auth_client.get("/logs/unread-count")
-        assert resp.json()["unread_count"] == before - 1
+        resp = await auth_client.get("/logs/count?unread_only=true")
+        assert resp.json()["total_count"] == before - 1
 
     async def test_extended_edr_unread_count_tracks_resolution_not_seen(
         self, auth_client: AsyncClient, client: AsyncClient
@@ -353,14 +353,14 @@ class TestLogSeenAndResolution:
         # Enable extended EDR
         await auth_client.put("/auth/extended-edr", json={"extended_edr_enabled": True})
 
-        resp = await auth_client.get("/logs/unread-count")
-        before = resp.json()["unread_count"]
+        resp = await auth_client.get("/logs/count?unread_only=true")
+        before = resp.json()["total_count"]
 
         # Mark seen (NO resolution) — in extended EDR, count must NOT change
         await auth_client.post(f"/logs/{log_id}/seen")
 
-        resp = await auth_client.get("/logs/unread-count")
-        assert resp.json()["unread_count"] == before  # unchanged
+        resp = await auth_client.get("/logs/count?unread_only=true")
+        assert resp.json()["total_count"] == before  # unchanged
 
         # Now resolve — count should decrease
         await auth_client.patch(
@@ -368,8 +368,8 @@ class TestLogSeenAndResolution:
             json={"alert_resolution": "true_positive", "triage_note": ""},
         )
 
-        resp = await auth_client.get("/logs/unread-count")
-        assert resp.json()["unread_count"] == before - 1
+        resp = await auth_client.get("/logs/count?unread_only=true")
+        assert resp.json()["total_count"] == before - 1
 
         # Cleanup
         await auth_client.put("/auth/extended-edr", json={"extended_edr_enabled": False})

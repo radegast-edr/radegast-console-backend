@@ -1,9 +1,18 @@
+import enum
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Text, String
+from sqlalchemy import DateTime, ForeignKey, Integer, Text, String, Enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+
+class LogSeverity(str, enum.Enum):
+    informational = "informational"
+    low = "low"
+    medium = "medium"
+    high = "high"
+    critical = "critical"
 
 
 class Log(Base):
@@ -16,7 +25,7 @@ class Log(Base):
     time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     signature: Mapped[str | None] = mapped_column(Text, nullable=True)
-    severity: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    severity: Mapped[LogSeverity | None] = mapped_column(Enum(LogSeverity), nullable=True)
     triage_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     alert_resolution: Mapped[str | None] = mapped_column(String(50), default=None, server_default=None, nullable=True)
     device = relationship("Device", back_populates="logs")

@@ -10,6 +10,7 @@ from sqlalchemy import select, delete
 
 from app.config import settings
 import app.database
+from app.models.log import LogSeverity
 from app.models.queued_email import QueuedEmail
 from app.models.email_bulk_state import EmailBulkState
 from app.models.user import User
@@ -305,10 +306,10 @@ async def send_device_log_notification(email: str, device_name: str, device_id: 
     await send_email(email, subject, html, email_type="device_log")
 
 
-async def send_severity_changed_email(email: str, old_level: str, new_level: str):
+async def send_severity_changed_email(email: str, old_level: LogSeverity, new_level: LogSeverity):
     html = SEVERITY_CHANGED_TEMPLATE.render(
-        old_level=old_level,
-        new_level=new_level,
+        old_level=old_level.value,
+        new_level=new_level.value,
         time=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
     )
     await send_email(email, "Notification Severity Preference Changed — Radegast EDR", html, email_type="severity_changed")

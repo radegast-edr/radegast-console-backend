@@ -2,23 +2,22 @@ from datetime import datetime
 from pydantic import field_validator, BaseModel
 from typing import Any
 
-from app.schemas.common import SigmaLevel
+from app.models.log import LogSeverity
+
 
 class LogCreate(BaseModel):
     time: datetime
     content: str
     signature: str | None = None
-    severity: SigmaLevel | None = None
+    severity: LogSeverity | None = None
 
     @field_validator("severity", mode="before")
     @classmethod
-    def validate_severity(cls, v: Any) -> SigmaLevel | None:
-        if not v:
+    def validate_severity(cls, v: Any) -> LogSeverity | None:
+        try:
+            return LogSeverity(v)
+        except (ValueError, TypeError):
             return None
-        v_lower = str(v).lower()
-        if v_lower in ["informational", "low", "medium", "high", "critical"]:
-            return v_lower # type: ignore
-        return None
 
 
 class LogResponse(BaseModel):
@@ -28,7 +27,7 @@ class LogResponse(BaseModel):
     content: str
     signature: str | None
     seen: bool = False
-    severity: SigmaLevel | None = None
+    severity: LogSeverity | None = None
     alert_resolution: str | None = None
     triage_note: str | None = None
 

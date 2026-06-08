@@ -5,6 +5,7 @@ from sqlalchemy.orm import selectinload
 from app.models.team import Team
 from app.models.associations import team_users
 
+
 async def get_user_team_ids_transitive(user_id: int, db: AsyncSession) -> set[int]:
     """Get all team IDs where the user is a direct or virtual member (via managing teams)."""
     # 1. Get direct team IDs

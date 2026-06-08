@@ -7,36 +7,19 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.dependencies import get_current_device, get_current_user
-from app.utils import ensure_utc
 from app.models.associations import device_group_devices, team_device_groups, team_users
 from app.models.device import Device
 from app.models.device_group import DeviceGroup
-from app.models.log import Log, LogSeen
-from app.models.public_key import PublicKey
+from app.models.log import Log, LogSeen, LogSeverity
 from app.models.team import Team
 from app.models.user import User
-from app.schemas.log import LogCreate, LogResponse, LogCountResponse
+from app.schemas.log import LogCreate, LogResponse, LogCountResponse, LogResolveRequest
 from app.services.email import send_device_log_notification
+from app.services.logs import is_sufficient_severity, get_visible_device_ids, filter_logs
 from app.services.permissions import get_device_encryption_keys_list
+from app.utils import ensure_utc
 
 router = APIRouter(prefix="/logs", tags=["logs"])
-
-
-SIGMA_LEVELS = {
-    "informational": 1,
-    "low": 2,
-    "medium": 3,
-    "high": 4,
-    "critical": 5,
-}
-
-
-def is_sufficient_severity(alert_severity: str | None, user_level: str) -> bool:
-    if not alert_severity:
-        return True
-    alert_val = SIGMA_LEVELS.get(alert_severity.lower(), 1)
-    user_val = SIGMA_LEVELS.get(user_level.lower(), 3)
-    return alert_val >= user_val
 
 
 @router.post("/", response_model=LogResponse)
@@ -87,65 +70,6 @@ async def submit_log(
     await db.commit()
 
     return log
-
-
-@router.get("/unread-count")
-async def get_unread_logs_count(
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    # Get all teams user is in with log read permission
-    result = await db.execute(
-        select(Team)
-        .options(selectinload(Team.groups).selectinload(DeviceGroup.devices))
-        .where(Team.users.any(User.id == user.id), Team.permission_logs == "read")
-    )
-    teams = result.scalars().all()
-
-    visible_device_ids = set()
-    for team in teams:
-        for group in team.groups:
-            for device in group.devices:
-                visible_device_ids.add(device.id)
-
-    if not visible_device_ids:
-        return {"unread_count": 0}
-
-    # If the user has configured minimal alert severity, count all with lower severity as read.
-    sufficient_severities = []
-    for sev, val in SIGMA_LEVELS.items():
-        if val >= SIGMA_LEVELS.get(user.notification_level.lower(), 3):
-            sufficient_severities.extend([sev, sev.upper(), sev.capitalize()])
-
-    seen_subquery = select(LogSeen.log_id).where(LogSeen.user_id == user.id)
-    if user.extended_edr_enabled:
-        # Extended EDR: a log is "active" until it has an explicit resolution.
-        # Seen status alone does not close an alert.
-        count_query = select(func.count(Log.id)).where(
-            Log.device_id.in_(visible_device_ids),
-            or_(
-                Log.alert_resolution.is_(None),
-                Log.alert_resolution == "none"
-            ),
-            or_(
-                Log.severity.is_(None),
-                Log.severity.in_(sufficient_severities)
-            )
-        )
-    else:
-        # Basic mode: a log is "active" until the user has seen it.
-        # Resolution is not required in basic mode — seeing the alert is enough.
-        count_query = select(func.count(Log.id)).where(
-            Log.device_id.in_(visible_device_ids),
-            Log.id.not_in(seen_subquery),
-            or_(
-                Log.severity.is_(None),
-                Log.severity.in_(sufficient_severities)
-            )
-        )
-    unread_res = await db.execute(count_query)
-    count = unread_res.scalar_one()
-    return {"unread_count": count}
 
 
 @router.post("/seen/all")
@@ -222,21 +146,12 @@ async def get_logs_count(
     device_id: int | None = None,
     from_time: datetime | None = None,
     to_time: datetime | None = None,
+    min_level: LogSeverity | None = None,
+    unread_only: bool = False,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Team)
-        .options(selectinload(Team.groups).selectinload(DeviceGroup.devices))
-        .where(Team.users.any(User.id == user.id), Team.permission_logs == "read")
-    )
-    teams = result.scalars().all()
-
-    visible_device_ids = set()
-    for team in teams:
-        for group in team.groups:
-            for device in group.devices:
-                visible_device_ids.add(device.id)
+    visible_device_ids = await get_visible_device_ids(user, db)
 
     if not visible_device_ids:
         return LogCountResponse(total_count=0)
@@ -248,10 +163,26 @@ async def get_logs_count(
     else:
         query = select(func.count(Log.id)).where(Log.device_id.in_(visible_device_ids))
 
-    if from_time:
-        query = query.where(Log.time >= ensure_utc(from_time).replace(tzinfo=None))
-    if to_time:
-        query = query.where(Log.time <= ensure_utc(to_time).replace(tzinfo=None))
+    query = filter_logs(query, from_time, to_time, min_level, user)
+
+    if unread_only:
+        if user.extended_edr_enabled:
+            # Extended EDR: a log is "active" until it has an explicit resolution.
+            # Seen status alone does not close an alert.
+            query = query.where(
+                or_(
+                    Log.alert_resolution.is_(None),
+                    Log.alert_resolution == "none"
+                )
+            )
+        else:
+            # Basic mode: a log is "active" until the user has seen it.
+            # Resolution is not required in basic mode — seeing the alert is enough.
+            seen_subq = select(LogSeen.log_id).where(
+                LogSeen.user_id == user.id,
+                LogSeen.log_id == Log.id
+            ).exists()
+            query = query.where(~seen_subq)
 
     count_res = await db.execute(query)
     count = count_res.scalar_one()
@@ -263,25 +194,13 @@ async def list_logs(
     device_id: int | None = None,
     from_time: datetime | None = None,
     to_time: datetime | None = None,
+    min_level: LogSeverity | None = None,
     page: int = 1,
     limit: int = 100,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Get all teams user is in with log read permission
-    result = await db.execute(
-        select(Team)
-        .options(selectinload(Team.groups).selectinload(DeviceGroup.devices))
-        .where(Team.users.any(User.id == user.id), Team.permission_logs == "read")
-    )
-    teams = result.scalars().all()
-
-    # Collect all device IDs user can see logs for
-    visible_device_ids = set()
-    for team in teams:
-        for group in team.groups:
-            for device in group.devices:
-                visible_device_ids.add(device.id)
+    visible_device_ids = await get_visible_device_ids(user, db)
 
     if not visible_device_ids:
         return []
@@ -295,11 +214,7 @@ async def list_logs(
     else:
         query = select(Log).where(Log.device_id.in_(visible_device_ids))
 
-    if from_time:
-        query = query.where(Log.time >= ensure_utc(from_time).replace(tzinfo=None))
-    if to_time:
-        query = query.where(Log.time <= ensure_utc(to_time).replace(tzinfo=None))
-
+    query = filter_logs(query, from_time, to_time, min_level, user)
     query = query.order_by(Log.time.desc()).offset(offset).limit(limit)
 
     result = await db.execute(query)
@@ -332,8 +247,6 @@ async def list_logs(
         )
     return response_logs
 
-
-from app.schemas.log import LogResolveRequest
 
 @router.patch("/{log_id}/resolve", response_model=LogResponse)
 async def resolve_log(
@@ -407,18 +320,7 @@ async def get_log_encryption_keys_for_user(
         raise HTTPException(status_code=404, detail="Log not found")
 
     # 2. Get user's visible devices to verify permission
-    teams_res = await db.execute(
-        select(Team)
-        .options(selectinload(Team.groups).selectinload(DeviceGroup.devices))
-        .where(Team.users.any(User.id == user.id), Team.permission_logs == "read")
-    )
-    teams = teams_res.scalars().all()
-
-    visible_device_ids = set()
-    for team in teams:
-        for group in team.groups:
-            for device in group.devices:
-                visible_device_ids.add(device.id)
+    visible_device_ids = await get_visible_device_ids(user, db)
 
     if log.device_id not in visible_device_ids:
         raise HTTPException(status_code=403, detail="No log permission for this device")

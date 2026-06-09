@@ -145,8 +145,8 @@ echo "Installing radegast-agent tool..."
 sudo -u radegast-agent -i "$UV_BIN" tool install radegast-edr-agent
 
 # Verify agent executable exists
-if [ ! -f "/opt/radegast/home/.local/bin/radegast-agent" ]; then
-    echo "ERROR: radegast-agent executable not found at /opt/radegast/home/.local/bin/radegast-agent after installation." >&2
+if [ ! -f "/opt/radegast/home/.local/bin/radegast-edr-agent" ]; then
+    echo "ERROR: radegast-agent executable not found at /opt/radegast/home/.local/bin/radegast-edr-agent after installation." >&2
     exit 1
 fi
 

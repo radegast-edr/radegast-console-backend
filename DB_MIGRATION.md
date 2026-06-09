@@ -15,5 +15,6 @@ Format: `Date - Command - What was changed`
 - 2026-06-05 - `ALTER TABLE users ADD COLUMN notify_api_key_modification BOOLEAN NOT NULL DEFAULT 1;` - Added notify_api_key_modification column to users table.
 - 2026-06-05 - `ALTER TABLE api_keys ADD COLUMN last_used DATETIME;` - Added last_used column to api_keys table to track programmatic usage.
 - 2026-06-06 - `ALTER TABLE pack_versions ADD COLUMN meta JSON;` - Added meta JSON column to pack_versions table for storing pack.yml metadata.
+- 2026-06-09 - `CREATE TABLE exclusions (id INTEGER PRIMARY KEY AUTOINCREMENT, device_group_id INTEGER NOT NULL REFERENCES device_groups(id) ON DELETE CASCADE, name VARCHAR(255) NOT NULL, description TEXT, jsonata_query TEXT NOT NULL, created_at DATETIME NOT NULL);` - Added exclusions table for device group exclusion rules.
 
 

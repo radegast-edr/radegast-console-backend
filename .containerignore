@@ -46,6 +46,3 @@ scratch/
 dist/
 app/web_build/
 app/agent_config/
-
-# Documentation / misc — not needed in build context
-README.md

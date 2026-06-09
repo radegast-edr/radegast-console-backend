@@ -2,6 +2,7 @@
 name = "radegast-edr-console"
 version = "0.1.0"
 description = "Backend & WebUI for Radegast - EDR management platform"
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",

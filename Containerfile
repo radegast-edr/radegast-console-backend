@@ -28,6 +28,7 @@ COPY --from=frontend-builder /web/build ./web/build
 
 # Copy the rest of the backend files
 COPY app ./app
+ADD README.md ./
 COPY agent/config ./agent/config
 COPY hatch_build.py ./
 

@@ -117,6 +117,35 @@ async def has_device_admin_permission(device_id: int, user_id: int, db: AsyncSes
     return has_access
 
 
+async def has_team_pack_permission(team_id: int, user_id: int, db: AsyncSession) -> bool:
+    """
+    Check if user has pack write permission on team_id.
+    This checks if the team itself has permission_pack=write and the user is a member,
+    or transitively if any managing team in the chain has permission_pack=write and the user is a member.
+    """
+    user_team_ids = await get_user_team_ids_transitive(user_id, db)
+    
+    # Walk up the managing chain of team_id
+    curr_id = team_id
+    visited = set()
+    while curr_id is not None and curr_id not in visited:
+        visited.add(curr_id)
+        
+        # Load team details for this node in the chain
+        res = await db.execute(select(Team).where(Team.id == curr_id))
+        team = res.scalar_one_or_none()
+        if not team:
+            break
+            
+        # If this team in the chain has pack permission, and the user is a member (direct or virtual) of this team:
+        if team.permission_pack == "write" and curr_id in user_team_ids:
+            return True
+            
+        curr_id = team.managing_team_id
+        
+    return False
+
+
 async def get_device_encryption_keys_list(device_id: int, db: AsyncSession) -> list[dict]:
     """
     Shared utility: returns all public keys of users who have log-read permission

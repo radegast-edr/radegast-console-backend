@@ -9,9 +9,11 @@ from app.dependencies import get_current_user
 from app.models.associations import team_device_groups
 from app.models.device import Device
 from app.models.device_group import DeviceGroup
+from app.models.exclusion import Exclusion
 from app.models.team import Team
 from app.models.user import User
 from app.schemas.device import DeviceResponse
+from app.schemas.exclusion import ExclusionResponse
 from app.schemas.team import TeamResponse, DeviceGroupResponse
 from app.services.permissions import (
     get_user_team_ids_transitive,
@@ -35,6 +37,7 @@ class DeviceGroupDetail(BaseModel):
     name: str
     teams: list[TeamResponse]
     devices: list[DeviceResponse]
+    exclusions: list[ExclusionResponse]
 
 
 async def _user_has_admin(group: DeviceGroup, user: User, db: AsyncSession) -> bool:
@@ -61,6 +64,17 @@ def _group_detail(group: DeviceGroup) -> dict:
             for t in group.teams
         ],
         "devices": [{"id": d.id, "name": d.name, "signature_public_key": d.signature_public_key, "last_seen": d.last_seen} for d in group.devices],
+        "exclusions": [
+            {
+                "id": e.id,
+                "device_group_id": e.device_group_id,
+                "name": e.name,
+                "description": e.description,
+                "jsonata_query": e.jsonata_query,
+                "created_at": e.created_at,
+            }
+            for e in group.exclusions
+        ],
     }
 
 
@@ -95,6 +109,7 @@ async def get_group(
 		.options(
 			selectinload(DeviceGroup.teams).selectinload(Team.users),
 			selectinload(DeviceGroup.devices),
+			selectinload(DeviceGroup.exclusions),
 		)
 		.where(DeviceGroup.id == group_id)
 	)

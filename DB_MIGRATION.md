@@ -16,5 +16,6 @@ Format: `Date - Command - What was changed`
 - 2026-06-05 - `ALTER TABLE api_keys ADD COLUMN last_used DATETIME;` - Added last_used column to api_keys table to track programmatic usage.
 - 2026-06-06 - `ALTER TABLE pack_versions ADD COLUMN meta JSON;` - Added meta JSON column to pack_versions table for storing pack.yml metadata.
 - 2026-06-09 - `CREATE TABLE exclusions (id INTEGER PRIMARY KEY AUTOINCREMENT, device_group_id INTEGER NOT NULL REFERENCES device_groups(id) ON DELETE CASCADE, name VARCHAR(255) NOT NULL, description TEXT, jsonata_query TEXT NOT NULL, created_at DATETIME NOT NULL);` - Added exclusions table for device group exclusion rules.
+- 2026-06-10 - `CREATE INDEX IF NOT EXISTS idx_logs_device_id ON logs(device_id); CREATE INDEX IF NOT EXISTS idx_logs_time ON logs(time); CREATE INDEX IF NOT EXISTS idx_logs_severity ON logs(severity); CREATE INDEX IF NOT EXISTS idx_logs_alert_resolution ON logs(alert_resolution); CREATE INDEX IF NOT EXISTS idx_logs_device_id_time ON logs(device_id, time); CREATE INDEX IF NOT EXISTS idx_logs_time_severity ON logs(time, severity);` - Added performance indexes to logs table for frequently queried columns.
 
 

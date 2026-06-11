@@ -46,3 +46,4 @@ scratch/
 dist/
 app/web_build/
 app/agent_config/
+docs/

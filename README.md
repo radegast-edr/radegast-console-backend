@@ -1,14 +1,18 @@
 # Radegast EDR — Backend
 
-Radegast EDR Backend is the management and orchestration server for the Radegast Endpoint Detection and Response (EDR) platform. Built with FastAPI and SQLAlchemy, it handles device authorisation, user configuration packs, age-encrypted log storage, alert status tracking, and key/session management.
+Radegast EDR is a lightweight, privacy-focused Endpoint Detection and Response platform **perfect for smaller teams, home labbers, and families**. With complete end-to-end encryption (E2EE) using age encryption, your log data remains private and secure — even from the server itself. **No custom infrastructure is required**: the built-in SQLite database and self-contained deployment make it easy to get started without complex setup. You don't need to host any custom infrastructure if you don't want to.
+
+Built with FastAPI and SQLAlchemy, the backend handles device authorization, user configuration packs, encrypted log storage, alert status tracking, and key/session management.
 
 ## Features
 
-1. **Device Management**: Creating and enrolling EDR agent devices, assigning them to Groups, and generating secure authorisation tokens.
-2. **Configuration Packs**: Storing and distributing YAML/binary endpoint detection policies and versions.
-3. **Encrypted Log Storage**: Accepting EDR agent telemetry/logs encrypted using `age`, verifying signatures, and managing user "seen" states for logged alerts.
-4. **Team Collaboration**: Creating teams, managing device group permissions, and sending email notifications on critical events.
-5. **Agent Distribution**: Serving the Rustinel eBPF sensor and its installation script to enrolled devices.
+- **Device Management**: Create and enroll EDR agent devices, assign them to groups, and generate secure authorization tokens
+- **Configuration Packs**: Store and distribute YAML/binary endpoint detection policies and versions
+- **End-to-End Encrypted Log Storage**: All logs are encrypted on the device using `age` before transmission; the server stores only encrypted data it cannot read
+- **Team Collaboration**: Create teams, manage device group permissions, and receive email notifications for critical events
+- **Zero-Trust Architecture**: All data is encrypted client-side; the server never has access to your private keys or decrypted log contents
+- **Self-Contained Deployment**: Built-in SQLite database means no external database server required
+- **Agent Distribution**: Serve the Rustinel eBPF sensor and provide single-command installation for Linux and Windows
 
 ---
 
@@ -32,7 +36,7 @@ podman run -d \
   -v radegast_db:/app/data/db \
   -v radegast_uploads:/app/data/uploads \
   -v radegast_releases:/app/data/releases \
-  docker.io/radegast-edr/console:latest
+  docker.io/radegastedr/console:latest
 ```
 
 ### Using podman-compose

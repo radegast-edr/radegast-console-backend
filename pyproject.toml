@@ -36,9 +36,16 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "pytest-xdist>=3.6.0",
 ]
+docs = [
+    "Sphinx>=7.0.0",
+    "sphinx-rtd-theme>=2.0.0",
+    "myst-parser>=2.0.0",
+    "linkify>=1.0.0",
+]
 
 [dependency-groups]
 dev = ["radegast-edr-console[dev]"]
+docs = ["radegast-edr-console[docs]"]
 
 [build-system]
 requires = ["hatchling"]

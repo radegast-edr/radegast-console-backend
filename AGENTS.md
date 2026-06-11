@@ -81,6 +81,37 @@ When adding any new configuration value:
 
 If a database migration is needed (e.g. schema changes), the local SQLite database must be migrated, and the `DB_MIGRATION.md` file must be updated with the details of the migration in the format: `date - command - what was changed`.
 
+## Documentation
+
+The project documentation is built using Sphinx with MyST Parser for Markdown support and hosted on ReadTheDocs.
+
+### Updating Documentation
+
+When modifying documentation files in `docs/` or `README.md`:
+
+1. **Local rebuild** to verify changes:
+
+```bash
+cd docs
+uv pip install -r requirements.txt
+LC_ALL=C uv run sphinx-build -b html . _build/html
+```
+
+2. **Check for warnings** - The build should complete with no warnings.
+
+3. **Verify links** - Open `_build/html/index.html` in a browser to test navigation.
+
+4. **Update README.md** - If documentation changes affect the main README, update it as well.
+
+### Documentation Files
+
+- User guides: `docs/user-guides/*.md` (Markdown format, parsed by MyST)
+- Configuration: `docs/conf.py` (Sphinx settings)
+- Main index: `docs/index.rst` (Table of contents)
+- ReadTheDocs config: `.readthedocs.yaml`
+
+**IMPORTANT**: Always rebuild and verify documentation before committing changes.
+
 ## UI Styling & Theme Guidelines
 
 - **Theme Compatibility**: Do not hardcode light or dark background/text classes (e.g., `bg-light`, `text-dark`) on dynamic/interactive components. Use theme-aware Bootstrap classes instead (e.g., `bg-body-secondary`, `text-body`).

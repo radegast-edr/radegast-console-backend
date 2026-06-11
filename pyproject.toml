@@ -44,8 +44,62 @@ docs = [
 ]
 
 [dependency-groups]
-dev = ["radegast-edr-console[dev]"]
+dev = [
+    "radegast-edr-console[dev]",
+    "ruff>=0.15.16",
+]
 docs = ["radegast-edr-console[docs]"]
+
+[tool.ruff]
+line-length = 140
+target-version = "py311"
+include = ["app/**/*.py", "tests/**/*.py"]
+exclude = [".venv", "migrations", "node_modules", "web/"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "FAST", # FastAPI-specific rules
+    "ASYNC", # Async best practices
+    "S",   # flake8-bandit (security)
+    "Q",   # flake8-quotes
+    "TID", # flake8-tidy-imports
+    "PLE", # Pylint errors
+    "PLW", # Pylint warnings
+    "RUF", # Ruff-specific rules
+]
+ignore = [
+    "E501",  # Line too long (handled by formatter)
+    "S101",  # Use of `assert` detected
+    "Q000",  # Single quotes found but double quotes preferred (we use single quotes)
+    "FAST002",  # FastAPI dependency without Annotated (temporarily disabled - too many to fix)
+    "B008",  # Do not perform function call Depends in argument defaults (temporarily disabled)
+]
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]  # Allow assert in tests
+"app/config.py" = ["S105", "S108"]  # Allow hardcoded password and temp file in config
+"app/main.py" = ["ASYNC240"]  # Allow Path.mkdir in lifespan (startup code)
+"app/routers/install.py" = ["ASYNC240"]  # Allow Path.resolve/is_relative_to (synchronous path checks)
+"app/services/email.py" = ["S311"]  # Allow random.randint for non-crypto sleep delays
+"app/routers/packs.py" = ["S311"]  # Allow random.randint for non-crypto pack_id generation
+"app/cli.py" = ["S603", "S607"]  # Allow subprocess calls with shutil.which (trusted commands)
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
 
 [build-system]
 requires = ["hatchling"]

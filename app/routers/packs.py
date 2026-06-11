@@ -1,7 +1,7 @@
 import random
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,14 +18,14 @@ from app.models.team import Team
 from app.models.user import User, UserRole
 from app.schemas.pack import (
     PackCreate,
-    PackUpdate,
     PackEnabledCreate,
     PackEnabledResponse,
     PackResponse,
+    PackUpdate,
     PackVersionResponse,
 )
-from app.services.packs import get_upload_path, save_upload, delete_pack_files
 from app.services.pack_validation import validate_zip_contents
+from app.services.packs import delete_pack_files, get_upload_path, save_upload
 from app.services.permissions import (
     get_user_team_ids_transitive,
     is_user_member_of_team_transitive,
@@ -37,12 +37,7 @@ router = APIRouter(prefix="/packs", tags=["packs"])
 
 async def get_latest_version(pack: Pack, db: AsyncSession) -> PackVersion | None:
     """Get the latest version for a pack."""
-    result = await db.execute(
-        select(PackVersion)
-        .where(PackVersion.pack_id == pack.id)
-        .order_by(PackVersion.released.desc())
-        .limit(1)
-    )
+    result = await db.execute(select(PackVersion).where(PackVersion.pack_id == pack.id).order_by(PackVersion.released.desc()).limit(1))
     return result.scalar_one_or_none()
 
 
@@ -60,10 +55,7 @@ async def check_pack_write_permission(pack: Pack, user: User, db: AsyncSession) 
 
 
 @router.get("/", response_model=list[PackResponse])
-async def list_packs(
-    request: Request,
-    db: AsyncSession = Depends(get_db)
-):
+async def list_packs(request: Request, db: AsyncSession = Depends(get_db)):
     user = None
     try:
         session = await get_session(request, db)
@@ -77,18 +69,13 @@ async def list_packs(
         packs = [p for p in packs if not p.teams]
     else:
         user_team_ids = await get_user_team_ids_transitive(user.id, db)
-        packs = [
-            p for p in packs
-            if not p.teams or p.creator_id == user.id or any(t.id in user_team_ids for t in p.teams)
-        ]
-    
+        packs = [p for p in packs if not p.teams or p.creator_id == user.id or any(t.id in user_team_ids for t in p.teams)]
+
     # Load latest versions for all packs
     pack_ids = [p.id for p in packs]
     if pack_ids:
         result = await db.execute(
-            select(PackVersion)
-            .where(PackVersion.pack_id.in_(pack_ids))
-            .order_by(PackVersion.pack_id, PackVersion.released.desc())
+            select(PackVersion).where(PackVersion.pack_id.in_(pack_ids)).order_by(PackVersion.pack_id, PackVersion.released.desc())
         )
         versions = result.scalars().all()
         # Group by pack_id and get the latest
@@ -98,7 +85,7 @@ async def list_packs(
                 latest_map[v.pack_id] = v
     else:
         latest_map = {}
-    
+
     return [
         PackResponse(
             id=p.id,
@@ -107,7 +94,7 @@ async def list_packs(
             description=p.description,
             creator_id=p.creator_id,
             team_ids=p.team_ids,
-            latest=latest_map.get(p.id)
+            latest=latest_map.get(p.id),
         )
         for p in packs
     ]
@@ -121,7 +108,10 @@ async def create_pack(
 ):
     if not data.team_ids:
         if user.role not in (UserRole.maintainer, UserRole.admin):
-            raise HTTPException(status_code=403, detail="Maintainer or admin role required to create public packs")
+            raise HTTPException(
+                status_code=403,
+                detail="Maintainer or admin role required to create public packs",
+            )
     else:
         for team_id in data.team_ids:
             res_t = await db.execute(select(Team).where(Team.id == team_id))
@@ -131,19 +121,25 @@ async def create_pack(
             if user.role not in (UserRole.admin, UserRole.maintainer):
                 is_member = await is_user_member_of_team_transitive(team_id, user.id, db)
                 if not (is_member and team.permission_pack == "write"):
-                    raise HTTPException(status_code=403, detail=f"No pack write permission on team {team_id}")
+                    raise HTTPException(
+                        status_code=403,
+                        detail=f"No pack write permission on team {team_id}",
+                    )
 
     # Validate or generate pack_id
     if not data.pack_id:
-        pack_id = re.sub(r'[^a-zA-Z0-9_-]+', '-', data.name.lower()).strip('-')
+        pack_id = re.sub(r"[^a-zA-Z0-9_-]+", "-", data.name.lower()).strip("-")
         if not pack_id:
             pack_id = "pack"
     else:
         pack_id = data.pack_id
 
     # Validate characters
-    if not re.match(r'^[a-zA-Z0-9_-]+$', pack_id):
-        raise HTTPException(status_code=400, detail="pack_id must only contain alphanumeric characters, dashes, and underscores")
+    if not re.match(r"^[a-zA-Z0-9_-]+$", pack_id):
+        raise HTTPException(
+            status_code=400,
+            detail="pack_id must only contain alphanumeric characters, dashes, and underscores",
+        )
 
     # Check for uniqueness
     existing_id = await db.execute(select(Pack).where(Pack.pack_id == pack_id))
@@ -157,7 +153,12 @@ async def create_pack(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Pack with this name already exists")
 
-    pack = Pack(name=data.name, pack_id=pack_id, description=data.description, creator_id=user.id)
+    pack = Pack(
+        name=data.name,
+        pack_id=pack_id,
+        description=data.description,
+        creator_id=user.id,
+    )
     if data.team_ids:
         res_teams = await db.execute(select(Team).where(Team.id.in_(data.team_ids)))
         pack.teams = res_teams.scalars().all()
@@ -165,9 +166,7 @@ async def create_pack(
     db.add(pack)
     await db.commit()
     await db.refresh(pack)
-    result_ref = await db.execute(
-        select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack.id)
-    )
+    result_ref = await db.execute(select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack.id))
     pack = result_ref.scalar_one()
     return PackResponse(
         id=pack.id,
@@ -176,16 +175,12 @@ async def create_pack(
         description=pack.description,
         creator_id=pack.creator_id,
         team_ids=pack.team_ids,
-        latest=None
+        latest=None,
     )
 
 
 @router.get("/{pack_id}", response_model=PackResponse)
-async def get_pack(
-    pack_id: int,
-    request: Request,
-    db: AsyncSession = Depends(get_db)
-):
+async def get_pack(pack_id: int, request: Request, db: AsyncSession = Depends(get_db)):
     user = None
     try:
         session = await get_session(request, db)
@@ -193,9 +188,7 @@ async def get_pack(
     except HTTPException:
         pass
 
-    result = await db.execute(
-        select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack_id)
-    )
+    result = await db.execute(select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack_id))
     pack = result.scalar_one_or_none()
     if not pack:
         raise HTTPException(status_code=404, detail="Pack not found")
@@ -209,7 +202,7 @@ async def get_pack(
 
     # Get latest version
     latest = await get_latest_version(pack, db)
-    
+
     return PackResponse(
         id=pack.id,
         pack_id=pack.pack_id,
@@ -217,7 +210,7 @@ async def get_pack(
         description=pack.description,
         creator_id=pack.creator_id,
         team_ids=pack.team_ids,
-        latest=latest
+        latest=latest,
     )
 
 
@@ -228,9 +221,7 @@ async def update_pack(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack_id)
-    )
+    result = await db.execute(select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack_id))
     pack = result.scalar_one_or_none()
     if not pack:
         raise HTTPException(status_code=404, detail="Pack not found")
@@ -247,8 +238,11 @@ async def update_pack(
 
     if data.pack_id is not None:
         if data.pack_id != pack.pack_id:
-            if not re.match(r'^[a-zA-Z0-9_-]+$', data.pack_id):
-                raise HTTPException(status_code=400, detail="pack_id must only contain alphanumeric characters, dashes, and underscores")
+            if not re.match(r"^[a-zA-Z0-9_-]+$", data.pack_id):
+                raise HTTPException(
+                    status_code=400,
+                    detail="pack_id must only contain alphanumeric characters, dashes, and underscores",
+                )
             existing = await db.execute(select(Pack).where(Pack.pack_id == data.pack_id))
             if existing.scalar_one_or_none():
                 raise HTTPException(status_code=400, detail="Pack with this pack_id already exists")
@@ -260,7 +254,10 @@ async def update_pack(
     if data.team_ids is not None:
         if not data.team_ids:
             if user.role not in (UserRole.admin, UserRole.maintainer):
-                raise HTTPException(status_code=403, detail="Maintainer or admin role required to make pack public")
+                raise HTTPException(
+                    status_code=403,
+                    detail="Maintainer or admin role required to make pack public",
+                )
             pack.teams = []
         else:
             for team_id in data.team_ids:
@@ -271,21 +268,22 @@ async def update_pack(
                 if user.role not in (UserRole.admin, UserRole.maintainer):
                     is_member = await is_user_member_of_team_transitive(team_id, user.id, db)
                     if not (is_member and team.permission_pack == "write"):
-                        raise HTTPException(status_code=403, detail=f"No pack write permission on team {team_id}")
-            
+                        raise HTTPException(
+                            status_code=403,
+                            detail=f"No pack write permission on team {team_id}",
+                        )
+
             res_teams = await db.execute(select(Team).where(Team.id.in_(data.team_ids)))
             pack.teams = res_teams.scalars().all()
 
     await db.commit()
     await db.refresh(pack)
-    result_ref = await db.execute(
-        select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack.id)
-    )
+    result_ref = await db.execute(select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack.id))
     pack = result_ref.scalar_one()
-    
+
     # Get latest version
     latest = await get_latest_version(pack, db)
-    
+
     return PackResponse(
         id=pack.id,
         pack_id=pack.pack_id,
@@ -293,16 +291,12 @@ async def update_pack(
         description=pack.description,
         creator_id=pack.creator_id,
         team_ids=pack.team_ids,
-        latest=latest
+        latest=latest,
     )
 
 
 @router.get("/{pack_id}/versions", response_model=list[PackVersionResponse])
-async def list_versions(
-    pack_id: int,
-    request: Request,
-    db: AsyncSession = Depends(get_db)
-):
+async def list_versions(pack_id: int, request: Request, db: AsyncSession = Depends(get_db)):
     user = None
     try:
         session = await get_session(request, db)
@@ -310,9 +304,7 @@ async def list_versions(
     except HTTPException:
         pass
 
-    result_p = await db.execute(
-        select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack_id)
-    )
+    result_p = await db.execute(select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack_id))
     pack = result_p.scalar_one_or_none()
     if not pack:
         raise HTTPException(status_code=404, detail="Pack not found")
@@ -324,9 +316,7 @@ async def list_versions(
         if pack.creator_id != user.id and not any(t.id in user_team_ids for t in pack.teams):
             raise HTTPException(status_code=403, detail="Access denied")
 
-    result = await db.execute(
-        select(PackVersion).where(PackVersion.pack_id == pack_id).order_by(PackVersion.released.desc())
-    )
+    result = await db.execute(select(PackVersion).where(PackVersion.pack_id == pack_id).order_by(PackVersion.released.desc()))
     return result.scalars().all()
 
 
@@ -339,9 +329,7 @@ async def upload_version(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack_id)
-    )
+    result = await db.execute(select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack_id))
     pack = result.scalar_one_or_none()
     if not pack:
         raise HTTPException(status_code=404, detail="Pack not found")
@@ -353,16 +341,14 @@ async def upload_version(
     if not re.match(r"^\d+\.\d+\.\d+$", version):
         raise HTTPException(
             status_code=400,
-            detail="Invalid version format. Version must be in major.minor.patch format (e.g., 1.0.0)"
+            detail="Invalid version format. Version must be in major.minor.patch format (e.g., 1.0.0)",
         )
     new_ver = tuple(map(int, version.split(".")))
     if not pack:
         raise HTTPException(status_code=404, detail="Pack not found")
 
     # Check version doesn't already exist and is strictly higher than all existing versions
-    existing_versions = await db.execute(
-        select(PackVersion).where(PackVersion.pack_id == pack_id)
-    )
+    existing_versions = await db.execute(select(PackVersion).where(PackVersion.pack_id == pack_id))
     for pv in existing_versions.scalars().all():
         if not re.match(r"^\d+\.\d+\.\d+$", pv.version):
             continue  # skip validation if existing version in database doesn't follow semver (e.g. legacy)
@@ -370,12 +356,12 @@ async def upload_version(
         if new_ver <= exist_ver:
             raise HTTPException(
                 status_code=400,
-                detail=f"Uploaded version {version} must be higher than existing version {pv.version}"
+                detail=f"Uploaded version {version} must be higher than existing version {pv.version}",
             )
 
     # Read and validate the zip file contents
     content = await file.read()
-    
+
     # Validate the zip contents
     validation_result = await validate_zip_contents(content)
     if not validation_result["valid"]:
@@ -383,10 +369,7 @@ async def upload_version(
         # Return a properly formatted error response
         raise HTTPException(
             status_code=400,
-            detail={
-                "message": "Pack validation failed",
-                "errors": error_details
-            }
+            detail={"message": "Pack validation failed", "errors": error_details},
         )
 
     filename = "pack.zip"
@@ -395,8 +378,14 @@ async def upload_version(
 
     # Save meta from pack.yml if present
     meta = validation_result.get("meta")
-    
-    pv = PackVersion(pack_id=pack_id, version=version, zip_path=path, release_notes=release_notes, meta=meta)
+
+    pv = PackVersion(
+        pack_id=pack_id,
+        version=version,
+        zip_path=path,
+        release_notes=release_notes,
+        meta=meta,
+    )
     db.add(pv)
     await db.flush()
 
@@ -404,7 +393,7 @@ async def upload_version(
     result_pe = await db.execute(
         select(PackEnabled)
         .join(PackVersion, PackEnabled.pack_version_id == PackVersion.id)
-        .where(PackVersion.pack_id == pack_id, PackEnabled.autoupdate == True)
+        .where(PackVersion.pack_id == pack_id, PackEnabled.autoupdate)
     )
     for pe in result_pe.scalars().all():
         pe.pack_version_id = pv.id
@@ -424,9 +413,7 @@ async def enable_pack_for_group(
 ):
     # Check user has write permission on at least one team linked to this group
     result = await db.execute(
-        select(DeviceGroup)
-        .options(selectinload(DeviceGroup.teams).selectinload(Team.users))
-        .where(DeviceGroup.id == group_id)
+        select(DeviceGroup).options(selectinload(DeviceGroup.teams).selectinload(Team.users)).where(DeviceGroup.id == group_id)
     )
     group = result.scalar_one_or_none()
     if not group:
@@ -441,9 +428,7 @@ async def enable_pack_for_group(
         raise HTTPException(status_code=403, detail="No pack write permission for this group")
 
     # Verify pack version exists
-    result = await db.execute(
-        select(PackVersion).options(selectinload(PackVersion.pack)).where(PackVersion.id == data.pack_version_id)
-    )
+    result = await db.execute(select(PackVersion).options(selectinload(PackVersion.pack)).where(PackVersion.id == data.pack_version_id))
     pv = result.scalar_one_or_none()
     if not pv:
         raise HTTPException(status_code=404, detail="Pack version not found")
@@ -475,9 +460,7 @@ async def list_enabled_packs(
 ):
     # Check user has at least read permission
     result = await db.execute(
-        select(DeviceGroup)
-        .options(selectinload(DeviceGroup.teams).selectinload(Team.users))
-        .where(DeviceGroup.id == group_id)
+        select(DeviceGroup).options(selectinload(DeviceGroup.teams).selectinload(Team.users)).where(DeviceGroup.id == group_id)
     )
     group = result.scalar_one_or_none()
     if not group:
@@ -520,9 +503,7 @@ async def disable_pack(
 ):
     # Check write permission
     result = await db.execute(
-        select(DeviceGroup)
-        .options(selectinload(DeviceGroup.teams).selectinload(Team.users))
-        .where(DeviceGroup.id == group_id)
+        select(DeviceGroup).options(selectinload(DeviceGroup.teams).selectinload(Team.users)).where(DeviceGroup.id == group_id)
     )
     group = result.scalar_one_or_none()
     if not group:
@@ -536,9 +517,7 @@ async def disable_pack(
     if not has_write:
         raise HTTPException(status_code=403, detail="No pack write permission")
 
-    result = await db.execute(
-        select(PackEnabled).where(PackEnabled.id == enabled_id, PackEnabled.device_group_id == group_id)
-    )
+    result = await db.execute(select(PackEnabled).where(PackEnabled.id == enabled_id, PackEnabled.device_group_id == group_id))
     pe = result.scalar_one_or_none()
     if not pe:
         raise HTTPException(status_code=404, detail="Enabled pack not found")
@@ -554,9 +533,7 @@ async def delete_pack(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack_id)
-    )
+    result = await db.execute(select(Pack).options(selectinload(Pack.teams)).where(Pack.id == pack_id))
     pack = result.scalar_one_or_none()
     if not pack:
         raise HTTPException(status_code=404, detail="Pack not found")
@@ -599,14 +576,16 @@ async def device_available_packs(
     packs = []
     for group in device.groups:
         for pe in group.packs:
-            packs.append({
-                "enabled_id": pe.id,
-                "pack_id": pe.pack_version.pack.pack_id,
-                "pack_name": pe.pack_version.pack.name,
-                "version": pe.pack_version.version,
-                "pack_version_id": pe.pack_version_id,
-                "autoupdate": pe.autoupdate,
-            })
+            packs.append(
+                {
+                    "enabled_id": pe.id,
+                    "pack_id": pe.pack_version.pack.pack_id,
+                    "pack_name": pe.pack_version.pack.name,
+                    "version": pe.pack_version.version,
+                    "pack_version_id": pe.pack_version_id,
+                    "autoupdate": pe.autoupdate,
+                }
+            )
 
     return packs
 
@@ -618,9 +597,7 @@ async def download_pack_for_user(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(PackVersion)
-        .options(selectinload(PackVersion.pack).selectinload(Pack.teams))
-        .where(PackVersion.id == version_id)
+        select(PackVersion).options(selectinload(PackVersion.pack).selectinload(Pack.teams)).where(PackVersion.id == version_id)
     )
     pv = result.scalar_one_or_none()
     if not pv:
@@ -642,9 +619,7 @@ async def download_pack(
 ):
 
     result = await db.execute(
-        select(PackVersion)
-        .options(selectinload(PackVersion.pack).selectinload(Pack.teams))
-        .where(PackVersion.id == version_id)
+        select(PackVersion).options(selectinload(PackVersion.pack).selectinload(Pack.teams)).where(PackVersion.id == version_id)
     )
     pv = result.scalar_one_or_none()
     if not pv:
@@ -652,9 +627,7 @@ async def download_pack(
 
     if pv.pack.teams:
         result_d = await db.execute(
-            select(Device)
-            .options(selectinload(Device.groups).selectinload(DeviceGroup.teams))
-            .where(Device.id == device.id)
+            select(Device).options(selectinload(Device.groups).selectinload(DeviceGroup.teams)).where(Device.id == device.id)
         )
         dev = result_d.scalar_one()
         device_team_ids = {t.id for g in dev.groups for t in g.teams}

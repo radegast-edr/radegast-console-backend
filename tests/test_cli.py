@@ -62,7 +62,7 @@ def test_cli_run_without_build_prompt_yes(mock_sub_run, mock_uvicorn_run):
             cli()
 
             # Verify npm run build was called
-            mock_sub_run.assert_any_call(["npm", "run", "build"], cwd=ANY, check=True)
+            mock_sub_run.assert_any_call([ANY, "run", "build"], cwd=ANY, check=True)
             # Verify uvicorn was run
             mock_uvicorn_run.assert_called_once_with(
                 "app.main:app", host="127.0.0.1", port=8500, workers=4
@@ -92,7 +92,7 @@ def test_cli_run_without_build_prompt_no(mock_sub_run, mock_uvicorn_run):
 
             # Verify npm run build was NOT called
             for call in mock_sub_run.call_args_list:
-                assert "npm" not in call[0][0]
+                assert "run" not in call[0] or "build" not in call[0]
             # Verify uvicorn was run
             mock_uvicorn_run.assert_called_once_with(
                 "app.main:app", host="127.0.0.1", port=8501, workers=4
@@ -104,4 +104,4 @@ def test_cli_run_without_build_prompt_no(mock_sub_run, mock_uvicorn_run):
 def test_cli_build(mock_which, mock_sub_run):
     with patch("sys.argv", ["radegast-edr-console", "build"]):
         cli()
-        mock_sub_run.assert_called_once_with(["uv", "build"], check=True)
+        mock_sub_run.assert_called_once_with(["/usr/bin/uv", "build"], check=True)

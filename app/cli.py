@@ -4,6 +4,8 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Literal, Union, get_args, get_origin
+
 import uvicorn
 
 from app.config import Settings
@@ -28,7 +30,6 @@ def build_parser() -> argparse.ArgumentParser:
         # Determine the type, choices, and defaults
         annotation = field.annotation
         # We need to resolve Optional / Union types to their main type
-        from typing import get_origin, get_args, Union
         import types
 
         origin = get_origin(annotation)
@@ -49,7 +50,6 @@ def build_parser() -> argparse.ArgumentParser:
             )
         else:
             # Determine choices from Literal
-            from typing import Literal
             choices = None
             if origin is Literal:
                 choices = get_args(annotation)
@@ -91,13 +91,7 @@ def cli():
         if not has_web_pkg and not has_web_git:
             if sys.stdin.isatty():
                 try:
-                    response = (
-                        input(
-                            "Frontend web build not found. Would you like to build the frontend now? [y/N]: "
-                        )
-                        .strip()
-                        .lower()
-                    )
+                    response = input("Frontend web build not found. Would you like to build the frontend now? [y/N]: ").strip().lower()
                 except (KeyboardInterrupt, EOFError):
                     print("\nBuild aborted.")
                     sys.exit(1)
@@ -109,7 +103,7 @@ def cli():
                         sys.exit(1)
                     try:
                         # Build the web project
-                        subprocess.run(["npm", "run", "build"], cwd=web_dir, check=True)
+                        subprocess.run([shutil.which("npm"), "run", "build"], cwd=web_dir, check=True)
                         print("Frontend built successfully.")
                     except subprocess.CalledProcessError as e:
                         print(f"Error: npm build failed: {e}")
@@ -120,13 +114,12 @@ def cli():
                 print("Warning: Frontend web build not found (and stdin is not a TTY). Proceeding without UI.")
 
         # 2. Process configuration overrides.
-        from app.config import settings
-
-        for name, field in Settings.model_fields.items():
+        settings_instance = Settings()
+        for name, _field in Settings.model_fields.items():
             val = getattr(args, name)
             if val is not None:
                 # Update settings in-place
-                setattr(settings, name, val)
+                setattr(settings_instance, name, val)
                 # Set environment variable so any uvicorn workers inherit it
                 env_key = f"RADEGAST_{name.upper()}"
                 if isinstance(val, bool):
@@ -142,9 +135,9 @@ def cli():
         print("Building PyPI package (frontend build will be executed automatically by Hatch)...")
         try:
             if shutil.which("uv"):
-                subprocess.run(["uv", "build"], check=True)
+                subprocess.run([shutil.which("uv"), "build"], check=True)
             elif shutil.which("hatch"):
-                subprocess.run(["hatch", "build"], check=True)
+                subprocess.run([shutil.which("hatch"), "build"], check=True)
             else:
                 subprocess.run([sys.executable, "-m", "build"], check=True)
             print("Package built successfully.")

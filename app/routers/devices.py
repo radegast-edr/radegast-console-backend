@@ -21,9 +21,9 @@ from app.schemas.device import (
 from app.services.auth import generate_token, hash_token
 from app.services.permissions import (
     get_user_team_ids_transitive,
-    is_user_member_of_team_transitive,
-    has_team_admin_permission,
     has_device_admin_permission,
+    has_team_admin_permission,
+    is_user_member_of_team_transitive,
 )
 from app.utils import utc_now
 
@@ -37,9 +37,7 @@ async def create_device(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(DeviceGroup)
-        .options(selectinload(DeviceGroup.teams).selectinload(Team.users))
-        .where(DeviceGroup.id == data.group_id)
+        select(DeviceGroup).options(selectinload(DeviceGroup.teams).selectinload(Team.users)).where(DeviceGroup.id == data.group_id)
     )
     group = result.scalar_one_or_none()
     if not group:
@@ -60,9 +58,7 @@ async def create_device(
     )
     db.add(device)
     await db.flush()
-    await db.execute(
-        insert(device_group_devices).values(device_group_id=group.id, device_id=device.id)
-    )
+    await db.execute(insert(device_group_devices).values(device_group_id=group.id, device_id=device.id))
     await db.commit()
     await db.refresh(device)
 
@@ -83,9 +79,7 @@ async def list_devices(
     if not team_ids:
         return []
     result = await db.execute(
-        select(Team)
-        .options(selectinload(Team.groups).selectinload(DeviceGroup.devices))
-        .where(Team.id.in_(list(team_ids)))
+        select(Team).options(selectinload(Team.groups).selectinload(DeviceGroup.devices)).where(Team.id.in_(list(team_ids)))
     )
     teams = result.scalars().all()
     devices = set()
@@ -154,7 +148,10 @@ async def remove_device_from_group(
 ):
     result = await db.execute(
         select(DeviceGroup)
-        .options(selectinload(DeviceGroup.teams).selectinload(Team.users), selectinload(DeviceGroup.devices))
+        .options(
+            selectinload(DeviceGroup.teams).selectinload(Team.users),
+            selectinload(DeviceGroup.devices),
+        )
         .where(DeviceGroup.id == group_id)
     )
     group = result.scalar_one_or_none()
@@ -169,9 +166,7 @@ async def remove_device_from_group(
     if not has_access:
         raise HTTPException(status_code=403, detail="No admin permission on any team for this group")
 
-    result = await db.execute(
-        select(Device).options(selectinload(Device.groups)).where(Device.id == device_id)
-    )
+    result = await db.execute(select(Device).options(selectinload(Device.groups)).where(Device.id == device_id))
     device = result.scalar_one_or_none()
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
@@ -193,7 +188,10 @@ async def add_device_to_group(
     # Verify user has admin access to a team owning this group
     result = await db.execute(
         select(DeviceGroup)
-        .options(selectinload(DeviceGroup.teams).selectinload(Team.users), selectinload(DeviceGroup.devices))
+        .options(
+            selectinload(DeviceGroup.teams).selectinload(Team.users),
+            selectinload(DeviceGroup.devices),
+        )
         .where(DeviceGroup.id == group_id)
     )
     group = result.scalar_one_or_none()

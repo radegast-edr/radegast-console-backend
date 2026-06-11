@@ -1,18 +1,18 @@
-import random
-
-import aiosmtplib
 import asyncio
+import random
 from datetime import timedelta
 from email.mime.text import MIMEText
+
+import aiosmtplib
 from filelock import Timeout
 from jinja2 import Template
-from sqlalchemy import select, delete
+from sqlalchemy import delete, select
 
-from app.config import settings
 import app.database
+from app.config import settings
+from app.models.email_bulk_state import EmailBulkState
 from app.models.log import LogSeverity
 from app.models.queued_email import QueuedEmail
-from app.models.email_bulk_state import EmailBulkState
 from app.models.user import User
 from app.services.auth import create_signed_token
 from app.utils import ensure_utc, get_worker_lock, utc_now
@@ -156,7 +156,7 @@ API_KEYS_TOGGLED_TEMPLATE = Template("""
 
 def get_web_ui_base() -> str:
     if settings.web_ui_url:
-        return settings.web_ui_url.rstrip('/')
+        return settings.web_ui_url.rstrip("/")
     return f"{settings.base_url.rstrip('/')}/ui"
 
 
@@ -164,10 +164,19 @@ EMAIL_TYPE_TO_PREFERENCE = {
     "login": ("notify_login", "New login alerts"),
     "new_keys": ("notify_new_keys", "New encryption keys added"),
     "recovery": ("notify_recovery_used", "Recovery key usage alerts"),
-    "keys_transferred": ("notify_keys_transferred", "Encryption keys transferred alerts"),
+    "keys_transferred": (
+        "notify_keys_transferred",
+        "Encryption keys transferred alerts",
+    ),
     "device_log": ("notify_device_log", "New device alerts"),
-    "downtime_maintenance": ("notify_downtime_maintenance", "Platform downtime and maintenance emails"),
-    "api_key_modification": ("notify_api_key_modification", "API key modification alerts"),
+    "downtime_maintenance": (
+        "notify_downtime_maintenance",
+        "Platform downtime and maintenance emails",
+    ),
+    "api_key_modification": (
+        "notify_api_key_modification",
+        "API key modification alerts",
+    ),
 }
 
 
@@ -180,21 +189,22 @@ async def send_email_direct(to: str, subject: str, html_body: str, email_type: s
     if user and email_type in EMAIL_TYPE_TO_PREFERENCE:
         pref_field, pref_name = EMAIL_TYPE_TO_PREFERENCE[email_type]
         expires_at = (utc_now() + timedelta(weeks=2)).isoformat()
-        token = create_signed_token({
-            "user_id": user.id,
-            "expires_at": expires_at,
-            "preference_field": pref_field
-        }, salt="unsubscribe")
+        token = create_signed_token(
+            {
+                "user_id": user.id,
+                "expires_at": expires_at,
+                "preference_field": pref_field,
+            },
+            salt="unsubscribe",
+        )
         ui_base = get_web_ui_base()
         unsubscribe_url = f"{ui_base}/unsubscribe?token={token}"
         api_unsubscribe_url = f"{settings.base_url.rstrip('/')}/auth/unsubscribe?token={token}"
-        
-        footer_html = f"""
-<div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #666; text-align: center;">
-    If you no longer wish to receive {pref_name.lower()}, you can 
+
+        footer_html = f"""<div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #666; text-align: center;">
+    If you no longer wish to receive {pref_name.lower()}, you can
     <a href="{unsubscribe_url}" style="color: #0066cc; text-decoration: none;">unsubscribe here</a>.
-</div>
-"""
+</div>"""
         if "</body>" in html_body:
             html_body = html_body.replace("</body>", f"{footer_html}</body>")
         elif "</BODY>" in html_body:
@@ -290,7 +300,12 @@ async def send_keys_transferred_notification(email: str, ip: str):
         time=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
         ip=ip,
     )
-    await send_email(email, "Encryption Keys Transferred — Radegast EDR", html, email_type="keys_transferred")
+    await send_email(
+        email,
+        "Encryption Keys Transferred — Radegast EDR",
+        html,
+        email_type="keys_transferred",
+    )
 
 
 async def send_device_log_notification(email: str, device_name: str, device_id: int, severity: str | None = None):
@@ -302,7 +317,9 @@ async def send_device_log_notification(email: str, device_name: str, device_id: 
         base_url=ui_base,
         severity=severity,
     )
-    subject = f"New Alert [{severity.upper()}] from {device_name} — Radegast EDR" if severity else f"New Alert from {device_name} — Radegast EDR"
+    subject = (
+        f"New Alert [{severity.upper()}] from {device_name} — Radegast EDR" if severity else f"New Alert from {device_name} — Radegast EDR"
+    )
     await send_email(email, subject, html, email_type="device_log")
 
 
@@ -312,7 +329,12 @@ async def send_severity_changed_email(email: str, old_level: LogSeverity, new_le
         new_level=new_level.value,
         time=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
     )
-    await send_email(email, "Notification Severity Preference Changed — Radegast EDR", html, email_type="severity_changed")
+    await send_email(
+        email,
+        "Notification Severity Preference Changed — Radegast EDR",
+        html,
+        email_type="severity_changed",
+    )
 
 
 async def send_notification_disabled_alert(email: str, disabled_features: list[str]):
@@ -320,7 +342,12 @@ async def send_notification_disabled_alert(email: str, disabled_features: list[s
         features=disabled_features,
         time=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
     )
-    await send_email(email, "Notification Settings Disabled — Radegast EDR", html, email_type="notification_disabled")
+    await send_email(
+        email,
+        "Notification Settings Disabled — Radegast EDR",
+        html,
+        email_type="notification_disabled",
+    )
 
 
 async def send_api_key_created_notification(email: str, name: str, scopes: dict):
@@ -338,7 +365,12 @@ async def send_api_key_created_notification(email: str, name: str, scopes: dict)
         scopes=formatted_scopes,
         time=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
     )
-    await send_email(email, f"New API Key Created: {name} — Radegast EDR", html, email_type="api_key_modification")
+    await send_email(
+        email,
+        f"New API Key Created: {name} — Radegast EDR",
+        html,
+        email_type="api_key_modification",
+    )
 
 
 async def send_api_keys_toggled_notification(email: str, enabled: bool):
@@ -347,7 +379,12 @@ async def send_api_keys_toggled_notification(email: str, enabled: bool):
         status=status_str,
         time=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
     )
-    await send_email(email, f"API Keys Support {status_str.capitalize()} — Radegast EDR", html, email_type="api_key_modification")
+    await send_email(
+        email,
+        f"API Keys Support {status_str.capitalize()} — Radegast EDR",
+        html,
+        email_type="api_key_modification",
+    )
 
 
 async def send_password_reset_email(email: str, new_password: str):
@@ -363,6 +400,7 @@ async def send_password_reset_email(email: str, new_password: str):
 
 def combine_html_bodies(html_bodies: list[str]) -> str:
     import re
+
     extracted_bodies = []
     for html in html_bodies:
         match = re.search(r"<body>(.*?)</body>", html, re.DOTALL | re.IGNORECASE)
@@ -386,9 +424,7 @@ async def process_email_queue():
     now = utc_now()
 
     async with app.database.async_session() as session:
-        result = await session.execute(
-            select(QueuedEmail).order_by(QueuedEmail.created_at.asc())
-        )
+        result = await session.execute(select(QueuedEmail).order_by(QueuedEmail.created_at.asc()))
         queued_emails = result.scalars().all()
 
         if not queued_emails:
@@ -405,7 +441,7 @@ async def process_email_queue():
             result_state = await session.execute(
                 select(EmailBulkState).where(
                     EmailBulkState.email_to == email_to,
-                    EmailBulkState.email_type == email_type
+                    EmailBulkState.email_type == email_type,
                 )
             )
             state = result_state.scalar_one_or_none()
@@ -414,7 +450,7 @@ async def process_email_queue():
                     email_to=email_to,
                     email_type=email_type,
                     last_sent_at=None,
-                    sent_count=0
+                    sent_count=0,
                 )
                 session.add(state)
 
@@ -473,11 +509,8 @@ async def process_email_queue():
                 state.last_sent_at = now
 
                 ids_to_delete = [e.id for e in emails]
-                await session.execute(
-                    delete(QueuedEmail).where(QueuedEmail.id.in_(ids_to_delete))
-                )
+                await session.execute(delete(QueuedEmail).where(QueuedEmail.id.in_(ids_to_delete)))
                 await session.commit()
-
 
 
 async def process_email_queue_loop():

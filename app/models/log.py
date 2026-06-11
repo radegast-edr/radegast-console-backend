@@ -1,13 +1,13 @@
-import enum
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from enum import StrEnum
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Text, String, Enum, Index
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
 
-class LogSeverity(str, enum.Enum):
+class LogSeverity(StrEnum):
     informational = "informational"
     low = "low"
     medium = "medium"
@@ -19,9 +19,7 @@ class Log(Base):
     __tablename__ = "logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    device_id: Mapped[int] = mapped_column(
-        ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True
-    )
+    device_id: Mapped[int] = mapped_column(ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
     time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     signature: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -39,13 +37,9 @@ class Log(Base):
 class LogSeen(Base):
     __tablename__ = "logs_seen"
 
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
-    )
-    log_id: Mapped[int] = mapped_column(
-        ForeignKey("logs.id", ondelete="CASCADE"), primary_key=True
-    )
-    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    log_id: Mapped[int] = mapped_column(ForeignKey("logs.id", ondelete="CASCADE"), primary_key=True)
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
 
     user = relationship("User")
     log = relationship("Log")

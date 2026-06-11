@@ -42,13 +42,15 @@ def _list_all_releases() -> list[dict]:
                 zip_path = arch_dir / "rustinel.zip"
                 if zip_path.exists():
                     stat = zip_path.stat()
-                    releases.append({
-                        "version": version,
-                        "os": os_name,
-                        "arch": arch,
-                        "size_bytes": stat.st_size,
-                        "uploaded_at": stat.st_mtime,
-                    })
+                    releases.append(
+                        {
+                            "version": version,
+                            "os": os_name,
+                            "arch": arch,
+                            "size_bytes": stat.st_size,
+                            "uploaded_at": stat.st_mtime,
+                        }
+                    )
     return releases
 
 
@@ -68,7 +70,10 @@ def _validate_release_params(version: str, os_name: str, arch: str, is_upload: b
     arch = arch.lower()
 
     if os_name not in VALID_OS:
-        raise HTTPException(status_code=err_code, detail=f"OS must be one of: {', '.join(sorted(VALID_OS))}")
+        raise HTTPException(
+            status_code=err_code,
+            detail=f"OS must be one of: {', '.join(sorted(VALID_OS))}",
+        )
 
     # Validate specific arch allowed for each OS
     if os_name == "linux" and arch not in {"amd64", "arm64"}:
@@ -101,7 +106,7 @@ async def upload_release(
     if dest.exists():
         raise HTTPException(
             status_code=409,
-            detail=f"Release {version}/{os_name}/{arch} already exists. Delete it first."
+            detail=f"Release {version}/{os_name}/{arch} already exists. Delete it first.",
         )
 
     content = await file.read()
@@ -162,4 +167,8 @@ async def download_release(
     zip_path = _releases_dir() / version / os_name / arch / "rustinel.zip"
     if not zip_path.exists():
         raise HTTPException(status_code=404, detail="Release not found")
-    return FileResponse(zip_path, media_type="application/zip", filename=f"rustinel-{version}-{os_name}-{arch}.zip")
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename=f"rustinel-{version}-{os_name}-{arch}.zip",
+    )

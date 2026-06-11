@@ -34,9 +34,9 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         client_port = request.client.port if request.client else 0
         http_version = request.scope.get("http_version", "1.1")
         session_label = get_request_session_label(request)
-        
+
         response = await call_next(request)
-        
+
         logger.info(
             "%s:%s - %s %s HTTP/%s %s - %s",
             client_host,

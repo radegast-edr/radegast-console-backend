@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlalchemy import select, func, or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -13,9 +13,13 @@ from app.models.device_group import DeviceGroup
 from app.models.log import Log, LogSeen, LogSeverity
 from app.models.team import Team
 from app.models.user import User
-from app.schemas.log import LogCreate, LogResponse, LogCountResponse, LogResolveRequest
+from app.schemas.log import LogCountResponse, LogCreate, LogResolveRequest, LogResponse
 from app.services.email import send_device_log_notification
-from app.services.logs import is_sufficient_severity, get_visible_device_ids, filter_logs
+from app.services.logs import (
+    filter_logs,
+    get_visible_device_ids,
+    is_sufficient_severity,
+)
 from app.services.permissions import get_device_encryption_keys_list
 from app.utils import ensure_utc
 
@@ -64,7 +68,11 @@ async def submit_log(
         else:
             if u.notify_device_log:
                 background_tasks.add_task(
-                    send_device_log_notification, u.email, device.name, device.id, log.severity
+                    send_device_log_notification,
+                    u.email,
+                    device.name,
+                    device.id,
+                    log.severity,
                 )
 
     await db.commit()
@@ -95,18 +103,16 @@ async def mark_all_logs_seen(
         return {"message": "No logs to mark as seen"}
 
     # Fetch all log IDs visible to this user
-    logs_res = await db.execute(
-        select(Log.id).where(Log.device_id.in_(visible_device_ids))
-    )
+    # In extended EDR mode, only mark logs without a resolution to avoid overwriting
+    query = select(Log.id).where(Log.device_id.in_(visible_device_ids))
+    if user.extended_edr_enabled:
+        query = query.where(Log.alert_resolution is None)
+    logs_res = await db.execute(query)
     visible_log_ids = logs_res.scalars().all()
 
     if visible_log_ids:
         # Find which ones are already marked seen
-        existing_res = await db.execute(
-            select(LogSeen.log_id).where(
-                LogSeen.user_id == user.id, LogSeen.log_id.in_(visible_log_ids)
-            )
-        )
+        existing_res = await db.execute(select(LogSeen.log_id).where(LogSeen.user_id == user.id, LogSeen.log_id.in_(visible_log_ids)))
         existing_seen_ids = set(existing_res.scalars().all())
 
         to_add_ids = set(visible_log_ids) - existing_seen_ids
@@ -130,9 +136,7 @@ async def mark_log_seen(
     if not log:
         raise HTTPException(status_code=404, detail="Log not found")
 
-    seen_result = await db.execute(
-        select(LogSeen).where(LogSeen.user_id == user.id, LogSeen.log_id == log_id)
-    )
+    seen_result = await db.execute(select(LogSeen).where(LogSeen.user_id == user.id, LogSeen.log_id == log_id))
     if not seen_result.scalar_one_or_none():
         log_seen = LogSeen(user_id=user.id, log_id=log_id)
         db.add(log_seen)
@@ -169,19 +173,11 @@ async def get_logs_count(
         if user.extended_edr_enabled:
             # Extended EDR: a log is "active" until it has an explicit resolution.
             # Seen status alone does not close an alert.
-            query = query.where(
-                or_(
-                    Log.alert_resolution.is_(None),
-                    Log.alert_resolution == "none"
-                )
-            )
+            query = query.where(or_(Log.alert_resolution.is_(None), Log.alert_resolution == "none"))
         else:
             # Basic mode: a log is "active" until the user has seen it.
             # Resolution is not required in basic mode — seeing the alert is enough.
-            seen_subq = select(LogSeen.log_id).where(
-                LogSeen.user_id == user.id,
-                LogSeen.log_id == Log.id
-            ).exists()
+            seen_subq = select(LogSeen.log_id).where(LogSeen.user_id == user.id, LogSeen.log_id == Log.id).exists()
             query = query.where(~seen_subq)
 
     count_res = await db.execute(query)
@@ -206,7 +202,7 @@ async def list_logs(
         return []
 
     offset = (page - 1) * limit
-    
+
     if device_id:
         if device_id not in visible_device_ids:
             raise HTTPException(status_code=403, detail="No log permission for this device")
@@ -223,14 +219,12 @@ async def list_logs(
     seen_log_ids = set()
     if logs:
         log_ids = [log.id for log in logs]
-        seen_res = await db.execute(
-            select(LogSeen.log_id).where(LogSeen.user_id == user.id, LogSeen.log_id.in_(log_ids))
-        )
+        seen_res = await db.execute(select(LogSeen.log_id).where(LogSeen.user_id == user.id, LogSeen.log_id.in_(log_ids)))
         seen_log_ids = set(seen_res.scalars().all())
 
     response_logs = []
     for log in logs:
-        seen = (log.id in seen_log_ids)
+        seen = log.id in seen_log_ids
 
         response_logs.append(
             LogResponse(
@@ -242,7 +236,7 @@ async def list_logs(
                 seen=seen,
                 severity=log.severity,
                 alert_resolution=log.alert_resolution,
-                triage_note=log.triage_note
+                triage_note=log.triage_note,
             )
         )
     return response_logs
@@ -268,9 +262,7 @@ async def resolve_log(
     # should NOT mark the log as seen so it remains visually "active" until triaged.
     has_real_resolution = data.alert_resolution and data.alert_resolution != "none"
     if not user.extended_edr_enabled or has_real_resolution:
-        seen_result = await db.execute(
-            select(LogSeen).where(LogSeen.user_id == user.id, LogSeen.log_id == log_id)
-        )
+        seen_result = await db.execute(select(LogSeen).where(LogSeen.user_id == user.id, LogSeen.log_id == log_id))
         if not seen_result.scalar_one_or_none():
             log_seen = LogSeen(user_id=user.id, log_id=log_id)
             db.add(log_seen)
@@ -279,9 +271,7 @@ async def resolve_log(
     await db.refresh(log)
 
     # Determine seen status for response
-    seen_result = await db.execute(
-        select(LogSeen).where(LogSeen.user_id == user.id, LogSeen.log_id == log_id)
-    )
+    seen_result = await db.execute(select(LogSeen).where(LogSeen.user_id == user.id, LogSeen.log_id == log_id))
     seen = seen_result.scalar_one_or_none() is not None
 
     return LogResponse(
@@ -293,7 +283,7 @@ async def resolve_log(
         seen=seen,
         severity=log.severity,
         alert_resolution=log.alert_resolution,
-        triage_note=log.triage_note
+        triage_note=log.triage_note,
     )
 
 

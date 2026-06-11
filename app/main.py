@@ -3,15 +3,28 @@ from collections import defaultdict
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
-import uvicorn
 
 from app.config import settings
 from app.database import init_db
 from app.middleware.request_logging import RequestLoggingMiddleware
-from app.routers import admin, auth, apikeys, devices, exclusions, groups, install, logs, packs, releases, teams, ui
+from app.routers import (
+    admin,
+    apikeys,
+    auth,
+    devices,
+    exclusions,
+    groups,
+    install,
+    logs,
+    packs,
+    releases,
+    teams,
+    ui,
+)
 from app.services.email import process_email_queue_loop
 
 
@@ -58,17 +71,18 @@ app.add_middleware(
 api_version = "1"
 
 # Routers
-app.include_router(prefix=f"/api/v{api_version}", router=auth.router)
-app.include_router(prefix=f"/api/v{api_version}", router=teams.router)
-app.include_router(prefix=f"/api/v{api_version}", router=devices.router)
-app.include_router(prefix=f"/api/v{api_version}", router=install.install_router)
-app.include_router(prefix=f"/api/v{api_version}", router=groups.router)
-app.include_router(prefix=f"/api/v{api_version}", router=exclusions.router)
-app.include_router(prefix=f"/api/v{api_version}", router=packs.router)
-app.include_router(prefix=f"/api/v{api_version}", router=apikeys.router)
-app.include_router(prefix=f"/api/v{api_version}", router=logs.router)
-app.include_router(prefix=f"/api/v{api_version}", router=admin.router)
-app.include_router(prefix=f"/api/v{api_version}", router=releases.router)
+api_prefix = f"/api/v{api_version}"
+app.include_router(prefix=api_prefix, router=auth.router)
+app.include_router(prefix=api_prefix, router=teams.router)
+app.include_router(prefix=api_prefix, router=devices.router)
+app.include_router(prefix=api_prefix, router=install.install_router)
+app.include_router(prefix=api_prefix, router=groups.router)
+app.include_router(prefix=api_prefix, router=exclusions.router)
+app.include_router(prefix=api_prefix, router=packs.router)
+app.include_router(prefix=api_prefix, router=apikeys.router)
+app.include_router(prefix=api_prefix, router=logs.router)
+app.include_router(prefix=api_prefix, router=admin.router)
+app.include_router(prefix=api_prefix, router=releases.router)
 app.include_router(prefix="/ui", router=ui.router)
 app.add_middleware(RequestLoggingMiddleware)
 
@@ -88,12 +102,12 @@ async def favicon() -> FileResponse:
     return FileResponse(file_favicon, media_type="image/x-icon")
 
 
-@app.get('/')
+@app.get("/")
 async def root() -> RedirectResponse:
     return RedirectResponse(url="/ui/", status_code=302)
 
 
-@app.get('/.well-known/security.txt')
+@app.get("/.well-known/security.txt")
 async def security_txt() -> FileResponse:
     file_security = Path(__file__).parent.parent / "security.txt"
     if not file_security.exists():

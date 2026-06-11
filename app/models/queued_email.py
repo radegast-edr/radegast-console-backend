@@ -1,5 +1,6 @@
-from datetime import datetime, timezone
-from sqlalchemy import Integer, String, Text, DateTime
+from datetime import UTC, datetime
+
+from sqlalchemy import DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -13,6 +14,4 @@ class QueuedEmail(Base):
     email_type: Mapped[str] = mapped_column(String(50), nullable=False)
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
     html_body: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)

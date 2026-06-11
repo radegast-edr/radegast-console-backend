@@ -1,7 +1,7 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.dependencies import get_current_user
@@ -28,12 +28,7 @@ async def list_all_users(
     db: AsyncSession = Depends(get_db),
 ):
     _require_admin(user)
-    result = await db.execute(
-        select(User).options(
-            selectinload(User.hardware_tokens),
-            selectinload(User.public_keys)
-        )
-    )
+    result = await db.execute(select(User).options(selectinload(User.hardware_tokens), selectinload(User.public_keys)))
     users = result.scalars().all()
 
     from app.config import settings
@@ -158,19 +153,19 @@ async def reset_user_password(
 ):
     _require_admin(user)
 
-    result = await db.execute(
-        select(User).options(selectinload(User.hardware_tokens)).where(User.id == user_id)
-    )
+    result = await db.execute(select(User).options(selectinload(User.hardware_tokens)).where(User.id == user_id))
     target = result.scalar_one_or_none()
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
 
     import secrets
     import string
+
     alphabet = string.ascii_letters + string.digits
     new_password = "".join(secrets.choice(alphabet) for _ in range(12))
 
     from app.services.auth import hash_password
+
     target.password = hash_password(new_password)
     target.password_change = utc_now()
 
@@ -181,7 +176,7 @@ async def reset_user_password(
     await db.commit()
 
     from app.services.email import send_password_reset_email
+
     background_tasks.add_task(send_password_reset_email, target.email, new_password)
 
     return {"message": "User password reset successfully and MFA cleared"}
-

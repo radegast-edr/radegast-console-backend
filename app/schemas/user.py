@@ -77,7 +77,6 @@ class PublicKeyAddRequest(BaseModel):
     name: str | None = None
 
 
-
 # Key transfer schemas
 class KeyTransferInitiateRequest(BaseModel):
     receiver_age_public_key: str  # receiver's ephemeral AGE public key
@@ -100,6 +99,7 @@ class KeyTransferCompleteRequest(BaseModel):
 
 class KeySecondarySetupRequest(BaseModel):
     """Add a secondary (recovery) keypair alongside the existing main keypair."""
+
     public_key: str
     encrypted_private_key: str  # private key AGE-encrypted with the matching recovery key
 
@@ -187,4 +187,3 @@ class MfaSettingsResponse(BaseModel):
 
 class UnsubscribeRequest(BaseModel):
     token: str
-

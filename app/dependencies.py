@@ -1,5 +1,6 @@
 import hashlib
 import time
+from logging import getLogger
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import APIKeyHeader, OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -35,11 +36,11 @@ def user_has_required_mfa_setup(user: User, required_level: str) -> bool:
     has_token = False
     try:
         has_token = bool(user.hardware_tokens and len(user.hardware_tokens) > 0)
-    except Exception:
-        pass
+    except Exception as e:
+        getLogger(__name__).debug(f"Error checking hardware tokens: {e}")
     if req_val == 1:  # otp
         return has_otp or has_token
-    elif req_val == 2:  # hardware_token/token
+    if req_val == 2:  # hardware_token/token
         return has_token
     return True
 
@@ -51,7 +52,7 @@ def check_api_key_permission(session: SessionData, path: str, method: str):
     normalized_path = path.lower()
     for prefix in ("/api/v1", "/api/v2"):
         if normalized_path.startswith(prefix):
-            normalized_path = normalized_path[len(prefix):]
+            normalized_path = normalized_path[len(prefix) :]
 
     scope = None
     if normalized_path.startswith("/devices"):
@@ -68,7 +69,7 @@ def check_api_key_permission(session: SessionData, path: str, method: str):
     if scope is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="This scope is not yet supported by the API"
+            detail="This scope is not yet supported by the API",
         )
 
     # Check scopes dict
@@ -100,7 +101,7 @@ def check_api_key_permission(session: SessionData, path: str, method: str):
     if required_permission not in allowed:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"API key does not have '{required_permission}' permission for scope '{scope}'"
+            detail=f"API key does not have '{required_permission}' permission for scope '{scope}'",
         )
 
 
@@ -121,9 +122,7 @@ async def get_session_api_key(request: Request, db: AsyncSession) -> SessionData
         return session_data
 
     h = hashlib.sha256(api_key.encode()).hexdigest()
-    result = await db.execute(
-        select(APIKey).options(selectinload(APIKey.user)).where(APIKey.key_hash == h)
-    )
+    result = await db.execute(select(APIKey).options(selectinload(APIKey.user)).where(APIKey.key_hash == h))
     key_record = result.scalar_one_or_none()
     if key_record:
         key_record.last_used = utc_now()
@@ -133,7 +132,10 @@ async def get_session_api_key(request: Request, db: AsyncSession) -> SessionData
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
 
     if not key_record.user.api_keys_enabled:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API keys are disabled for this user")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API keys are disabled for this user",
+        )
 
     if key_record.expires_at and key_record.expires_at < utc_now():
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key has expired")
@@ -198,13 +200,11 @@ async def get_current_user(
 ) -> User:
     if session.scope != "user":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User session required")
-    result = await db.execute(
-        select(User).options(selectinload(User.hardware_tokens)).where(User.id == session.id)
-    )
+    result = await db.execute(select(User).options(selectinload(User.hardware_tokens)).where(User.id == session.id))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    
+
     # Check session invalidation only for non-API keys
     if session.api_key_id is None:
         if ensure_utc(user.password_change).timestamp() > session.issued_at.timestamp():
@@ -224,11 +224,7 @@ async def get_current_user(
 
         # Bypass enforcement for MFA setup, verification, profile, and logout
         path = request.url.path
-        is_mfa_path = (
-            "/auth/mfa" in path
-            or "/auth/logout" in path
-            or "/auth/me" in path
-        )
+        is_mfa_path = "/auth/mfa" in path or "/auth/logout" in path or "/auth/me" in path
 
         if not is_mfa_path:
             # Only enforce if they actually have the required MFA configured
@@ -300,7 +296,7 @@ def check_rate_limit(request: Request, key: str, limit: int, window: float):
         wait_time = int(window - (now - timestamps[0]))
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Too many attempts. Please try again in {wait_time} seconds."
+            detail=f"Too many attempts. Please try again in {wait_time} seconds.",
         )
     rate_limits[key].append(now)
 

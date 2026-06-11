@@ -11,11 +11,7 @@ class DeviceGroup(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
 
-    devices = relationship(
-        "Device", secondary=device_group_devices, back_populates="groups"
-    )
-    teams = relationship(
-        "Team", secondary=team_device_groups, back_populates="groups"
-    )
+    devices = relationship("Device", secondary=device_group_devices, back_populates="groups")
+    teams = relationship("Team", secondary=team_device_groups, back_populates="groups")
     packs = relationship("PackEnabled", back_populates="device_group", cascade="all, delete-orphan")
     exclusions = relationship("Exclusion", back_populates="device_group", cascade="all, delete-orphan")

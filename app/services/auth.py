@@ -20,6 +20,7 @@ def generate_token() -> str:
 
 def hash_token(token: str) -> str:
     import hashlib
+
     return hashlib.sha256(token.encode()).hexdigest()
 
 
@@ -42,4 +43,3 @@ def load_signed_token_without_age(token: str, salt: str = "default") -> dict | N
         return _serializer.loads(token, salt=salt)
     except Exception:
         return None
-

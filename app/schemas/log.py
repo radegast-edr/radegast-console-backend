@@ -1,6 +1,7 @@
 from datetime import datetime
-from pydantic import field_validator, BaseModel
 from typing import Any
+
+from pydantic import BaseModel, field_validator
 
 from app.models.log import LogSeverity
 

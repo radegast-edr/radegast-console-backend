@@ -1,22 +1,24 @@
 from datetime import datetime
-from typing import TypeVar
 from types import MappingProxyType
+from typing import TypeVar
 
-from sqlalchemy import select, Select, or_
+from sqlalchemy import Select, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models import User, Team, DeviceGroup
-from app.models.log import LogSeverity, Log
+from app.models import DeviceGroup, Team, User
+from app.models.log import Log, LogSeverity
 from app.utils import ensure_utc
 
-SEVERITY_TO_INT: MappingProxyType[LogSeverity, int] = MappingProxyType({
-    LogSeverity.informational: 1,
-    LogSeverity.low: 2,
-    LogSeverity.medium: 3,
-    LogSeverity.high: 4,
-    LogSeverity.critical: 5,
-})
+SEVERITY_TO_INT: MappingProxyType[LogSeverity, int] = MappingProxyType(
+    {
+        LogSeverity.informational: 1,
+        LogSeverity.low: 2,
+        LogSeverity.medium: 3,
+        LogSeverity.high: 4,
+        LogSeverity.critical: 5,
+    }
+)
 
 T = TypeVar("T")
 

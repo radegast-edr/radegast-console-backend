@@ -1,6 +1,6 @@
 import os
-from pathlib import Path
 import re
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, PlainTextResponse
@@ -73,7 +73,7 @@ async def download_agent(
     if not zip_path.exists():
         raise HTTPException(
             status_code=404,
-            detail=f"Agent release not found for version={version}, os={os_name}, arch={arch_name}"
+            detail=f"Agent release not found for version={version}, os={os_name}, arch={arch_name}",
         )
 
     return FileResponse(zip_path, media_type="application/zip", filename="rustinel.zip")
@@ -89,24 +89,23 @@ def build_base64_write_and_decode_block(
     progress_label: str = "Decoding script",
     delete_base64_file: bool = False,
 ) -> str:
-    chunks = [base64_str[i:i+line_size] for i in range(0, len(base64_str), line_size)]
+    chunks = [base64_str[i : i + line_size] for i in range(0, len(base64_str), line_size)]
     block = ""
-    block += f'set {base64_file_env_var}={base64_file_path}\r\n'
-    block += f'set {output_file_env_var}={output_file_path}\r\n'
+    block += f"set {base64_file_env_var}={base64_file_path}\r\n"
+    block += f"set {output_file_env_var}={output_file_path}\r\n"
     if delete_base64_file:
         block += f'if exist "%{base64_file_env_var}%" del "%{base64_file_env_var}%"\r\n'
-    
+
     for i, chunk in enumerate(chunks):
         op = ">" if i == 0 else ">>"
         current = i + 1
         total = len(chunks)
         percent = int((current / total) * 100)
         block += f'(echo {chunk}){op}"%{base64_file_env_var}%"\r\n'
-        block += f'echo {progress_label}: {current}/{total} ({percent}%)\r\n'
-        
+        block += f"echo {progress_label}: {current}/{total} ({percent}%)\r\n"
+
     block += f'powershell -Command "$b = Get-Content -Path $env:{base64_file_env_var} -Raw; $x = [System.Convert]::FromBase64String($b); [System.IO.File]::WriteAllBytes($env:{output_file_env_var}, $x)"\r\n'
     return block
-
 
 
 @install_router.get("/install")
@@ -115,7 +114,10 @@ async def get_install_script(
 ):
     os_name = os_param.lower()
     if os_name not in ("linux", "windows"):
-        raise HTTPException(status_code=400, detail="Only linux and windows OS are supported for automatic installation")
+        raise HTTPException(
+            status_code=400,
+            detail="Only linux and windows OS are supported for automatic installation",
+        )
 
     backend_url = settings.base_url.rstrip("/")
 
@@ -126,10 +128,7 @@ async def get_install_script(
         install_script_tmpl = AGENT_CONFIG_DIR / "linux" / "install.sh"
 
         if not (
-            config_tmpl.exists()
-            and rustinel_service_tmpl.exists()
-            and radegast_service_tmpl.exists()
-            and install_script_tmpl.exists()
+            config_tmpl.exists() and rustinel_service_tmpl.exists() and radegast_service_tmpl.exists() and install_script_tmpl.exists()
         ):
             raise HTTPException(status_code=500, detail="Installation templates missing on server")
 
@@ -141,11 +140,8 @@ async def get_install_script(
         # Prefill service
         radegast_service_content = radegast_service_content.replace(
             "{{RADEGAST_AGENT_PATH}}",
-            "/opt/radegast/home/.local/bin/radegast-edr-agent"
-        ).replace(
-            "{{RADEGAST_AGENT_BACKEND_URL}}",
-            backend_url
-        )
+            "/opt/radegast/home/.local/bin/radegast-edr-agent",
+        ).replace("{{RADEGAST_AGENT_BACKEND_URL}}", backend_url)
 
         # Render install script via Jinja2
         template = Template(install_script_content)
@@ -163,12 +159,11 @@ async def get_install_script(
         install_service_tmpl = AGENT_CONFIG_DIR / "windows" / "install-service.py"
         install_bat_tmpl = AGENT_CONFIG_DIR / "windows" / "install.bat"
 
-        if not (
-            config_tmpl.exists()
-            and install_service_tmpl.exists()
-            and install_bat_tmpl.exists()
-        ):
-            raise HTTPException(status_code=500, detail="Windows installation templates missing on server")
+        if not (config_tmpl.exists() and install_service_tmpl.exists() and install_bat_tmpl.exists()):
+            raise HTTPException(
+                status_code=500,
+                detail="Windows installation templates missing on server",
+            )
 
         config_content = config_tmpl.read_text(encoding="utf-8")
         install_service_content = install_service_tmpl.read_text(encoding="utf-8")
@@ -176,6 +171,7 @@ async def get_install_script(
 
         # Encode config to base64 to put it in install-service.py
         import base64
+
         config_b64 = base64.b64encode(config_content.encode("utf-8")).decode("utf-8")
 
         # Render install-service.py using Jinja2
@@ -197,14 +193,11 @@ async def get_install_script(
             output_file_path="%INSTALL_SCRIPT%",
             line_size=7000,
             progress_label="Decoding script",
-            delete_base64_file=False
+            delete_base64_file=False,
         )
 
         # Render install.bat using Jinja2 template
         bat_template = Template(install_bat_content)
-        rendered_bat = bat_template.render(
-            install_service_block=block.strip()
-        )
+        rendered_bat = bat_template.render(install_service_block=block.strip())
 
         return PlainTextResponse(rendered_bat, media_type="text/plain")
-

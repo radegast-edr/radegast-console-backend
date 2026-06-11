@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -65,8 +65,7 @@ async def list_all_exclusions(
 
     # Get all device groups accessible to user's teams
     result = await db.execute(
-        select(DeviceGroup)
-        .where(DeviceGroup.teams.any(Team.id.in_(team_ids)))  # type: ignore
+        select(DeviceGroup).where(DeviceGroup.teams.any(Team.id.in_(team_ids)))  # type: ignore
     )
     groups = result.scalars().all()
 
@@ -76,9 +75,7 @@ async def list_all_exclusions(
     group_ids = [g.id for g in groups]
 
     # Get all exclusions for these groups
-    result = await db.execute(
-        select(Exclusion).where(Exclusion.device_group_id.in_(group_ids))
-    )
+    result = await db.execute(select(Exclusion).where(Exclusion.device_group_id.in_(group_ids)))
     exclusions = result.scalars().all()
 
     return [
@@ -101,11 +98,7 @@ async def list_group_exclusions(
     db: AsyncSession = Depends(get_db),
 ):
     """List all exclusions for a specific device group."""
-    result = await db.execute(
-        select(DeviceGroup)
-        .options(selectinload(DeviceGroup.teams))
-        .where(DeviceGroup.id == group_id)
-    )
+    result = await db.execute(select(DeviceGroup).options(selectinload(DeviceGroup.teams)).where(DeviceGroup.id == group_id))
     group = result.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
@@ -113,9 +106,7 @@ async def list_group_exclusions(
     if not await _user_can_view_group(group, user, db):
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    result = await db.execute(
-        select(Exclusion).where(Exclusion.device_group_id == group_id)
-    )
+    result = await db.execute(select(Exclusion).where(Exclusion.device_group_id == group_id))
     exclusions = result.scalars().all()
 
     return [
@@ -139,11 +130,7 @@ async def create_exclusion(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new exclusion for a device group."""
-    result = await db.execute(
-        select(DeviceGroup)
-        .options(selectinload(DeviceGroup.teams))
-        .where(DeviceGroup.id == group_id)
-    )
+    result = await db.execute(select(DeviceGroup).options(selectinload(DeviceGroup.teams)).where(DeviceGroup.id == group_id))
     group = result.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
@@ -183,9 +170,7 @@ async def get_device_exclusions(
     """
     # Get all groups this device belongs to
     result = await db.execute(
-        select(DeviceGroup)
-        .options(selectinload(DeviceGroup.teams))
-        .where(DeviceGroup.devices.any(Device.id == device.id))  # type: ignore
+        select(DeviceGroup).options(selectinload(DeviceGroup.teams)).where(DeviceGroup.devices.any(Device.id == device.id))  # type: ignore
     )
     groups = result.scalars().all()
 
@@ -195,23 +180,23 @@ async def get_device_exclusions(
     group_ids = [g.id for g in groups]
 
     # Get all exclusions for these groups
-    result = await db.execute(
-        select(Exclusion).where(Exclusion.device_group_id.in_(group_ids))
-    )
+    result = await db.execute(select(Exclusion).where(Exclusion.device_group_id.in_(group_ids)))
     exclusions = result.scalars().all()
 
     # Return as a simple array of {name, jsonata_query} for the device to use
-    return JSONResponse(content={
-        "exclusions": [
-            {
-                "id": e.id,
-                "name": e.name,
-                "jsonata_query": e.jsonata_query,
-                "device_group_id": e.device_group_id,
-            }
-            for e in exclusions
-        ]
-    })
+    return JSONResponse(
+        content={
+            "exclusions": [
+                {
+                    "id": e.id,
+                    "name": e.name,
+                    "jsonata_query": e.jsonata_query,
+                    "device_group_id": e.device_group_id,
+                }
+                for e in exclusions
+            ]
+        }
+    )
 
 
 @router.delete("/{exclusion_id}", response_model=MessageResponse)
@@ -221,19 +206,14 @@ async def delete_exclusion(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete an exclusion."""
-    result = await db.execute(
-        select(Exclusion)
-        .where(Exclusion.id == exclusion_id)
-    )
+    result = await db.execute(select(Exclusion).where(Exclusion.id == exclusion_id))
     exclusion = result.scalar_one_or_none()
     if not exclusion:
         raise HTTPException(status_code=404, detail="Exclusion not found")
 
     # Get the group to check permissions
     result = await db.execute(
-        select(DeviceGroup)
-        .options(selectinload(DeviceGroup.teams))
-        .where(DeviceGroup.id == exclusion.device_group_id)
+        select(DeviceGroup).options(selectinload(DeviceGroup.teams)).where(DeviceGroup.id == exclusion.device_group_id)
     )
     group = result.scalar_one_or_none()
     if not group:
@@ -255,18 +235,14 @@ async def get_exclusion(
     db: AsyncSession = Depends(get_db),
 ):
     """Get a specific exclusion by ID."""
-    result = await db.execute(
-        select(Exclusion).where(Exclusion.id == exclusion_id)
-    )
+    result = await db.execute(select(Exclusion).where(Exclusion.id == exclusion_id))
     exclusion = result.scalar_one_or_none()
     if not exclusion:
         raise HTTPException(status_code=404, detail="Exclusion not found")
 
     # Check if user can view the group
     result = await db.execute(
-        select(DeviceGroup)
-        .options(selectinload(DeviceGroup.teams))
-        .where(DeviceGroup.id == exclusion.device_group_id)
+        select(DeviceGroup).options(selectinload(DeviceGroup.teams)).where(DeviceGroup.id == exclusion.device_group_id)
     )
     group = result.scalar_one_or_none()
     if not group:

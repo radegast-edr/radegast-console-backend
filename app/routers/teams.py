@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -7,31 +8,30 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.associations import team_device_groups, team_users
 from app.models.device_group import DeviceGroup
+from app.models.pack import Pack
 from app.models.team import Team
 from app.models.user import User
-from app.models.pack import Pack
-from pydantic import BaseModel
+from app.schemas.device import DeviceResponse
 from app.schemas.team import (
     DeviceGroupCreate,
     DeviceGroupResponse,
     TeamCreate,
     TeamInvite,
+    TeamMemberResponse,
     TeamResponse,
     TeamUpdate,
-    TeamMemberResponse,
 )
-from app.schemas.user import UserResponse
-from app.schemas.device import DeviceResponse
+from app.services.email import send_invite_email
+from app.services.permissions import (
+    get_user_team_ids_transitive,
+    has_team_admin_permission,
+    is_user_member_of_team_transitive,
+)
+
 
 class MessageResponse(BaseModel):
     message: str
-from app.services.email import send_invite_email
 
-from app.services.permissions import (
-    get_user_team_ids_transitive,
-    is_user_member_of_team_transitive,
-    has_team_admin_permission,
-)
 
 router = APIRouter(prefix="/teams", tags=["teams"])
 
@@ -80,17 +80,11 @@ async def verify_admin_chain(
 
 
 @router.get("/", response_model=list[TeamResponse])
-async def list_teams(
-    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
-):
+async def list_teams(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     team_ids = await get_user_team_ids_transitive(user.id, db)
     if not team_ids:
         return []
-    result = await db.execute(
-        select(Team)
-        .options(selectinload(Team.users))
-        .where(Team.id.in_(list(team_ids)))
-    )
+    result = await db.execute(select(Team).options(selectinload(Team.users)).where(Team.id.in_(list(team_ids))))
     teams = result.scalars().all()
     return teams
 
@@ -144,11 +138,7 @@ async def verify_team_pack_constraint(
     if new_permission_pack == "write":
         return
 
-    res = await db.execute(
-        select(Team)
-        .options(selectinload(Team.packs).selectinload(Pack.teams))
-        .where(Team.id == team_id)
-    )
+    res = await db.execute(select(Team).options(selectinload(Team.packs).selectinload(Pack.teams)).where(Team.id == team_id))
     team = res.scalar_one_or_none()
     if not team:
         return
@@ -182,16 +172,8 @@ async def update_team(
             )
 
     # Validate the resulting admin chain
-    proposed_admin = (
-        data.permission_admin
-        if "permission_admin" in data.model_fields_set
-        else team.permission_admin
-    )
-    proposed_managing = (
-        data.managing_team_id
-        if "managing_team_id" in data.model_fields_set
-        else team.managing_team_id
-    )
+    proposed_admin = data.permission_admin if "permission_admin" in data.model_fields_set else team.permission_admin
+    proposed_managing = data.managing_team_id if "managing_team_id" in data.model_fields_set else team.managing_team_id
     await verify_admin_chain(team.id, proposed_admin, proposed_managing, db)
 
     if "name" in data.model_fields_set:
@@ -272,11 +254,7 @@ async def list_team_groups(
     db: AsyncSession = Depends(get_db),
 ):
     await _get_user_team(team_id, user, db)
-    result = await db.execute(
-        select(DeviceGroup)
-        .options(selectinload(DeviceGroup.teams))
-        .where(DeviceGroup.teams.any(Team.id == team_id))
-    )
+    result = await db.execute(select(DeviceGroup).options(selectinload(DeviceGroup.teams)).where(DeviceGroup.teams.any(Team.id == team_id)))
     groups = result.scalars().all()
     return groups
 
@@ -313,9 +291,7 @@ async def link_group_to_team(
         raise HTTPException(status_code=403, detail="No admin permission on this team")
 
     result = await db.execute(
-        select(DeviceGroup)
-        .options(selectinload(DeviceGroup.teams).selectinload(Team.users))
-        .where(DeviceGroup.id == group_id)
+        select(DeviceGroup).options(selectinload(DeviceGroup.teams).selectinload(Team.users)).where(DeviceGroup.id == group_id)
     )
     group = result.scalar_one_or_none()
     if not group:
@@ -331,9 +307,7 @@ async def link_group_to_team(
         raise HTTPException(status_code=403, detail="No admin permission on this device group")
 
     if group not in team.groups:
-        await db.execute(
-            insert(team_device_groups).values(team_id=team.id, device_group_id=group.id)
-        )
+        await db.execute(insert(team_device_groups).values(team_id=team.id, device_group_id=group.id))
         await db.commit()
 
     return {"message": "Group linked to team"}
@@ -350,9 +324,7 @@ async def list_team_devices(
 
     team = await _get_user_team(team_id, user, db)
     result = await db.execute(
-        select(DeviceGroup)
-        .options(selectinload(DeviceGroup.devices))
-        .where(DeviceGroup.id.in_([g.id for g in team.groups]))
+        select(DeviceGroup).options(selectinload(DeviceGroup.devices)).where(DeviceGroup.id.in_([g.id for g in team.groups]))
     )
     groups = result.scalars().all()
     seen: dict[int, Device] = {}
@@ -363,11 +335,7 @@ async def list_team_devices(
 
 
 async def _get_user_team(team_id: int, user: User, db: AsyncSession) -> Team:
-    result = await db.execute(
-        select(Team)
-        .options(selectinload(Team.users), selectinload(Team.groups))
-        .where(Team.id == team_id)
-    )
+    result = await db.execute(select(Team).options(selectinload(Team.users), selectinload(Team.groups)).where(Team.id == team_id))
     team = result.scalar_one_or_none()
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")

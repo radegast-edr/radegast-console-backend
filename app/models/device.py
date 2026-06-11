@@ -19,7 +19,5 @@ class Device(Base):
     agent_version: Mapped[str | None] = mapped_column(String(255), nullable=True)
     rustinel_version: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
-    groups = relationship(
-        "DeviceGroup", secondary=device_group_devices, back_populates="devices"
-    )
+    groups = relationship("DeviceGroup", secondary=device_group_devices, back_populates="devices")
     logs = relationship("Log", back_populates="device", cascade="all, delete-orphan")

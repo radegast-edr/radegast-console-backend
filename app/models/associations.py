@@ -28,9 +28,7 @@ device_group_devices = Table(
         ForeignKey("device_groups.id", ondelete="CASCADE"),
         primary_key=True,
     ),
-    Column(
-        "device_id", ForeignKey("devices.id", ondelete="CASCADE"), primary_key=True
-    ),
+    Column("device_id", ForeignKey("devices.id", ondelete="CASCADE"), primary_key=True),
 )
 
 

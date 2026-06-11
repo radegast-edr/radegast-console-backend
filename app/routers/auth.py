@@ -1,17 +1,18 @@
 import base64
 import json
 from datetime import datetime, timedelta
+from logging import getLogger
 from urllib.parse import urlparse
 
 import httpx
 import pyotp
+import webauthn
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-import webauthn
 from webauthn.helpers.structs import PublicKeyCredentialDescriptor
 
 from app.config import settings
@@ -63,17 +64,18 @@ from app.schemas.user import (
     UserLogin,
     UserRegister,
     UserResponse,
-    UnsubscribeRequest,
 )
 from app.services.auth import (
     create_signed_token,
     hash_password,
     hash_token,
+    load_signed_token_without_age,
     verify_password,
     verify_signed_token,
-    load_signed_token_without_age,
 )
 from app.services.email import (
+    EMAIL_TYPE_TO_PREFERENCE,
+    send_api_keys_toggled_notification,
     send_keys_transferred_notification,
     send_login_notification,
     send_new_keys_notification,
@@ -81,8 +83,6 @@ from app.services.email import (
     send_recovery_used_notification,
     send_severity_changed_email,
     send_verification_email,
-    send_api_keys_toggled_notification,
-    EMAIL_TYPE_TO_PREFERENCE,
 )
 from app.utils import ensure_utc, utc_now
 
@@ -114,7 +114,12 @@ def _normalize_origin(origin: str) -> str | None:
 
 def _configured_webauthn_origins() -> list[str]:
     origins: list[str] = []
-    for source in (settings.base_url, settings.cors_origins, settings.webauthn_origins, settings.web_ui_url):
+    for source in (
+        settings.base_url,
+        settings.cors_origins,
+        settings.webauthn_origins,
+        settings.web_ui_url,
+    ):
         if not source:
             continue
         parts = source.split(",") if isinstance(source, str) else []
@@ -159,12 +164,15 @@ async def _verify_turnstile(token: str | None, remote_ip: str) -> None:
                 timeout=5.0,
             )
             if resp.status_code != 200:
-                raise HTTPException(status_code=400, detail="Failed to verify Turnstile token with Cloudflare")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Failed to verify Turnstile token with Cloudflare",
+                )
             result = resp.json()
             if not result.get("success"):
                 raise HTTPException(status_code=400, detail="Turnstile verification failed")
     except httpx.RequestError as e:
-        raise HTTPException(status_code=500, detail=f"Turnstile verification request failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Turnstile verification request failed: {e!s}") from e
 
 
 @router.post("/register", response_model=UserResponse)
@@ -179,9 +187,15 @@ async def register(data: UserRegister, request: Request, db: AsyncSession = Depe
                 await send_verification_email(data.email)
                 existing.password_change = now
                 await db.commit()
-                raise HTTPException(status_code=400, detail="Email not verified. A new verification email has been sent.")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Email not verified. A new verification email has been sent.",
+                )
             else:
-                raise HTTPException(status_code=400, detail="Email not verified. Please check your inbox.")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Email not verified. Please check your inbox.",
+                )
 
         raise HTTPException(status_code=400, detail="Email already registered")
 
@@ -242,11 +256,9 @@ async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
 async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
-    _rate_limit = Depends(rate_limit_token),
+    _rate_limit=Depends(rate_limit_token),
 ):
-    result = await db.execute(
-        select(User).options(selectinload(User.hardware_tokens)).where(User.email == form_data.username)
-    )
+    result = await db.execute(select(User).options(selectinload(User.hardware_tokens)).where(User.email == form_data.username))
     user = result.scalar_one_or_none()
     if not user or not verify_password(form_data.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -260,7 +272,9 @@ async def login_for_access_token(
     if has_otp or has_token:
         raise HTTPException(
             status_code=403,
-            detail="MFA is required for this user. OAuth2 password login in OpenAPI docs is only supported for users without MFA. Please use API key authentication instead."
+            detail="MFA is required for this user. "
+            "OAuth2 password login in OpenAPI docs is only supported for users "
+            "without MFA. Please use API key authentication instead.",
         )
 
     # Generate a standard signed session token
@@ -278,11 +292,9 @@ async def login(
     response: Response,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    _rate_limit = Depends(rate_limit_login),
+    _rate_limit=Depends(rate_limit_login),
 ):
-    result = await db.execute(
-        select(User).options(selectinload(User.hardware_tokens)).where(User.email == data.email)
-    )
+    result = await db.execute(select(User).options(selectinload(User.hardware_tokens)).where(User.email == data.email))
     user = result.scalar_one_or_none()
     if not user or not verify_password(data.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -290,11 +302,7 @@ async def login(
         raise HTTPException(status_code=403, detail="Email not verified")
 
     if data.public_key:
-        pk_res = await db.execute(
-            select(PublicKey).where(
-                PublicKey.user_id == user.id, PublicKey.public_key == data.public_key
-            )
-        )
+        pk_res = await db.execute(select(PublicKey).where(PublicKey.user_id == user.id, PublicKey.public_key == data.public_key))
         pk_obj = pk_res.scalar_one_or_none()
         if pk_obj:
             pk_obj.last_used_at = utc_now()
@@ -359,9 +367,7 @@ async def setup_keys(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(PublicKey).where(PublicKey.user_id == user.id)
-    )
+    result = await db.execute(select(PublicKey).where(PublicKey.user_id == user.id))
     if result.scalars().first():
         raise HTTPException(status_code=400, detail="Keys already set up")
 
@@ -403,19 +409,11 @@ async def setup_secondary_key(
     db: AsyncSession = Depends(get_db),
 ):
     """Add a secondary key alongside the user's existing main keypair (e.g. on a new device)."""
-    result = await db.execute(
-        select(PublicKey).where(
-            PublicKey.user_id == user.id, PublicKey.key_type == "regular"
-        )
-    )
+    result = await db.execute(select(PublicKey).where(PublicKey.user_id == user.id, PublicKey.key_type == "regular"))
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="No primary key found; use /keys/setup first")
 
-    dup = await db.execute(
-        select(PublicKey).where(
-            PublicKey.user_id == user.id, PublicKey.key_type == "secondary"
-        )
-    )
+    dup = await db.execute(select(PublicKey).where(PublicKey.user_id == user.id, PublicKey.key_type == "secondary"))
     if dup.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Secondary key already exists")
 
@@ -444,7 +442,10 @@ async def delete_all_keys(
     keys = result.scalars().all()
     recovery_keys = [k for k in keys if k.private_key is not None]
     if len(recovery_keys) > 0:
-        raise HTTPException(status_code=400, detail="Cannot delete keys. At least one recovery key must always exist.")
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete keys. At least one recovery key must always exist.",
+        )
     for key in keys:
         await db.delete(key)
     await db.commit()
@@ -457,9 +458,7 @@ async def list_user_keys(
     db: AsyncSession = Depends(get_db),
 ):
     """List all public keys for the current user."""
-    result = await db.execute(
-        select(PublicKey).where(PublicKey.user_id == user.id)
-    )
+    result = await db.execute(select(PublicKey).where(PublicKey.user_id == user.id))
     keys = result.scalars().all()
     return [
         PublicKeyResponse(
@@ -484,11 +483,7 @@ async def add_user_key(
 ):
     """Add a new public key for the current user."""
     # Check duplicate
-    dup = await db.execute(
-        select(PublicKey).where(
-            PublicKey.user_id == user.id, PublicKey.public_key == data.public_key
-        )
-    )
+    dup = await db.execute(select(PublicKey).where(PublicKey.user_id == user.id, PublicKey.public_key == data.public_key))
     if dup.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Public key already exists")
 
@@ -517,9 +512,7 @@ async def delete_user_key(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a specific public key belonging to the user."""
-    result = await db.execute(
-        select(PublicKey).where(PublicKey.user_id == user.id)
-    )
+    result = await db.execute(select(PublicKey).where(PublicKey.user_id == user.id))
     keys = result.scalars().all()
     key_to_delete = next((k for k in keys if k.id == key_id), None)
     if not key_to_delete:
@@ -545,11 +538,7 @@ async def recover_keys(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(PublicKey).where(
-            PublicKey.user_id == user.id, PublicKey.private_key.isnot(None)
-        )
-    )
+    result = await db.execute(select(PublicKey).where(PublicKey.user_id == user.id, PublicKey.private_key.isnot(None)))
     keys = result.scalars().all()
     if not keys:
         raise HTTPException(status_code=404, detail="No recovery keys found")
@@ -568,11 +557,7 @@ async def recover_keys(
 
 @router.get("/me", response_model=UserResponse)
 async def me(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    key_count = (
-        await db.execute(
-            select(func.count()).select_from(PublicKey).where(PublicKey.user_id == user.id)
-        )
-    ).scalar()
+    key_count = (await db.execute(select(func.count()).select_from(PublicKey).where(PublicKey.user_id == user.id))).scalar()
 
     required_level = "none"
     if user.role.value == "admin":
@@ -672,8 +657,6 @@ async def update_notifications(
     return NotificationSettings.model_validate(user)
 
 
-
-
 @router.put("/extended-edr", response_model=ExtendedEdrSettings)
 async def update_extended_edr(
     data: ExtendedEdrSettings,
@@ -683,6 +666,7 @@ async def update_extended_edr(
     user.extended_edr_enabled = data.extended_edr_enabled
     await db.commit()
     return ExtendedEdrSettings.model_validate(user)
+
 
 @router.put("/api-keys-enabled", response_model=ApiKeysEnabledSettings)
 async def update_api_keys_enabled(
@@ -696,13 +680,10 @@ async def update_api_keys_enabled(
     await db.commit()
 
     if changed and user.notify_api_key_modification:
-        background_tasks.add_task(
-            send_api_keys_toggled_notification,
-            user.email,
-            data.api_keys_enabled
-        )
+        background_tasks.add_task(send_api_keys_toggled_notification, user.email, data.api_keys_enabled)
 
     return ApiKeysEnabledSettings.model_validate(user)
+
 
 @router.post("/keys/transfer/initiate", response_model=KeyTransferInitiateResponse)
 async def initiate_key_transfer(
@@ -726,9 +707,7 @@ async def get_key_transfer(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(KeyTransfer).where(KeyTransfer.id == transfer_id)
-    )
+    result = await db.execute(select(KeyTransfer).where(KeyTransfer.id == transfer_id))
     transfer = result.scalar_one_or_none()
     if not transfer:
         raise HTTPException(status_code=404, detail="Transfer not found")
@@ -754,9 +733,7 @@ async def complete_key_transfer(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(KeyTransfer).where(KeyTransfer.id == transfer_id)
-    )
+    result = await db.execute(select(KeyTransfer).where(KeyTransfer.id == transfer_id))
     transfer = result.scalar_one_or_none()
     if not transfer:
         raise HTTPException(status_code=404, detail="Transfer not found")
@@ -779,9 +756,7 @@ async def complete_key_transfer(
 
 # Device auth
 @router.post("/device/login")
-async def device_login(
-    data: DeviceLogin, response: Response, db: AsyncSession = Depends(get_db)
-):
+async def device_login(data: DeviceLogin, response: Response, db: AsyncSession = Depends(get_db)):
     token_hash = hash_token(data.token)
     result = await db.execute(select(Device).where(Device.token == token_hash))
     device = result.scalar_one_or_none()
@@ -813,9 +788,7 @@ async def accept_invite(token: str, db: AsyncSession = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found. Please register first.")
 
-    result = await db.execute(
-        select(Team).options(selectinload(Team.users)).where(Team.id == data["team_id"])
-    )
+    result = await db.execute(select(Team).options(selectinload(Team.users)).where(Team.id == data["team_id"]))
     team = result.scalar_one_or_none()
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
@@ -863,7 +836,7 @@ async def mfa_otp_verify(
     request: Request,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    _rate_limit = Depends(rate_limit_mfa_otp),
+    _rate_limit=Depends(rate_limit_mfa_otp),
 ):
     if not user.otp_secret:
         raise HTTPException(status_code=400, detail="OTP setup not initiated")
@@ -907,7 +880,7 @@ async def mfa_hardware_token_setup(
 
     registration_token = create_signed_token(
         {"challenge": options_json["challenge"], "user_id": user.id, "rp_id": rp_id},
-        salt="hardware-token-register"
+        salt="hardware-token-register",
     )
 
     return MfaHardwareTokenSetupResponse(options=options_json, registration_token=registration_token)
@@ -939,7 +912,7 @@ async def mfa_hardware_token_verify(
             require_user_verification=False,
         )
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"WebAuthn verification failed: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"WebAuthn verification failed: {e!s}") from e
 
     cred_id_str = base64url_encode(verification.credential_id)
     pub_key_str = base64url_encode(verification.credential_public_key)
@@ -967,7 +940,10 @@ async def mfa_hardware_token_verify(
     return {"message": "Hardware token registered successfully"}
 
 
-@router.post("/mfa/hardware-token/assertion-options", response_model=MfaHardwareTokenAssertionOptionsResponse)
+@router.post(
+    "/mfa/hardware-token/assertion-options",
+    response_model=MfaHardwareTokenAssertionOptionsResponse,
+)
 async def mfa_hardware_token_assertion_options(
     data: MfaHardwareTokenAssertionOptionsRequest,
     request: Request,
@@ -977,17 +953,12 @@ async def mfa_hardware_token_assertion_options(
     if not token_data or "user_id" not in token_data:
         raise HTTPException(status_code=400, detail="Invalid or expired MFA token")
 
-    result = await db.execute(
-        select(HardwareToken).where(HardwareToken.user_id == token_data["user_id"])
-    )
+    result = await db.execute(select(HardwareToken).where(HardwareToken.user_id == token_data["user_id"]))
     tokens = result.scalars().all()
     if not tokens:
         raise HTTPException(status_code=400, detail="No Hardware tokens registered for this user")
 
-    allow_credentials = [
-        PublicKeyCredentialDescriptor(id=base64url_decode(t.credential_id))
-        for t in tokens
-    ]
+    allow_credentials = [PublicKeyCredentialDescriptor(id=base64url_decode(t.credential_id)) for t in tokens]
 
     rp_id = _resolve_webauthn_rp_id(request)
 
@@ -999,8 +970,12 @@ async def mfa_hardware_token_assertion_options(
     options_json = json.loads(webauthn.options_to_json(options))
 
     assertion_token = create_signed_token(
-        {"challenge": options_json["challenge"], "user_id": token_data["user_id"], "rp_id": rp_id},
-        salt="hardware-token-login"
+        {
+            "challenge": options_json["challenge"],
+            "user_id": token_data["user_id"],
+            "rp_id": rp_id,
+        },
+        salt="hardware-token-login",
     )
 
     return MfaHardwareTokenAssertionOptionsResponse(options=options_json, assertion_token=assertion_token)
@@ -1013,16 +988,14 @@ async def mfa_verify(
     response: Response,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    _rate_limit = Depends(rate_limit_mfa),
+    _rate_limit=Depends(rate_limit_mfa),
 ):
     token_data = verify_signed_token(data.mfa_token, salt="mfa-login", max_age=300)
     if not token_data or "user_id" not in token_data:
         raise HTTPException(status_code=400, detail="Invalid or expired MFA token")
 
     user_id = token_data["user_id"]
-    result = await db.execute(
-        select(User).options(selectinload(User.hardware_tokens)).where(User.id == user_id)
-    )
+    result = await db.execute(select(User).options(selectinload(User.hardware_tokens)).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -1055,7 +1028,10 @@ async def mfa_verify(
 
         token_obj = next((k for k in user.hardware_tokens if k.credential_id == cred_id_str), None)
         if not token_obj:
-            raise HTTPException(status_code=400, detail="Hardware token credential not registered for this user")
+            raise HTTPException(
+                status_code=400,
+                detail="Hardware token credential not registered for this user",
+            )
 
         rp_id = str(assert_data.get("rp_id") or _resolve_webauthn_rp_id(request))
         origins = _configured_webauthn_origins()
@@ -1070,7 +1046,7 @@ async def mfa_verify(
                 credential_current_sign_count=token_obj.sign_count,
             )
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"WebAuthn verification failed: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"WebAuthn verification failed: {e!s}") from e
 
         token_obj.sign_count = verification.new_sign_count
         mfa_level = "hardware_token"
@@ -1099,12 +1075,10 @@ async def mfa_verify(
 async def get_mfa_settings(
     request: Request,
     user: User = Depends(get_current_user),
-    session = Depends(get_session),
+    session=Depends(get_session),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(HardwareToken).where(HardwareToken.user_id == user.id)
-    )
+    result = await db.execute(select(HardwareToken).where(HardwareToken.user_id == user.id))
     tokens = result.scalars().all()
 
     required_level = "none"
@@ -1131,9 +1105,7 @@ async def mfa_otp_disable(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(HardwareToken).where(HardwareToken.user_id == user.id)
-    )
+    result = await db.execute(select(HardwareToken).where(HardwareToken.user_id == user.id))
     tokens = result.scalars().all()
     has_token = len(tokens) > 0
 
@@ -1148,7 +1120,7 @@ async def mfa_otp_disable(
     if required_level in ("otp", "hardware_token", "token") and not has_token:
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot disable OTP. Your role requires at least '{required_level}' MFA, and you have no Hardware tokens registered."
+            detail=f"Cannot disable OTP. Your role requires at least '{required_level}' MFA, and you have no Hardware tokens registered.",
         )
 
     user.otp_enabled = False
@@ -1176,9 +1148,7 @@ async def delete_hardware_token(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(HardwareToken).where(HardwareToken.user_id == user.id)
-    )
+    result = await db.execute(select(HardwareToken).where(HardwareToken.user_id == user.id))
     tokens = result.scalars().all()
 
     target_token = next((t for t in tokens if t.id == token_id), None)
@@ -1199,12 +1169,12 @@ async def delete_hardware_token(
     if required_level in ("hardware_token", "token") and remaining_token_count == 0:
         raise HTTPException(
             status_code=400,
-            detail="Cannot delete Hardware token. Your role requires Hardware token MFA, and this is your last registered Hardware token."
+            detail="Cannot delete Hardware token. Your role requires Hardware token MFA, and this is your last registered Hardware token.",
         )
     if required_level == "otp" and remaining_token_count == 0 and not has_otp:
         raise HTTPException(
             status_code=400,
-            detail="Cannot delete Hardware token. Your role requires at least OTP MFA, and you do not have OTP enabled."
+            detail="Cannot delete Hardware token. Your role requires at least OTP MFA, and you do not have OTP enabled.",
         )
 
     await db.delete(target_token)
@@ -1237,105 +1207,78 @@ async def get_auth_config():
 
 
 @router.post("/unsubscribe")
-async def unsubscribe(
-    request: Request,
-    db: AsyncSession = Depends(get_db)
-):
+async def unsubscribe(request: Request, db: AsyncSession = Depends(get_db)):
     token = request.query_params.get("token")
     if not token:
         try:
             body = await request.json()
             if isinstance(body, dict):
                 token = body.get("token")
-        except Exception:
-            pass
+        except Exception as e:
+            getLogger(__name__).debug(f"Failed to parse JSON body: {e}")
 
     if not token:
         try:
             form = await request.form()
             token = form.get("token")
-        except Exception:
-            pass
+        except Exception as e:
+            getLogger(__name__).debug(f"Failed to parse form data: {e}")
 
     if not token:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid unsubscribe link."
-        )
+        raise HTTPException(status_code=400, detail="Invalid unsubscribe link.")
 
     token_data = load_signed_token_without_age(token, salt="unsubscribe")
     if not token_data:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid unsubscribe link."
-        )
+        raise HTTPException(status_code=400, detail="Invalid unsubscribe link.")
 
     user_id = token_data.get("user_id")
     expires_at_str = token_data.get("expires_at")
     if user_id is None or not expires_at_str:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid unsubscribe link."
-        )
+        raise HTTPException(status_code=400, detail="Invalid unsubscribe link.")
 
     try:
         expires_at = datetime.fromisoformat(expires_at_str)
-    except Exception:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid unsubscribe link."
-        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Invalid unsubscribe link.") from e
 
     expires_at = ensure_utc(expires_at)
     if utc_now() > expires_at:
         raise HTTPException(
             status_code=400,
-            detail="The unsubscribe link has expired. Please log in and unsubscribe manually."
+            detail="The unsubscribe link has expired. Please log in and unsubscribe manually.",
         )
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found."
-        )
+        raise HTTPException(status_code=404, detail="User not found.")
 
     pref_field = token_data.get("preference_field")
     if not pref_field:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid unsubscribe link."
-        )
+        raise HTTPException(status_code=400, detail="Invalid unsubscribe link.")
 
     # Find the matching preference name
     pref_name = None
-    for k, (field, name) in EMAIL_TYPE_TO_PREFERENCE.items():
+    for _k, (field, name) in EMAIL_TYPE_TO_PREFERENCE.items():
         if field == pref_field:
             pref_name = name
             break
 
     if not pref_name:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid unsubscribe link."
-        )
+        raise HTTPException(status_code=400, detail="Invalid unsubscribe link.")
 
     setattr(user, pref_field, False)
     await db.commit()
     return {
         "message": f"Successfully unsubscribed from {pref_name.lower()}.",
-        "preference_name": pref_name
+        "preference_name": pref_name,
     }
 
 
 @router.get("/unsubscribe")
-async def unsubscribe_get(
-    token: str | None = None
-):
-    ui_base = settings.web_ui_url.rstrip('/') if settings.web_ui_url else f"{settings.base_url.rstrip('/')}/ui"
+async def unsubscribe_get(token: str | None = None):
+    ui_base = settings.web_ui_url.rstrip("/") if settings.web_ui_url else f"{settings.base_url.rstrip('/')}/ui"
     url = f"{ui_base}/unsubscribe"
     if token:
         url += f"?token={token}"
     return RedirectResponse(url=url)
-

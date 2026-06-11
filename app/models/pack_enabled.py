@@ -8,12 +8,8 @@ class PackEnabled(Base):
     __tablename__ = "pack_enabled"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    device_group_id: Mapped[int] = mapped_column(
-        ForeignKey("device_groups.id", ondelete="CASCADE"), nullable=False
-    )
-    pack_version_id: Mapped[int] = mapped_column(
-        ForeignKey("pack_versions.id", ondelete="CASCADE"), nullable=False
-    )
+    device_group_id: Mapped[int] = mapped_column(ForeignKey("device_groups.id", ondelete="CASCADE"), nullable=False)
+    pack_version_id: Mapped[int] = mapped_column(ForeignKey("pack_versions.id", ondelete="CASCADE"), nullable=False)
     autoupdate: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     device_group = relationship("DeviceGroup", back_populates="packs")

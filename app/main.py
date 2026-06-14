@@ -15,6 +15,7 @@ from app.routers import (
     admin,
     apikeys,
     auth,
+    dashboard,
     devices,
     exclusions,
     groups,
@@ -24,6 +25,7 @@ from app.routers import (
     releases,
     teams,
     ui,
+    user,
 )
 from app.services.email import process_email_queue_loop
 
@@ -73,6 +75,7 @@ api_version = "1"
 # Routers
 api_prefix = f"/api/v{api_version}"
 app.include_router(prefix=api_prefix, router=auth.router)
+app.include_router(prefix=api_prefix, router=user.router)
 app.include_router(prefix=api_prefix, router=teams.router)
 app.include_router(prefix=api_prefix, router=devices.router)
 app.include_router(prefix=api_prefix, router=install.install_router)
@@ -83,6 +86,7 @@ app.include_router(prefix=api_prefix, router=apikeys.router)
 app.include_router(prefix=api_prefix, router=logs.router)
 app.include_router(prefix=api_prefix, router=admin.router)
 app.include_router(prefix=api_prefix, router=releases.router)
+app.include_router(prefix=api_prefix, router=dashboard.router)
 app.include_router(prefix="/ui", router=ui.router)
 app.add_middleware(RequestLoggingMiddleware)
 

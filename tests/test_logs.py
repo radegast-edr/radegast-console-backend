@@ -243,7 +243,7 @@ class TestLogSeenAndResolution:
         assert resp.json()["total_count"] == after_seen_unread
 
         # 5. Enable Extended EDR Mode
-        resp = await auth_client.put("/auth/extended-edr", json={"extended_edr_enabled": True})
+        resp = await auth_client.put("/user/extended-edr", json={"extended_edr_enabled": True})
         assert resp.status_code == 200
         assert resp.json()["extended_edr_enabled"] is True
 
@@ -285,7 +285,7 @@ class TestLogSeenAndResolution:
         assert resp.json()["total_count"] == edr_after_resolved
 
         # Cleanup: restore basic EDR mode
-        await auth_client.put("/auth/extended-edr", json={"extended_edr_enabled": False})
+        await auth_client.put("/user/extended-edr", json={"extended_edr_enabled": False})
 
     async def test_basic_mode_unread_count_tracks_seen_not_resolution(
         self, auth_client: AsyncClient, client: AsyncClient
@@ -351,7 +351,7 @@ class TestLogSeenAndResolution:
         await client.post("/auth/login", json={"email": "test@example.com", "password": "TestPass123!"})
 
         # Enable extended EDR
-        await auth_client.put("/auth/extended-edr", json={"extended_edr_enabled": True})
+        await auth_client.put("/user/extended-edr", json={"extended_edr_enabled": True})
 
         resp = await auth_client.get("/logs/count?unread_only=true")
         before = resp.json()["total_count"]
@@ -372,7 +372,7 @@ class TestLogSeenAndResolution:
         assert resp.json()["total_count"] == before - 1
 
         # Cleanup
-        await auth_client.put("/auth/extended-edr", json={"extended_edr_enabled": False})
+        await auth_client.put("/user/extended-edr", json={"extended_edr_enabled": False})
 
     async def test_get_log_encryption_keys_for_user(self, auth_client: AsyncClient, client: AsyncClient):
         # 1. Get default group first

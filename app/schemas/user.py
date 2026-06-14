@@ -117,6 +117,7 @@ class NotificationSettings(BaseModel):
     notify_device_log: bool
     notify_downtime_maintenance: bool
     notify_api_key_modification: bool = True
+    notify_news_updates: bool = True
     notification_level: LogSeverity = LogSeverity.medium
 
     model_config = {"from_attributes": True}

@@ -208,7 +208,12 @@ async def invite_to_team(
     if not is_admin and team.permission_invite is None:
         raise HTTPException(status_code=403, detail="No invite permission on this team")
 
-    await send_invite_email(data.email, team.id, team.name)
+    # Check if the user is registered
+    result = await db.execute(select(User).where(User.email == data.email))
+    invited_user = result.scalar_one_or_none()
+    if invited_user:
+        await send_invite_email(data.email, team.id, team.name)
+
     return {"message": f"Invitation sent to {data.email}"}
 
 

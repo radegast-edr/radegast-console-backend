@@ -121,7 +121,7 @@ class TestAPIKeys:
         assert "API key does not have 'read' permission for scope 'teams'" in resp.json()["detail"]
 
         # Test 4: Disable API keys support via settings endpoint
-        resp = await auth_client.put("/auth/api-keys-enabled", json={"api_keys_enabled": False})
+        resp = await auth_client.put("/user/api-keys-enabled", json={"api_keys_enabled": False})
         assert resp.status_code == 200
         assert resp.json()["api_keys_enabled"] is False
 
@@ -197,7 +197,7 @@ class TestAPIKeys:
         from unittest.mock import AsyncMock, patch
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
             # 1. Enable
-            resp = await auth_client.put("/auth/api-keys-enabled", json={"api_keys_enabled": True})
+            resp = await auth_client.put("/user/api-keys-enabled", json={"api_keys_enabled": True})
             assert resp.status_code == 200
 
         # Assert email was sent
@@ -210,7 +210,7 @@ class TestAPIKeys:
 
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
             # 2. Disable
-            resp = await auth_client.put("/auth/api-keys-enabled", json={"api_keys_enabled": False})
+            resp = await auth_client.put("/user/api-keys-enabled", json={"api_keys_enabled": False})
             assert resp.status_code == 200
 
         # Assert email was sent
@@ -231,7 +231,7 @@ class TestAPIKeys:
 
         from unittest.mock import AsyncMock, patch
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
-            resp = await auth_client.put("/auth/api-keys-enabled", json={"api_keys_enabled": True})
+            resp = await auth_client.put("/user/api-keys-enabled", json={"api_keys_enabled": True})
             assert resp.status_code == 200
 
         # Assert no email was sent

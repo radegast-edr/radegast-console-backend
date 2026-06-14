@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 import app.database as app_database
 import app.routers.auth as auth_router
 import app.routers.install as install_router
+import app.routers.user as user_router
 from app.config import settings
 from app.database import Base, get_db
 from app.dependencies import rate_limit_login, rate_limit_mfa, rate_limit_mfa_otp, rate_limit_token
@@ -24,6 +25,7 @@ from app.services.auth import create_signed_token
 settings.enable_email_worker = False
 # Disable secure cookies for tests
 auth_router.SECURE_COOKIE = False
+user_router.SECURE_COOKIE = False
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 

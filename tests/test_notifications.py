@@ -39,7 +39,7 @@ async def _set_notify_flag(db_engine, email: str, **flags):
 async def _setup_keys(client: AsyncClient):
     """Submit a minimal key-setup payload (no real AGE crypto needed for notification tests)."""
     return await client.post(
-        "/auth/keys/setup",
+        "/user/keys/setup",
         json={
             "public_key": "age1pub",
             "recovery_public_key": "age1rec",
@@ -122,7 +122,7 @@ class TestNewKeysNotification:
 
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
             await client.post(
-                "/auth/keys/secondary",
+                "/user/keys/secondary",
                 json={"public_key": "age1sec", "encrypted_private_key": "enc-sec"},
             )
 
@@ -173,7 +173,7 @@ class TestRecoveryNotification:
         await _setup_keys(client)
 
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
-            await client.get("/auth/keys/recover")
+            await client.get("/user/keys/recover")
 
         subjects = [call.args[1] for call in mock_send.call_args_list]
         assert any("Recovery Key Used" in s for s in subjects)
@@ -189,7 +189,7 @@ class TestRecoveryNotification:
         await _setup_keys(client)
 
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
-            await client.get("/auth/keys/recover")
+            await client.get("/user/keys/recover")
 
         subjects = [call.args[1] for call in mock_send.call_args_list]
         assert not any("Recovery Key Used" in s for s in subjects)
@@ -202,7 +202,7 @@ class TestRecoveryNotification:
         await _setup_keys(client)
 
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
-            await client.get("/auth/keys/recover")
+            await client.get("/user/keys/recover")
 
         bodies = [call.args[2] for call in mock_send.call_args_list]
         rec_bodies = [b for b in bodies if "Recovery Key" in b]
@@ -221,7 +221,7 @@ class TestTransferNotification:
         await _login(client, email, password)
         await _setup_keys(client)
         resp = await client.post(
-            "/auth/keys/transfer/initiate",
+            "/user/keys/transfer/initiate",
             json={"receiver_age_public_key": "age1recv"},
         )
         return resp.json()["transfer_id"]
@@ -233,7 +233,7 @@ class TestTransferNotification:
 
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
             await client.post(
-                f"/auth/keys/transfer/{transfer_id}/complete",
+                f"/user/keys/transfer/{transfer_id}/complete",
                 json={"encrypted_private_key": "enc-for-receiver"},
             )
 
@@ -249,7 +249,7 @@ class TestTransferNotification:
 
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
             await client.post(
-                f"/auth/keys/transfer/{transfer_id}/complete",
+                f"/user/keys/transfer/{transfer_id}/complete",
                 json={"encrypted_private_key": "enc-for-receiver"},
             )
 
@@ -263,7 +263,7 @@ class TestTransferNotification:
 
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
             await client.post(
-                f"/auth/keys/transfer/{transfer_id}/complete",
+                f"/user/keys/transfer/{transfer_id}/complete",
                 json={"encrypted_private_key": "enc-for-receiver"},
             )
 
@@ -344,7 +344,7 @@ class TestNotificationDisabledAlert:
             "notify_downtime_maintenance": True,
         }
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
-            resp = await client.put("/auth/notifications", json=payload)
+            resp = await client.put("/user/notifications", json=payload)
             assert resp.status_code == 200
 
         subjects = [call.args[1] for call in mock_send.call_args_list]
@@ -365,7 +365,7 @@ class TestNotificationDisabledAlert:
             "notify_downtime_maintenance": True,
         }
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
-            resp = await client.put("/auth/notifications", json=payload)
+            resp = await client.put("/user/notifications", json=payload)
             assert resp.status_code == 200
 
         subjects = [call.args[1] for call in mock_send.call_args_list]
@@ -386,7 +386,7 @@ class TestNotificationDisabledAlert:
             "notify_downtime_maintenance": False,
         }
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
-            resp = await client.put("/auth/notifications", json=payload)
+            resp = await client.put("/user/notifications", json=payload)
             assert resp.status_code == 200
 
         calls = mock_send.call_args_list
@@ -412,7 +412,7 @@ class TestNotificationDisabledAlert:
             "notification_level": "high",
         }
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
-            resp = await client.put("/auth/notifications", json=payload)
+            resp = await client.put("/user/notifications", json=payload)
             assert resp.status_code == 200
 
         calls = mock_send.call_args_list

@@ -18,7 +18,7 @@ async def test_mfa_otp_setup_and_verify(client: AsyncClient, registered_user):
     assert resp.status_code == 200
 
     # Initiate OTP setup
-    resp = await client.post("/auth/mfa/otp/setup")
+    resp = await client.post("/user/mfa/otp/setup")
     assert resp.status_code == 200
     data = resp.json()
     assert "secret" in data
@@ -26,13 +26,13 @@ async def test_mfa_otp_setup_and_verify(client: AsyncClient, registered_user):
     secret = data["secret"]
 
     # Verify invalid code
-    resp = await client.post("/auth/mfa/otp/verify", json={"code": "000000"})
+    resp = await client.post("/user/mfa/otp/verify", json={"code": "000000"})
     assert resp.status_code == 400
 
     # Verify valid code
     totp = pyotp.TOTP(secret)
     valid_code = totp.now()
-    resp = await client.post("/auth/mfa/otp/verify", json={"code": valid_code})
+    resp = await client.post("/user/mfa/otp/verify", json={"code": valid_code})
     assert resp.status_code == 200
     assert resp.json()["message"] == "OTP enabled successfully"
 
@@ -69,23 +69,23 @@ async def test_mfa_enforcement_by_role(client: AsyncClient, db_engine):
         resp = await client.get("/teams/")
         assert resp.status_code == 200
 
-        # Check `/auth/me` returns mfa_setup_missing=True
-        resp = await client.get("/auth/me")
+        # Check `/user/me` returns mfa_setup_missing=True
+        resp = await client.get("/user/me")
         assert resp.status_code == 200
         assert resp.json()["mfa_setup_missing"] is True
 
         # Set up OTP to satisfy the MFA requirement
-        resp = await client.post("/auth/mfa/otp/setup")
+        resp = await client.post("/user/mfa/otp/setup")
         assert resp.status_code == 200
         secret = resp.json()["secret"]
 
         # Verify OTP
         totp = pyotp.TOTP(secret)
-        resp = await client.post("/auth/mfa/otp/verify", json={"code": totp.now()})
+        resp = await client.post("/user/mfa/otp/verify", json={"code": totp.now()})
         assert resp.status_code == 200
 
-        # Now they have MFA set up. Let's verify that /auth/me returns mfa_setup_missing=False
-        resp = await client.get("/auth/me")
+        # Now they have MFA set up. Let's verify that /user/me returns mfa_setup_missing=False
+        resp = await client.get("/user/me")
         assert resp.status_code == 200
         assert resp.json()["mfa_setup_missing"] is False
 
@@ -147,7 +147,7 @@ async def test_hardware_token_setup_and_login_flow(client: AsyncClient, db_engin
     assert resp.status_code == 200
 
     # 1. Setup options request
-    resp = await client.post("/auth/mfa/hardware-token/setup")
+    resp = await client.post("/user/mfa/hardware-token/setup")
     assert resp.status_code == 200
     setup_data = resp.json()
     assert "options" in setup_data
@@ -163,7 +163,7 @@ async def test_hardware_token_setup_and_login_flow(client: AsyncClient, db_engin
     # 2. Verify / register Hardware token
     with patch("webauthn.verify_registration_response", return_value=mock_verification):
         resp = await client.post(
-            "/auth/mfa/hardware-token/verify",
+            "/user/mfa/hardware-token/verify",
             json={
                 "registration_token": registration_token,
                 "credential_response": {"id": "mock_response_id"},
@@ -229,21 +229,21 @@ async def test_mfa_settings_management(client: AsyncClient, db_engine, registere
     assert resp.status_code == 200
 
     # Get settings
-    resp = await client.get("/auth/mfa/settings")
+    resp = await client.get("/user/mfa/settings")
     assert resp.status_code == 200
     settings_data = resp.json()
     assert settings_data["otp_enabled"] is False
     assert len(settings_data["hardware_tokens"]) == 0
 
     # Set up OTP
-    resp = await client.post("/auth/mfa/otp/setup")
+    resp = await client.post("/user/mfa/otp/setup")
     assert resp.status_code == 200
     secret = resp.json()["secret"]
     totp = pyotp.TOTP(secret)
-    await client.post("/auth/mfa/otp/verify", json={"code": totp.now()})
+    await client.post("/user/mfa/otp/verify", json={"code": totp.now()})
 
     # Register a mock Hardware token
-    resp = await client.post("/auth/mfa/hardware-token/setup")
+    resp = await client.post("/user/mfa/hardware-token/setup")
     reg_token = resp.json()["registration_token"]
     mock_verification = MagicMock()
     mock_verification.credential_id = b"device_id_123"
@@ -252,7 +252,7 @@ async def test_mfa_settings_management(client: AsyncClient, db_engine, registere
 
     with patch("webauthn.verify_registration_response", return_value=mock_verification):
         resp = await client.post(
-            "/auth/mfa/hardware-token/verify",
+            "/user/mfa/hardware-token/verify",
             json={
                 "registration_token": reg_token,
                 "credential_response": {"id": "device_id_123_b64"},
@@ -262,7 +262,7 @@ async def test_mfa_settings_management(client: AsyncClient, db_engine, registere
         assert resp.status_code == 200
 
     # Verify settings now reflect both
-    resp = await client.get("/auth/mfa/settings")
+    resp = await client.get("/user/mfa/settings")
     assert resp.status_code == 200
     settings_data = resp.json()
     assert settings_data["otp_enabled"] is True
@@ -278,27 +278,27 @@ async def test_mfa_settings_management(client: AsyncClient, db_engine, registere
         settings.mfa_required_level_user = "otp"
         try:
             # Attempt to disable OTP (should succeed because user has Hardware token registered, satisfying OTP)
-            resp = await client.post("/auth/mfa/otp/disable")
+            resp = await client.post("/user/mfa/otp/disable")
             assert resp.status_code == 200
 
             # OTP is now disabled. Hardware token is still registered.
             # Attempt to delete Hardware token (should fail because user's role requires "otp", and OTP is disabled and this is the last token)
-            resp = await client.delete(f"/auth/mfa/hardware-token/{token_id}")
+            resp = await client.delete(f"/user/mfa/hardware-token/{token_id}")
             assert resp.status_code == 400
             assert "requires at least OTP MFA" in resp.json()["detail"]
 
             # Enable OTP again so we can delete the Hardware token
-            resp = await client.post("/auth/mfa/otp/setup")
+            resp = await client.post("/user/mfa/otp/setup")
             secret = resp.json()["secret"]
             totp = pyotp.TOTP(secret)
-            await client.post("/auth/mfa/otp/verify", json={"code": totp.now()})
+            await client.post("/user/mfa/otp/verify", json={"code": totp.now()})
 
             # Now delete Hardware token should succeed (since OTP is enabled and satisfies "otp" requirement)
-            resp = await client.delete(f"/auth/mfa/hardware-token/{token_id}")
+            resp = await client.delete(f"/user/mfa/hardware-token/{token_id}")
             assert resp.status_code == 200
 
             # Deleting is complete. Now attempt to disable OTP (should fail because no Hardware tokens left, and role requires "otp")
-            resp = await client.post("/auth/mfa/otp/disable")
+            resp = await client.post("/user/mfa/otp/disable")
             assert resp.status_code == 400
             assert "requires at least 'otp' MFA" in resp.json()["detail"]
 
@@ -337,23 +337,23 @@ async def test_mfa_grace_period_and_admin_reset_password(client: AsyncClient, db
         assert resp.status_code == 200
         assert resp.json()["message"] == "Login successful"
 
-        # 2. Check /auth/me returns mfa_setup_missing=True
-        resp = await client.get("/auth/me")
+        # 2. Check /user/me returns mfa_setup_missing=True
+        resp = await client.get("/user/me")
         assert resp.status_code == 200
         assert resp.json()["mfa_setup_missing"] is True
 
         # 3. Setup OTP
-        resp = await client.post("/auth/mfa/otp/setup")
+        resp = await client.post("/user/mfa/otp/setup")
         assert resp.status_code == 200
         secret = resp.json()["secret"]
 
         # Verify OTP to enable it
         totp = pyotp.TOTP(secret)
-        resp = await client.post("/auth/mfa/otp/verify", json={"code": totp.now()})
+        resp = await client.post("/user/mfa/otp/verify", json={"code": totp.now()})
         assert resp.status_code == 200
 
         # Now mfa_setup_missing should be False
-        resp = await client.get("/auth/me")
+        resp = await client.get("/user/me")
         assert resp.status_code == 200
         assert resp.json()["mfa_setup_missing"] is False
 
@@ -377,7 +377,7 @@ async def test_mfa_grace_period_and_admin_reset_password(client: AsyncClient, db
         assert resp.status_code == 200
 
         # Verify they are logged in with otp mfa level
-        resp = await client.get("/auth/me")
+        resp = await client.get("/user/me")
         assert resp.json()["mfa_setup_missing"] is False
 
         # Get target user ID

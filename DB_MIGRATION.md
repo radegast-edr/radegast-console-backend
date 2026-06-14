@@ -17,5 +17,9 @@ Format: `Date - Command - What was changed`
 - 2026-06-06 - `ALTER TABLE pack_versions ADD COLUMN meta JSON;` - Added meta JSON column to pack_versions table for storing pack.yml metadata.
 - 2026-06-09 - `CREATE TABLE exclusions (id INTEGER PRIMARY KEY AUTOINCREMENT, device_group_id INTEGER NOT NULL REFERENCES device_groups(id) ON DELETE CASCADE, name VARCHAR(255) NOT NULL, description TEXT, jsonata_query TEXT NOT NULL, created_at DATETIME NOT NULL);` - Added exclusions table for device group exclusion rules.
 - 2026-06-10 - `CREATE INDEX IF NOT EXISTS idx_logs_device_id ON logs(device_id); CREATE INDEX IF NOT EXISTS idx_logs_time ON logs(time); CREATE INDEX IF NOT EXISTS idx_logs_severity ON logs(severity); CREATE INDEX IF NOT EXISTS idx_logs_alert_resolution ON logs(alert_resolution); CREATE INDEX IF NOT EXISTS idx_logs_device_id_time ON logs(device_id, time); CREATE INDEX IF NOT EXISTS idx_logs_time_severity ON logs(time, severity);` - Added performance indexes to logs table for frequently queried columns.
+- 2026-06-14 - `ALTER TABLE logs ADD COLUMN rule_id VARCHAR(255); CREATE INDEX IF NOT EXISTS idx_logs_rule_id ON logs(rule_id);` - Added rule_id column to logs table for tracking detection rules.
+- 2026-06-14 - `ALTER TABLE users ADD COLUMN notify_news_updates BOOLEAN NOT NULL DEFAULT 1;` - Added notify_news_updates column to users table for platform news and updates preferences.
+
+
 
 

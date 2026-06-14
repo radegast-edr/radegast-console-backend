@@ -70,12 +70,12 @@ class TestRateLimits:
         try:
             # Make 5 setup attempts with invalid OTP codes
             for _ in range(5):
-                resp = await auth_client.post("/auth/mfa/otp/verify", json={"code": "123456"})
+                resp = await auth_client.post("/user/mfa/otp/verify", json={"code": "123456"})
                 # Should fail because setup not initiated
                 assert resp.status_code == 400
 
             # The 6th attempt must return 429
-            resp = await auth_client.post("/auth/mfa/otp/verify", json={"code": "123456"})
+            resp = await auth_client.post("/user/mfa/otp/verify", json={"code": "123456"})
             assert resp.status_code == 429
             assert "Too many attempts" in resp.json()["detail"]
 

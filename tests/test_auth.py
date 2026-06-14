@@ -158,19 +158,19 @@ class TestLogout:
 
     async def test_session_cleared_after_logout(self, auth_client: AsyncClient):
         await auth_client.post("/auth/logout")
-        resp = await auth_client.get("/auth/me")
+        resp = await auth_client.get("/user/me")
         assert resp.status_code == 401
 
 
 @pytest.mark.asyncio
 class TestMe:
     async def test_me_authenticated(self, auth_client: AsyncClient):
-        resp = await auth_client.get("/auth/me")
+        resp = await auth_client.get("/user/me")
         assert resp.status_code == 200
         assert resp.json()["email"] == "test@example.com"
 
     async def test_me_unauthenticated(self, client: AsyncClient):
-        resp = await client.get("/auth/me")
+        resp = await client.get("/user/me")
         assert resp.status_code == 401
 
 
@@ -209,7 +209,7 @@ class TestKeySetup:
         encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
 
         resp = await auth_client.post(
-            "/auth/keys/setup",
+            "/user/keys/setup",
             json={
                 "public_key": main_pub,
                 "recovery_public_key": rec_pub,
@@ -228,7 +228,7 @@ class TestKeySetup:
         encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
 
         resp = await client.post(
-            "/auth/keys/setup",
+            "/user/keys/setup",
             json={
                 "public_key": main_pub,
                 "recovery_public_key": rec_pub,
@@ -238,7 +238,7 @@ class TestKeySetup:
         assert resp.status_code == 401
 
     async def test_setup_keys_missing_fields(self, auth_client: AsyncClient):
-        resp = await auth_client.post("/auth/keys/setup", json={})
+        resp = await auth_client.post("/user/keys/setup", json={})
         assert resp.status_code == 422
 
     async def test_setup_keys_duplicate_fails(self, auth_client: AsyncClient):
@@ -254,12 +254,12 @@ class TestKeySetup:
             "recovery_encrypted_private_key": encrypted_priv,
         }
 
-        await auth_client.post("/auth/keys/setup", json=payload)
-        resp = await auth_client.post("/auth/keys/setup", json=payload)
+        await auth_client.post("/user/keys/setup", json=payload)
+        resp = await auth_client.post("/user/keys/setup", json=payload)
         assert resp.status_code == 400
 
     async def test_me_has_keys_false(self, auth_client: AsyncClient):
-        resp = await auth_client.get("/auth/me")
+        resp = await auth_client.get("/user/me")
         assert resp.status_code == 200
         assert resp.json()["has_keys"] is False
 
@@ -271,21 +271,21 @@ class TestKeySetup:
         recovery_key_hex = secrets.token_bytes(32).hex()
         encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
         await auth_client.post(
-            "/auth/keys/setup",
+            "/user/keys/setup",
             json={
                 "public_key": main_pub,
                 "recovery_public_key": rec_pub,
                 "recovery_encrypted_private_key": encrypted_priv,
             },
         )
-        resp = await auth_client.get("/auth/me")
+        resp = await auth_client.get("/user/me")
         assert resp.json()["has_keys"] is True
 
 
 @pytest.mark.asyncio
 class TestKeyRecover:
     async def test_recover_keys_no_keys(self, auth_client: AsyncClient):
-        resp = await auth_client.get("/auth/keys/recover")
+        resp = await auth_client.get("/user/keys/recover")
         assert resp.status_code == 404
 
     async def test_recover_keys_success(self, auth_client: AsyncClient):
@@ -297,7 +297,7 @@ class TestKeyRecover:
         encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
 
         await auth_client.post(
-            "/auth/keys/setup",
+            "/user/keys/setup",
             json={
                 "public_key": main_pub,
                 "recovery_public_key": rec_pub,
@@ -305,7 +305,7 @@ class TestKeyRecover:
             },
         )
 
-        resp = await auth_client.get("/auth/keys/recover")
+        resp = await auth_client.get("/user/keys/recover")
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
@@ -326,7 +326,7 @@ class TestKeyTransfer:
         recovery_key_hex = secrets.token_bytes(32).hex()
         encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
         await client.post(
-            "/auth/keys/setup",
+            "/user/keys/setup",
             json={
                 "public_key": main_pub,
                 "recovery_public_key": rec_pub,
@@ -339,7 +339,7 @@ class TestKeyTransfer:
         from app.services.crypto import generate_age_keypair
         eph_pub, _ = generate_age_keypair()
         resp = await auth_client.post(
-            "/auth/keys/transfer/initiate",
+            "/user/keys/transfer/initiate",
             json={"receiver_age_public_key": eph_pub},
         )
         assert resp.status_code == 200
@@ -351,7 +351,7 @@ class TestKeyTransfer:
         from app.services.crypto import generate_age_keypair
         eph_pub, _ = generate_age_keypair()
         resp = await client.post(
-            "/auth/keys/transfer/initiate",
+            "/user/keys/transfer/initiate",
             json={"receiver_age_public_key": eph_pub},
         )
         assert resp.status_code == 401
@@ -360,12 +360,12 @@ class TestKeyTransfer:
         from app.services.crypto import generate_age_keypair
         eph_pub, _ = generate_age_keypair()
         init_resp = await auth_client.post(
-            "/auth/keys/transfer/initiate",
+            "/user/keys/transfer/initiate",
             json={"receiver_age_public_key": eph_pub},
         )
         transfer_id = init_resp.json()["transfer_id"]
 
-        resp = await auth_client.get(f"/auth/keys/transfer/{transfer_id}")
+        resp = await auth_client.get(f"/user/keys/transfer/{transfer_id}")
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "pending"
@@ -373,7 +373,7 @@ class TestKeyTransfer:
         assert data["encrypted_private_key"] is None
 
     async def test_get_transfer_not_found(self, auth_client: AsyncClient):
-        resp = await auth_client.get("/auth/keys/transfer/00000000-0000-0000-0000-000000000000")
+        resp = await auth_client.get("/user/keys/transfer/00000000-0000-0000-0000-000000000000")
         assert resp.status_code == 404
 
     async def test_complete_transfer(self, auth_client: AsyncClient):
@@ -381,7 +381,7 @@ class TestKeyTransfer:
         # Receiver generates ephemeral keypair
         eph_pub, eph_priv = generate_age_keypair()
         init_resp = await auth_client.post(
-            "/auth/keys/transfer/initiate",
+            "/user/keys/transfer/initiate",
             json={"receiver_age_public_key": eph_pub},
         )
         transfer_id = init_resp.json()["transfer_id"]
@@ -391,13 +391,13 @@ class TestKeyTransfer:
         encrypted_payload = age_encrypt(main_priv, eph_pub)
 
         resp = await auth_client.post(
-            f"/auth/keys/transfer/{transfer_id}/complete",
+            f"/user/keys/transfer/{transfer_id}/complete",
             json={"encrypted_private_key": encrypted_payload},
         )
         assert resp.status_code == 200
 
         # Receiver polls and gets the completed transfer
-        status_resp = await auth_client.get(f"/auth/keys/transfer/{transfer_id}")
+        status_resp = await auth_client.get(f"/user/keys/transfer/{transfer_id}")
         assert status_resp.status_code == 200
         status = status_resp.json()
         assert status["status"] == "completed"
@@ -410,7 +410,7 @@ class TestKeyTransfer:
         from app.services.crypto import generate_age_keypair, age_encrypt
         eph_pub, _ = generate_age_keypair()
         init_resp = await auth_client.post(
-            "/auth/keys/transfer/initiate",
+            "/user/keys/transfer/initiate",
             json={"receiver_age_public_key": eph_pub},
         )
         transfer_id = init_resp.json()["transfer_id"]
@@ -418,8 +418,8 @@ class TestKeyTransfer:
         _, main_priv = generate_age_keypair()
         payload = {"encrypted_private_key": age_encrypt(main_priv, eph_pub)}
 
-        await auth_client.post(f"/auth/keys/transfer/{transfer_id}/complete", json=payload)
-        resp = await auth_client.post(f"/auth/keys/transfer/{transfer_id}/complete", json=payload)
+        await auth_client.post(f"/user/keys/transfer/{transfer_id}/complete", json=payload)
+        resp = await auth_client.post(f"/user/keys/transfer/{transfer_id}/complete", json=payload)
         assert resp.status_code == 400
 
 
@@ -434,7 +434,7 @@ class TestKeySecondary:
         recovery_key_hex = secrets.token_bytes(32).hex()
         encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
         await client.post(
-            "/auth/keys/setup",
+            "/user/keys/setup",
             json={
                 "public_key": main_pub,
                 "recovery_public_key": rec_pub,
@@ -452,7 +452,7 @@ class TestKeySecondary:
         recovery_key_hex = secrets.token_bytes(32).hex()
         encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
         resp = await auth_client.post(
-            "/auth/keys/secondary",
+            "/user/keys/secondary",
             json={"public_key": sec_pub, "encrypted_private_key": encrypted_priv},
         )
         assert resp.status_code == 200
@@ -465,7 +465,7 @@ class TestKeySecondary:
         recovery_key_hex = secrets.token_bytes(32).hex()
         encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
         resp = await auth_client.post(
-            "/auth/keys/secondary",
+            "/user/keys/secondary",
             json={"public_key": sec_pub, "encrypted_private_key": encrypted_priv},
         )
         assert resp.status_code == 400
@@ -479,8 +479,8 @@ class TestKeySecondary:
         recovery_key_hex = secrets.token_bytes(32).hex()
         encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
         payload = {"public_key": sec_pub, "encrypted_private_key": encrypted_priv}
-        await auth_client.post("/auth/keys/secondary", json=payload)
-        resp = await auth_client.post("/auth/keys/secondary", json=payload)
+        await auth_client.post("/user/keys/secondary", json=payload)
+        resp = await auth_client.post("/user/keys/secondary", json=payload)
         assert resp.status_code == 400
 
     async def test_secondary_key_unauthenticated(self, client: AsyncClient):
@@ -490,7 +490,7 @@ class TestKeySecondary:
         recovery_key_hex = secrets.token_bytes(32).hex()
         encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
         resp = await client.post(
-            "/auth/keys/secondary",
+            "/user/keys/secondary",
             json={"public_key": sec_pub, "encrypted_private_key": encrypted_priv},
         )
         assert resp.status_code == 401
@@ -506,7 +506,7 @@ class TestDeleteKeys:
         recovery_key_hex = secrets.token_bytes(32).hex()
         encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
         await client.post(
-            "/auth/keys/setup",
+            "/user/keys/setup",
             json={
                 "public_key": main_pub,
                 "recovery_public_key": rec_pub,
@@ -516,38 +516,38 @@ class TestDeleteKeys:
 
     async def test_delete_regular_key_succeeds(self, auth_client: AsyncClient):
         await self._setup_main_key(auth_client)
-        resp = await auth_client.get("/auth/keys")
+        resp = await auth_client.get("/user/keys")
         keys = resp.json()
         regular_key = next(k for k in keys if k["key_type"] == "regular")
 
         # Delete the regular key (should succeed)
-        del_resp = await auth_client.delete(f"/auth/keys/{regular_key['id']}")
+        del_resp = await auth_client.delete(f"/user/keys/{regular_key['id']}")
         assert del_resp.status_code == 200
 
     async def test_delete_last_recovery_key_fails(self, auth_client: AsyncClient):
         await self._setup_main_key(auth_client)
-        resp = await auth_client.get("/auth/keys")
+        resp = await auth_client.get("/user/keys")
         keys = resp.json()
         recovery_key = next(k for k in keys if k["key_type"] == "recovery")
 
         # Delete the last recovery key (should fail)
-        del_resp = await auth_client.delete(f"/auth/keys/{recovery_key['id']}")
+        del_resp = await auth_client.delete(f"/user/keys/{recovery_key['id']}")
         assert del_resp.status_code == 400
         assert "At least one recovery key must always exist" in del_resp.json()["detail"]
 
     async def test_delete_all_keys_fails_when_keys_exist(self, auth_client: AsyncClient):
         await self._setup_main_key(auth_client)
-        resp = await auth_client.delete("/auth/keys")
+        resp = await auth_client.delete("/user/keys")
         assert resp.status_code == 400
         assert "At least one recovery key must always exist" in resp.json()["detail"]
 
     async def test_delete_keys_empty(self, auth_client: AsyncClient):
         # Deleting when no keys should succeed (no-op)
-        resp = await auth_client.delete("/auth/keys")
+        resp = await auth_client.delete("/user/keys")
         assert resp.status_code == 200
 
     async def test_delete_keys_unauthenticated(self, client: AsyncClient):
-        resp = await client.delete("/auth/keys")
+        resp = await client.delete("/user/keys")
         assert resp.status_code == 401
 
 
@@ -607,7 +607,7 @@ class TestSessionInvalidation:
             await session.commit()
 
         # Session should now be invalid
-        resp = await client.get("/auth/me")
+        resp = await client.get("/user/me")
         assert resp.status_code == 401
 
 
@@ -626,7 +626,7 @@ class TestChangePassword:
     async def test_change_password_success(self, client: AsyncClient):
         _, old_pw = await self._setup(client)
         resp = await client.post(
-            "/auth/change-password",
+            "/user/change-password",
             json={"old_password": old_pw, "new_password": "NewPass456!"},
         )
         assert resp.status_code == 200
@@ -635,7 +635,7 @@ class TestChangePassword:
     async def test_change_password_wrong_old(self, client: AsyncClient):
         await self._setup(client)
         resp = await client.post(
-            "/auth/change-password",
+            "/user/change-password",
             json={"old_password": "WrongOld!", "new_password": "NewPass456!"},
         )
         assert resp.status_code == 400
@@ -643,7 +643,7 @@ class TestChangePassword:
     async def test_change_password_too_short(self, client: AsyncClient):
         _, old_pw = await self._setup(client)
         resp = await client.post(
-            "/auth/change-password",
+            "/user/change-password",
             json={"old_password": old_pw, "new_password": "short"},
         )
         assert resp.status_code == 400
@@ -651,7 +651,7 @@ class TestChangePassword:
     async def test_change_password_requires_auth(self, client: AsyncClient):
         # log out first by using a fresh client
         resp = await client.post(
-            "/auth/change-password",
+            "/user/change-password",
             json={"old_password": "x", "new_password": "NewPass456!"},
         )
         # Should fail (401 or 403)
@@ -671,7 +671,7 @@ class TestNotificationSettings:
 
     async def test_get_notifications(self, client: AsyncClient):
         await self._setup(client)
-        resp = await client.get("/auth/notifications")
+        resp = await client.get("/user/notifications")
         assert resp.status_code == 200
         data = resp.json()
         assert "notify_login" in data
@@ -692,7 +692,7 @@ class TestNotificationSettings:
             "notify_downtime_maintenance": False,
         }
         with patch("app.services.email.send_email", new_callable=AsyncMock):
-            resp = await client.put("/auth/notifications", json=payload)
+            resp = await client.put("/user/notifications", json=payload)
             assert resp.status_code == 200
         data = resp.json()
         assert data["notify_login"] is False
@@ -700,34 +700,34 @@ class TestNotificationSettings:
         assert data["notify_downtime_maintenance"] is False
 
         # Verify persisted
-        resp2 = await client.get("/auth/notifications")
+        resp2 = await client.get("/user/notifications")
         assert resp2.json()["notify_login"] is False
         assert resp2.json()["notify_device_log"] is False
         assert resp2.json()["notify_downtime_maintenance"] is False
 
     async def test_notifications_requires_auth(self, client: AsyncClient):
-        resp = await client.get("/auth/notifications")
+        resp = await client.get("/user/notifications")
         assert resp.status_code in (401, 403)
 
     async def test_update_extended_edr(self, client: AsyncClient):
         await self._setup(client)
         payload = {"extended_edr_enabled": True}
-        resp = await client.put("/auth/extended-edr", json=payload)
+        resp = await client.put("/user/extended-edr", json=payload)
         assert resp.status_code == 200
         assert resp.json()["extended_edr_enabled"] is True
 
         # Check in DB / status endpoint if any
-        resp2 = await client.get("/auth/me")
+        resp2 = await client.get("/user/me")
         assert resp2.json()["extended_edr_enabled"] is True
 
         # Disable it
         payload = {"extended_edr_enabled": False}
-        resp3 = await client.put("/auth/extended-edr", json=payload)
+        resp3 = await client.put("/user/extended-edr", json=payload)
         assert resp3.status_code == 200
         assert resp3.json()["extended_edr_enabled"] is False
 
     async def test_extended_edr_requires_auth(self, client: AsyncClient):
-        resp = await client.put("/auth/extended-edr", json={"extended_edr_enabled": True})
+        resp = await client.put("/user/extended-edr", json={"extended_edr_enabled": True})
         assert resp.status_code in (401, 403)
 
 
@@ -802,7 +802,7 @@ class TestTokenAuth:
         # Try to use this access token to authenticate subsequent requests
         access_token = data["access_token"]
         resp_me = await client.get(
-            "/auth/me",
+            "/user/me",
             headers={"Authorization": f"Bearer {access_token}"}
         )
         assert resp_me.status_code == 200

@@ -73,5 +73,5 @@ class TestSessionInvalidation:
         assert resp.status_code == 200
 
         # Session should work
-        resp = await client.get("/auth/me")
+        resp = await client.get("/user/me")
         assert resp.status_code == 200

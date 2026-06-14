@@ -29,7 +29,16 @@ The Admin panel typically includes:
 - **Users**: List of all registered users
 - **Devices**: List of all registered devices
 - **Packs**: List of all detection packs
-- **System Stats**: Overview of platform usage
+- **Stats**: Global statistics including alert distribution by severity and rule ID, and device agent/Rustinel version distributions.
+
+### Viewing Admin Stats
+
+1. In the Admin panel, click **"Stats"**
+2. The page displays two main panels:
+   - **Alert Stats**: Displays alert distribution by severity and by Rule ID. You can filter the statistics by selecting a custom **From** and **To** date-time range.
+   - **Device Stats**: Shows endpoint distribution by Agent Version and by Rustinel Version. You can toggle checkboxes to:
+     - **Exclude offline devices**: Exclude devices that have not been seen in the last 10 minutes.
+     - **Exclude devices with unreported version**: Hide devices where versions are not reported.
 
 ### Managing Users
 

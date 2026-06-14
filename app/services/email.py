@@ -177,6 +177,10 @@ EMAIL_TYPE_TO_PREFERENCE = {
         "notify_api_key_modification",
         "API key modification alerts",
     ),
+    "news_updates": (
+        "notify_news_updates",
+        "Platform news and updates",
+    ),
 }
 
 
@@ -199,7 +203,7 @@ async def send_email_direct(to: str, subject: str, html_body: str, email_type: s
         )
         ui_base = get_web_ui_base()
         unsubscribe_url = f"{ui_base}/unsubscribe?token={token}"
-        api_unsubscribe_url = f"{settings.base_url.rstrip('/')}/auth/unsubscribe?token={token}"
+        api_unsubscribe_url = f"{settings.base_url.rstrip('/')}/user/unsubscribe?token={token}"
 
         footer_html = f"""<div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #666; text-align: center;">
     If you no longer wish to receive {pref_name.lower()}, you can
@@ -265,7 +269,8 @@ async def send_verification_email(email: str):
 
 async def send_invite_email(email: str, team_id: int, team_name: str):
     token = create_signed_token({"email": email, "team_id": team_id}, salt="team-invite")
-    url = f"{settings.base_url}/auth/invite/accept?token={token}"
+    ui_base = get_web_ui_base()
+    url = f"{ui_base}/invite/accept?token={token}"
     html = INVITE_EMAIL_TEMPLATE.render(url=url, team_name=team_name)
     await send_email(email, f"Invitation to join {team_name}", html, email_type="invite")
 

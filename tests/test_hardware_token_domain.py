@@ -204,7 +204,7 @@ async def test_registration_options_embed_configured_rp_id(
     try:
         await client.post("/auth/login", json=registered_user)
         resp = await client.post(
-            "/auth/mfa/hardware-token/setup",
+            "/user/mfa/hardware-token/setup",
             headers={"Origin": "https://console.radegast.app"},
         )
         assert resp.status_code == 200
@@ -239,7 +239,7 @@ async def test_registration_verify_passes_correct_rp_id_and_origins(
     try:
         await client.post("/auth/login", json=registered_user)
         resp = await client.post(
-            "/auth/mfa/hardware-token/setup",
+            "/user/mfa/hardware-token/setup",
             headers={"Origin": "https://console.radegast.app"},
         )
         registration_token = resp.json()["registration_token"]
@@ -251,7 +251,7 @@ async def test_registration_verify_passes_correct_rp_id_and_origins(
 
         with patch("webauthn.verify_registration_response", return_value=mock_reg) as mock_vrr:
             await client.post(
-                "/auth/mfa/hardware-token/verify",
+                "/user/mfa/hardware-token/verify",
                 headers={"Origin": "https://console.radegast.app"},
                 json={
                     "registration_token": registration_token,
@@ -282,7 +282,7 @@ async def test_assertion_options_embed_configured_rp_id(
     try:
         await client.post("/auth/login", json=registered_user)
         resp = await client.post(
-            "/auth/mfa/hardware-token/setup",
+            "/user/mfa/hardware-token/setup",
             headers={"Origin": "https://console.radegast.app"},
         )
         registration_token = resp.json()["registration_token"]
@@ -294,7 +294,7 @@ async def test_assertion_options_embed_configured_rp_id(
 
         with patch("webauthn.verify_registration_response", return_value=mock_reg):
             await client.post(
-                "/auth/mfa/hardware-token/verify",
+                "/user/mfa/hardware-token/verify",
                 headers={"Origin": "https://console.radegast.app"},
                 json={
                     "registration_token": registration_token,
@@ -343,7 +343,7 @@ async def test_login_verify_passes_rp_id_from_assertion_token(
     try:
         await client.post("/auth/login", json=registered_user)
         resp = await client.post(
-            "/auth/mfa/hardware-token/setup",
+            "/user/mfa/hardware-token/setup",
             headers={"Origin": "https://console.radegast.app"},
         )
         registration_token = resp.json()["registration_token"]
@@ -355,7 +355,7 @@ async def test_login_verify_passes_rp_id_from_assertion_token(
 
         with patch("webauthn.verify_registration_response", return_value=mock_reg):
             await client.post(
-                "/auth/mfa/hardware-token/verify",
+                "/user/mfa/hardware-token/verify",
                 headers={"Origin": "https://console.radegast.app"},
                 json={
                     "registration_token": registration_token,
@@ -418,7 +418,7 @@ async def test_full_split_domain_flow(client: AsyncClient, registered_user):
         await client.post("/auth/login", json=registered_user)
 
         resp = await client.post(
-            "/auth/mfa/hardware-token/setup",
+            "/user/mfa/hardware-token/setup",
             headers={"Origin": "https://console.radegast.app"},
         )
         assert resp.status_code == 200
@@ -432,7 +432,7 @@ async def test_full_split_domain_flow(client: AsyncClient, registered_user):
 
         with patch("webauthn.verify_registration_response", return_value=mock_reg) as mock_vrr:
             resp = await client.post(
-                "/auth/mfa/hardware-token/verify",
+                "/user/mfa/hardware-token/verify",
                 headers={"Origin": "https://console.radegast.app"},
                 json={
                     "registration_token": registration_token,

@@ -26,6 +26,7 @@ class Log(Base):
     severity: Mapped[LogSeverity | None] = mapped_column(Enum(LogSeverity), nullable=True, index=True)
     triage_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     alert_resolution: Mapped[str | None] = mapped_column(String(50), default=None, server_default=None, nullable=True, index=True)
+    rule_id: Mapped[str | None] = mapped_column(String(255), default=None, server_default=None, nullable=True, index=True)
     device = relationship("Device", back_populates="logs")
 
     __table_args__ = (

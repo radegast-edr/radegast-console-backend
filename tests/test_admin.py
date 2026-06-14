@@ -35,7 +35,7 @@ class TestAdminUsers:
 
     @pytest.mark.asyncio
     async def test_admin_cannot_delete_self(self, admin_client: AsyncClient):
-        resp = await admin_client.get("/auth/me")
+        resp = await admin_client.get("/user/me")
         admin_id = resp.json()["id"]
 
         resp = await admin_client.delete(f"/admin/users/{admin_id}")
@@ -106,3 +106,31 @@ class TestAdminPacks:
     async def test_delete_nonexistent_pack(self, admin_client: AsyncClient):
         resp = await admin_client.delete("/admin/packs/99999")
         assert resp.status_code == 404
+
+
+class TestAdminStats:
+    @pytest.mark.asyncio
+    async def test_get_admin_alert_stats(self, admin_client: AsyncClient):
+        resp = await admin_client.get("/admin/stats/alerts")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "severity_distribution" in data
+        assert "rule_distribution" in data
+
+    @pytest.mark.asyncio
+    async def test_get_admin_alert_stats_as_user(self, auth_client: AsyncClient):
+        resp = await auth_client.get("/admin/stats/alerts")
+        assert resp.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_get_admin_device_stats(self, admin_client: AsyncClient):
+        resp = await admin_client.get("/admin/stats/devices?exclude_offline=true&exclude_no_version=true")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "agent_distribution" in data
+        assert "rustinel_distribution" in data
+
+    @pytest.mark.asyncio
+    async def test_get_admin_device_stats_as_user(self, auth_client: AsyncClient):
+        resp = await auth_client.get("/admin/stats/devices")
+        assert resp.status_code == 403

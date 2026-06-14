@@ -224,7 +224,7 @@ async def get_current_user(
 
         # Bypass enforcement for MFA setup, verification, profile, and logout
         path = request.url.path
-        is_mfa_path = "/auth/mfa" in path or "/auth/logout" in path or "/auth/me" in path
+        is_mfa_path = "/auth/mfa" in path or "/auth/logout" in path or "/auth/me" in path or "/user/mfa" in path or "/user/me" in path
 
         if not is_mfa_path:
             # Only enforce if they actually have the required MFA configured

@@ -36,7 +36,7 @@ async def _create_user(db_engine, email: str, password: str, role: UserRole = Us
 
 async def _register_mock_hardware_token(client: AsyncClient, name: str = "Test Key") -> int:
     """Register a hardware token with a mocked WebAuthn verification. Returns token DB id."""
-    resp = await client.post("/auth/mfa/hardware-token/setup")
+    resp = await client.post("/user/mfa/hardware-token/setup")
     assert resp.status_code == 200
     reg_token = resp.json()["registration_token"]
 
@@ -47,7 +47,7 @@ async def _register_mock_hardware_token(client: AsyncClient, name: str = "Test K
 
     with patch("webauthn.verify_registration_response", return_value=mock_verification):
         resp = await client.post(
-            "/auth/mfa/hardware-token/verify",
+            "/user/mfa/hardware-token/verify",
             json={
                 "registration_token": reg_token,
                 "credential_response": {"id": "mock_id"},
@@ -56,7 +56,7 @@ async def _register_mock_hardware_token(client: AsyncClient, name: str = "Test K
         )
         assert resp.status_code == 200
 
-    resp = await client.get("/auth/mfa/settings")
+    resp = await client.get("/user/mfa/settings")
     assert resp.status_code == 200
     tokens = resp.json()["hardware_tokens"]
     return next(t["id"] for t in tokens if t["name"] == name)
@@ -64,11 +64,11 @@ async def _register_mock_hardware_token(client: AsyncClient, name: str = "Test K
 
 async def _enable_otp(client: AsyncClient) -> str:
     """Set up and enable OTP. Returns the TOTP secret."""
-    resp = await client.post("/auth/mfa/otp/setup")
+    resp = await client.post("/user/mfa/otp/setup")
     assert resp.status_code == 200
     secret = resp.json()["secret"]
     totp = pyotp.TOTP(secret)
-    resp = await client.post("/auth/mfa/otp/verify", json={"code": totp.now()})
+    resp = await client.post("/user/mfa/otp/verify", json={"code": totp.now()})
     assert resp.status_code == 200
     return secret
 
@@ -195,7 +195,7 @@ class TestOtpDisableProtection:
             await _enable_otp(client)
 
             # No hardware token — disabling OTP should be blocked
-            resp = await client.post("/auth/mfa/otp/disable")
+            resp = await client.post("/user/mfa/otp/disable")
             assert resp.status_code == 400
             assert "requires" in resp.json()["detail"].lower()
         finally:
@@ -218,7 +218,7 @@ class TestOtpDisableProtection:
             await _register_mock_hardware_token(client, "Backup Key")
 
             # Hardware token satisfies "otp" requirement — disabling OTP is OK
-            resp = await client.post("/auth/mfa/otp/disable")
+            resp = await client.post("/user/mfa/otp/disable")
             assert resp.status_code == 200
         finally:
             settings.mfa_required_level_user = original
@@ -242,7 +242,7 @@ class TestOtpDisableProtection:
             await _register_mock_hardware_token(client, "Required Key")
 
             # Hardware token satisfies the "hardware_token" requirement — disabling OTP is fine
-            resp = await client.post("/auth/mfa/otp/disable")
+            resp = await client.post("/user/mfa/otp/disable")
             assert resp.status_code == 200
         finally:
             settings.mfa_required_level_admin = original
@@ -263,7 +263,7 @@ class TestOtpDisableProtection:
 
             await _enable_otp(client)
 
-            resp = await client.post("/auth/mfa/otp/disable")
+            resp = await client.post("/user/mfa/otp/disable")
             assert resp.status_code == 400
         finally:
             settings.mfa_required_level_admin = original
@@ -283,7 +283,7 @@ class TestOtpDisableProtection:
 
             await _enable_otp(client)
 
-            resp = await client.post("/auth/mfa/otp/disable")
+            resp = await client.post("/user/mfa/otp/disable")
             assert resp.status_code == 200
         finally:
             settings.mfa_required_level_user = original
@@ -311,7 +311,7 @@ class TestHardwareTokenDeleteProtection:
 
             token_id = await _register_mock_hardware_token(client, "Only Key")
 
-            resp = await client.delete(f"/auth/mfa/hardware-token/{token_id}")
+            resp = await client.delete(f"/user/mfa/hardware-token/{token_id}")
             assert resp.status_code == 400
             assert "last" in resp.json()["detail"].lower()
         finally:
@@ -334,7 +334,7 @@ class TestHardwareTokenDeleteProtection:
             await _register_mock_hardware_token(client, "Key Two")
 
             # Deleting the first token is fine — one still remains
-            resp = await client.delete(f"/auth/mfa/hardware-token/{token_id_1}")
+            resp = await client.delete(f"/user/mfa/hardware-token/{token_id_1}")
             assert resp.status_code == 200
         finally:
             settings.mfa_required_level_admin = original
@@ -354,7 +354,7 @@ class TestHardwareTokenDeleteProtection:
 
             token_id = await _register_mock_hardware_token(client, "Free Key")
 
-            resp = await client.delete(f"/auth/mfa/hardware-token/{token_id}")
+            resp = await client.delete(f"/user/mfa/hardware-token/{token_id}")
             assert resp.status_code == 200
         finally:
             settings.mfa_required_level_user = original
@@ -377,7 +377,7 @@ class TestHardwareTokenDeleteProtection:
             token_id = await _register_mock_hardware_token(client, "Solo Key")
             # No OTP enabled
 
-            resp = await client.delete(f"/auth/mfa/hardware-token/{token_id}")
+            resp = await client.delete(f"/user/mfa/hardware-token/{token_id}")
             assert resp.status_code == 400
             assert "otp" in resp.json()["detail"].lower()
         finally:
@@ -402,7 +402,7 @@ class TestHardwareTokenDeleteProtection:
             token_id = await _register_mock_hardware_token(client, "Redundant Key")
 
             # OTP is enabled — deleting the hardware token is allowed
-            resp = await client.delete(f"/auth/mfa/hardware-token/{token_id}")
+            resp = await client.delete(f"/user/mfa/hardware-token/{token_id}")
             assert resp.status_code == 200
         finally:
             settings.mfa_required_level_user = original

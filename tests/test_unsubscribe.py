@@ -106,7 +106,7 @@ async def test_unsubscribe_api_success(client: AsyncClient, db_session):
     }, salt="unsubscribe")
 
     # Post to unsubscribe endpoint
-    resp = await client.post("/auth/unsubscribe", json={"token": token})
+    resp = await client.post("/user/unsubscribe", json={"token": token})
     assert resp.status_code == 200
     assert "Successfully unsubscribed from new login alerts" in resp.json()["message"]
     assert resp.json()["preference_name"] == "New login alerts"
@@ -137,7 +137,7 @@ async def test_unsubscribe_api_expired_token(client: AsyncClient, db_session):
         "preference_field": "notify_login"
     }, salt="unsubscribe")
 
-    resp = await client.post("/auth/unsubscribe", json={"token": token})
+    resp = await client.post("/user/unsubscribe", json={"token": token})
     assert resp.status_code == 400
     assert "expired" in resp.json()["detail"].lower()
     assert "log in" in resp.json()["detail"].lower()
@@ -150,7 +150,7 @@ async def test_unsubscribe_api_expired_token(client: AsyncClient, db_session):
 
 @pytest.mark.asyncio
 async def test_unsubscribe_api_invalid_token(client: AsyncClient):
-    resp = await client.post("/auth/unsubscribe", json={"token": "invalidtoken123"})
+    resp = await client.post("/user/unsubscribe", json={"token": "invalidtoken123"})
     assert resp.status_code == 400
     assert "invalid" in resp.json()["detail"].lower()
 
@@ -198,7 +198,7 @@ async def test_list_unsubscribe_headers_added(db_session):
         assert "List-Unsubscribe" in msg
         assert "List-Unsubscribe-Post" in msg
         assert "List-Unsubscribe=One-Click" in msg["List-Unsubscribe-Post"]
-        assert "/auth/unsubscribe?token=" in msg["List-Unsubscribe"]
+        assert "/user/unsubscribe?token=" in msg["List-Unsubscribe"]
     finally:
         settings.smtp_host = orig_host
 
@@ -227,7 +227,7 @@ async def test_one_click_unsubscribe_post_success(client: AsyncClient, db_sessio
         "Content-Type": "text/plain"
     }
     resp = await client.post(
-        f"/auth/unsubscribe?token={token}",
+        f"/user/unsubscribe?token={token}",
         content="List-Unsubscribe=One-Click",
         headers=headers
     )
@@ -246,12 +246,12 @@ async def test_unsubscribe_get_redirect(client: AsyncClient):
         settings.web_ui_url = "https://custom-ui.radegast.app"
         
         # Test redirect with token
-        resp = await client.get("/auth/unsubscribe?token=my_dummy_token", follow_redirects=False)
+        resp = await client.get("/user/unsubscribe?token=my_dummy_token", follow_redirects=False)
         assert resp.status_code == 307
         assert resp.headers["location"] == "https://custom-ui.radegast.app/unsubscribe?token=my_dummy_token"
 
         # Test redirect without token
-        resp2 = await client.get("/auth/unsubscribe", follow_redirects=False)
+        resp2 = await client.get("/user/unsubscribe", follow_redirects=False)
         assert resp2.status_code == 307
         assert resp2.headers["location"] == "https://custom-ui.radegast.app/unsubscribe"
     finally:

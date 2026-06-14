@@ -11,6 +11,7 @@ class LogCreate(BaseModel):
     content: str
     signature: str | None = None
     severity: LogSeverity | None = None
+    rule_id: str | None = None
 
     @field_validator("severity", mode="before")
     @classmethod
@@ -31,6 +32,7 @@ class LogResponse(BaseModel):
     severity: LogSeverity | None = None
     alert_resolution: str | None = None
     triage_note: str | None = None
+    rule_id: str | None = None
 
     model_config = {"from_attributes": True}
 

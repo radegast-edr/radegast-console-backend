@@ -1,11 +1,15 @@
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlalchemy import select
+from pydantic import BaseModel
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.device import Device
+from app.models.log import Log
 from app.models.pack import Pack
 from app.models.user import User, UserRole
 from app.schemas.device import DeviceResponse
@@ -13,6 +17,17 @@ from app.schemas.pack import PackResponse
 from app.schemas.user import UserResponse
 from app.services.packs import delete_pack_files
 from app.utils import utc_now
+
+
+class AdminAlertStatsResponse(BaseModel):
+    severity_distribution: dict[str, int]
+    rule_distribution: dict[str, int]
+
+
+class AdminDeviceStatsResponse(BaseModel):
+    agent_distribution: dict[str, int]
+    rustinel_distribution: dict[str, int]
+
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -180,3 +195,102 @@ async def reset_user_password(
     background_tasks.add_task(send_password_reset_email, target.email, new_password)
 
     return {"message": "User password reset successfully and MFA cleared"}
+
+
+@router.get("/stats/alerts", response_model=AdminAlertStatsResponse)
+async def get_admin_alert_stats(
+    from_time: datetime | None = None,
+    to_time: datetime | None = None,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_admin(user)
+
+    from app.utils import ensure_utc
+
+    # Severity distribution query
+    query_sev = select(Log.severity, func.count(Log.id)).group_by(Log.severity)
+    if from_time:
+        query_sev = query_sev.where(Log.time >= ensure_utc(from_time).replace(tzinfo=None))
+    if to_time:
+        query_sev = query_sev.where(Log.time <= ensure_utc(to_time).replace(tzinfo=None))
+    res_sev = await db.execute(query_sev)
+    severity_distribution = {
+        row[0].value if hasattr(row[0], "value") else str(row[0]): row[1] for row in res_sev.all() if row[0] is not None
+    }
+
+    # Also handle None severity if any
+    where_clauses = [Log.severity.is_(None)]
+    if from_time:
+        where_clauses.append(Log.time >= ensure_utc(from_time).replace(tzinfo=None))
+    if to_time:
+        where_clauses.append(Log.time <= ensure_utc(to_time).replace(tzinfo=None))
+
+    from sqlalchemy import and_
+
+    res_sev_none = await db.execute(select(func.count(Log.id)).where(and_(*where_clauses)))
+    none_count = res_sev_none.scalar() or 0
+    if none_count > 0:
+        severity_distribution["unknown"] = none_count
+
+    # Rule distribution query
+    query_rule = select(Log.rule_id, func.count(Log.id)).group_by(Log.rule_id)
+    if from_time:
+        query_rule = query_rule.where(Log.time >= ensure_utc(from_time).replace(tzinfo=None))
+    if to_time:
+        query_rule = query_rule.where(Log.time <= ensure_utc(to_time).replace(tzinfo=None))
+    res_rule = await db.execute(query_rule)
+    rule_distribution = {row[0] or "unknown": row[1] for row in res_rule.all()}
+
+    return AdminAlertStatsResponse(
+        severity_distribution=severity_distribution,
+        rule_distribution=rule_distribution,
+    )
+
+
+@router.get("/stats/devices", response_model=AdminDeviceStatsResponse)
+async def get_admin_device_stats(
+    exclude_offline: bool = False,
+    exclude_no_version: bool = False,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_admin(user)
+
+    result = await db.execute(select(Device))
+    devices = result.scalars().all()
+
+    agent_distribution = {}
+    rustinel_distribution = {}
+
+    now_utc = datetime.now(UTC)
+    ten_minutes_ago = now_utc - timedelta(minutes=10)
+
+    for d in devices:
+        if exclude_offline:
+            if not d.last_seen:
+                continue
+            last_seen_val = d.last_seen
+            if last_seen_val.tzinfo is None:
+                last_seen_val = last_seen_val.replace(tzinfo=UTC)
+            if last_seen_val < ten_minutes_ago:
+                continue
+
+        agent_ver = d.agent_version
+        if exclude_no_version and (not agent_ver or agent_ver.strip() == ""):
+            pass
+        else:
+            ver_key = agent_ver if (agent_ver and agent_ver.strip() != "") else "unknown"
+            agent_distribution[ver_key] = agent_distribution.get(ver_key, 0) + 1
+
+        rustinel_ver = d.rustinel_version
+        if exclude_no_version and (not rustinel_ver or rustinel_ver.strip() == ""):
+            pass
+        else:
+            ver_key = rustinel_ver if (rustinel_ver and rustinel_ver.strip() != "") else "unknown"
+            rustinel_distribution[ver_key] = rustinel_distribution.get(ver_key, 0) + 1
+
+    return AdminDeviceStatsResponse(
+        agent_distribution=agent_distribution,
+        rustinel_distribution=rustinel_distribution,
+    )

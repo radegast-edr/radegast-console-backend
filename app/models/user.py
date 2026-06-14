@@ -38,6 +38,7 @@ class User(Base):
     notify_device_log: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     notify_downtime_maintenance: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     notify_api_key_modification: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1", nullable=False)
+    notify_news_updates: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1", nullable=False)
     notification_level: Mapped[LogSeverity] = mapped_column(Enum(LogSeverity), default="medium", server_default="medium", nullable=False)
     extended_edr_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
     api_keys_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)

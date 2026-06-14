@@ -39,6 +39,7 @@ async def submit_log(
         content=data.content,
         signature=data.signature,
         severity=data.severity,
+        rule_id=data.rule_id,
     )
     db.add(log)
     await db.commit()
@@ -237,6 +238,7 @@ async def list_logs(
                 severity=log.severity,
                 alert_resolution=log.alert_resolution,
                 triage_note=log.triage_note,
+                rule_id=log.rule_id,
             )
         )
     return response_logs
@@ -284,6 +286,7 @@ async def resolve_log(
         severity=log.severity,
         alert_resolution=log.alert_resolution,
         triage_note=log.triage_note,
+        rule_id=log.rule_id,
     )
 
 

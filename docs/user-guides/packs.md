@@ -31,6 +31,13 @@ The Packs page shows:
 - **Teams**: Teams that have access to this pack
 - **Actions**: Buttons to view details, edit, or delete the pack
 
+### Sorting Packs
+
+By default, the packs listed on the page are sorted sequentially using multiple criteria:
+1. **Publication**: Private packs (team-restricted) are shown first, followed by Global (public) packs.
+2. **Status**: Packs are ordered by their version status: `stable` > `testing` > `experimental` > unclassified/null.
+3. **Expected False Positive Level**: Packs are further ordered by their expected false positive rate: `low` > `medium` > `high` > null.
+
 ### Creating a New Detection Pack
 
 #### Steps

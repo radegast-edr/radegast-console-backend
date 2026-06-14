@@ -31,6 +31,7 @@ The Alerts page displays:
   - Timestamp
   - Device name
   - Severity level (color-coded)
+  - Rule ID (matched detection rule)
   - Alert type/event
   - Resolution status
 - **Alert Details Panel**: Click an alert to view full details
@@ -43,6 +44,7 @@ The Alerts page displays:
    - Device information
    - Timestamp
    - Severity level
+   - Rule ID
    - Current resolution status
    - Any existing triage notes
 3. If the alert contains encrypted content, it will be automatically decrypted if you have the appropriate private key stored in your browser

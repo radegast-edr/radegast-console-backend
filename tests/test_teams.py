@@ -60,7 +60,17 @@ class TestTeamCRUD:
 
 @pytest.mark.asyncio
 class TestTeamInvitation:
-    async def test_invite_user(self, auth_client: AsyncClient):
+    async def test_invite_user(self, client: AsyncClient, auth_client: AsyncClient):
+        from app.services.auth import create_signed_token
+
+        # Register the invited user first
+        await client.post(
+            "/auth/register",
+            json={"email": "invited@example.com", "password": "Password123!"},
+        )
+        token = create_signed_token({"email": "invited@example.com"}, salt="email-verify")
+        await client.get(f"/auth/verify?token={token}")
+
         resp = await auth_client.get("/teams/")
         teams = resp.json()
         team_id = teams[0]["id"]
@@ -69,6 +79,17 @@ class TestTeamInvitation:
             json={"email": "invited@example.com"},
         )
         assert resp.status_code == 200
+
+    async def test_invite_unregistered_user_fails_silently(self, auth_client: AsyncClient):
+        resp = await auth_client.get("/teams/")
+        teams = resp.json()
+        team_id = teams[0]["id"]
+        resp = await auth_client.post(
+            f"/teams/{team_id}/invite",
+            json={"email": "unregistered@example.com"},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {"message": "Invitation sent to unregistered@example.com"}
 
     async def test_accept_invitation(self, client: AsyncClient, auth_client: AsyncClient):
         from app.services.auth import create_signed_token

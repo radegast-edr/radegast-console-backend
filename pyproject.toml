@@ -24,6 +24,7 @@ dependencies = [
     "filelock>=3.29.0",
     "httpx>=0.28.1",
     "pyyaml>=6.0.0",
+    "alembic>=1.13.0",
 ]
 
 [project.scripts]

@@ -88,7 +88,21 @@ When adding any new configuration value:
 
 ## Database Migrations
 
-If a database migration is needed (e.g. schema changes), the local SQLite database must be migrated, and the `DB_MIGRATION.md` file must be updated with the details of the migration in the format: `date - command - what was changed`.
+We use **Alembic** to manage versioned database migrations. 
+
+When a database schema change is made:
+1. Generate a new versioned migration script:
+   ```bash
+   uv run alembic revision --autogenerate -m "description_of_change"
+   ```
+2. **Ensure migrations are safe and conditional**:
+   To prevent failures on pre-existing databases or fresh startup environments, check if tables, columns, or indexes exist before attempting to create/modify them in your `upgrade()` and `downgrade()` routines. You can get an inspector using `sa.inspect(op.get_bind())` and write conditional logic.
+3. Test the migration locally on both a fresh database and a replica of the current database:
+   ```bash
+   uv run python apply-migrations.py
+   ```
+4. All migration histories are tracked natively by Alembic under `migrations/versions/` (which is the sole source of truth for database versions).
+
 
 ## Documentation
 

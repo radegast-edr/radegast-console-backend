@@ -9,7 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 
 from app.config import settings
-from app.database import init_db
 from app.middleware.request_logging import RequestLoggingMiddleware
 from app.routers import (
     admin,
@@ -35,8 +34,6 @@ async def lifespan(app: FastAPI):
     # Create upload directory
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.releases_dir).mkdir(parents=True, exist_ok=True)
-    # Initialize database
-    await init_db()
 
     email_task = None
     if settings.enable_email_worker:

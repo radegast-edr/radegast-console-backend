@@ -13,8 +13,8 @@ class CustomBuildHook(BuildHookInterface):
         root_dir = os.path.abspath(os.path.dirname(__file__))
         web_dir = os.path.join(root_dir, "web")
 
-        is_git_repo = os.path.exists(os.path.join(root_dir, ".git"))
-        if is_git_repo:
+        has_web_sources = os.path.exists(web_dir)
+        if has_web_sources:
             # 1. Build the web frontend if Node dependencies and npm are available
             has_node_modules = os.path.exists(os.path.join(web_dir, "node_modules"))
             has_npm = shutil.which("npm") is not None
@@ -52,6 +52,6 @@ class CustomBuildHook(BuildHookInterface):
                 shutil.copytree(agent_config_src, agent_config_dest)
                 print(f"Copied agent config templates to {agent_config_dest}")
         else:
-            print("Not in git repository. Skipping frontend build (using packaged files).")
+            print("Web directory not found. Skipping frontend build (using packaged files).")
 
 

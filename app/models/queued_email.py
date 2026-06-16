@@ -15,3 +15,4 @@ class QueuedEmail(Base):
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
     html_body: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False)

@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
@@ -294,3 +295,45 @@ async def get_admin_device_stats(
         agent_distribution=agent_distribution,
         rustinel_distribution=rustinel_distribution,
     )
+
+
+class AdminBroadcastRequest(BaseModel):
+    subject: str
+    html_body: str
+    email_type: Literal["downtime_maintenance", "news_updates"]
+
+
+@router.post("/broadcast")
+async def send_admin_broadcast(
+    data: AdminBroadcastRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_admin(user)
+
+    # Find the matching users based on subscription preference
+    if data.email_type == "downtime_maintenance":
+        query = select(User).where(User.notify_downtime_maintenance)
+    elif data.email_type == "news_updates":
+        query = select(User).where(User.notify_news_updates)
+    else:
+        raise HTTPException(status_code=400, detail="Invalid email type")
+
+    result = await db.execute(query)
+    recipient_users = result.scalars().all()
+
+    from app.services.email import send_email
+
+    now = utc_now()
+    for i, u in enumerate(recipient_users):
+        wave_index = i // 20
+        scheduled_at = now + timedelta(minutes=wave_index)
+        await send_email(
+            to=u.email,
+            subject=data.subject,
+            html_body=data.html_body,
+            email_type=data.email_type,
+            scheduled_at=scheduled_at,
+        )
+
+    return {"message": f"Successfully queued broadcast to {len(recipient_users)} users."}

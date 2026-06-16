@@ -1,6 +1,6 @@
 import asyncio
 import random
-from datetime import timedelta
+from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 
 import aiosmtplib
@@ -241,7 +241,13 @@ async def send_email_direct(to: str, subject: str, html_body: str, email_type: s
     )
 
 
-async def send_email(to: str, subject: str, html_body: str, email_type: str | None = None):
+async def send_email(
+    to: str,
+    subject: str,
+    html_body: str,
+    email_type: str | None = None,
+    scheduled_at: datetime | None = None,
+):
     # Verification emails are sent right away.
     if email_type == "verify" or email_type is None:
         await send_email_direct(to, subject, html_body, email_type)
@@ -254,6 +260,8 @@ async def send_email(to: str, subject: str, html_body: str, email_type: str | No
             email_type=email_type,
             subject=subject,
             html_body=html_body,
+            created_at=scheduled_at or utc_now(),
+            scheduled_at=scheduled_at or utc_now(),
         )
         session.add(queued_email)
         await session.commit()
@@ -429,7 +437,7 @@ async def process_email_queue():
     now = utc_now()
 
     async with app.database.async_session() as session:
-        result = await session.execute(select(QueuedEmail).order_by(QueuedEmail.created_at.asc()))
+        result = await session.execute(select(QueuedEmail).where(QueuedEmail.scheduled_at <= now).order_by(QueuedEmail.scheduled_at.asc()))
         queued_emails = result.scalars().all()
 
         if not queued_emails:
@@ -486,13 +494,18 @@ async def process_email_queue():
                     next_interval = intervals[-1]
                 next_email_text = f"The next bulk email will arrive in {next_interval} minutes if more events occur."
 
-                header_html = f"""
-<div style="background-color: #f4f5f7; border-left: 4px solid #0052cc; padding: 12px; margin-bottom: 20px; font-family: sans-serif; font-size: 14px; line-height: 1.5; color: #333;">
-    <strong>Bulk Notification Summary</strong><br/>
-    This email contains {event_count} bulk events.<br/>
-    {next_email_text}
-</div>
-"""
+                if event_count > 1 or next_interval > 10:
+                    header_html = f"""
+    <div style="background-color: #f4f5f7; border-left: 4px solid #0052cc; padding: 12px; margin-bottom: 20px; font-family: sans-serif; font-size: 14px; line-height: 1.5; color: #333;">
+        <strong>Bulk Notification Summary</strong><br/>
+        This email contains {event_count} bulk events.<br/>
+        {next_email_text}
+    </div>
+    """
+                else:
+                    # Show header only if multiple bulk emails or next email in longer time
+                    header_html = ""
+
                 if event_count > 1:
                     subject = f"[Bulk] {emails[0].subject}"
                 else:

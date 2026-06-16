@@ -1,14 +1,15 @@
-import pytest
-from datetime import datetime, timezone as tz, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
+
+import pytest
 from sqlalchemy import select
 
 from app.config import settings
 from app.models.queued_email import QueuedEmail
 from app.services.email import (
-    send_verification_email,
-    send_login_notification,
     process_email_queue,
+    send_login_notification,
+    send_verification_email,
 )
 
 
@@ -57,7 +58,7 @@ async def test_debounce_email_queued_and_sent_after_timeout(db_session):
             assert len(result.scalars().all()) == 1
 
             # Manually alter the created_at to be 4 minutes ago to simulate passage of time
-            queued[0].created_at = datetime.now(tz=tz.utc) - timedelta(minutes=4)
+            queued[0].created_at = datetime.now(tz=UTC) - timedelta(minutes=4)
             await db_session.commit()
 
             # Run process_email_queue again - should send now
@@ -91,14 +92,14 @@ async def test_bulk_email_grouping_and_combining(db_session):
             assert len(queued) == 3
 
             # Make the oldest one (index 0) expire the debounce period
-            queued[0].created_at = datetime.now(tz=tz.utc) - timedelta(minutes=4)
+            queued[0].created_at = datetime.now(tz=UTC) - timedelta(minutes=4)
             await db_session.commit()
 
             # Run process_email_queue - should send all 3 in bulk as one email
             await process_email_queue()
 
             mock_direct.assert_called_once()
-            to_email, subject, html_body, *rest = mock_direct.call_args[0]
+            to_email, subject, html_body, *_rest = mock_direct.call_args[0]
             assert to_email == "bulk@example.com"
             assert subject.startswith("[Bulk]")
             assert "New Login Alert" in subject
@@ -129,7 +130,7 @@ async def test_different_users_or_types_not_combined(db_session):
             result = await db_session.execute(select(QueuedEmail))
             queued = result.scalars().all()
             for q in queued:
-                q.created_at = datetime.now(tz=tz.utc) - timedelta(minutes=4)
+                q.created_at = datetime.now(tz=UTC) - timedelta(minutes=4)
             await db_session.commit()
 
             await process_email_queue()
@@ -153,7 +154,7 @@ async def test_email_bulking_progression_headers_and_limit(db_session):
     try:
         with patch("app.services.email.send_email_direct", new_callable=AsyncMock) as mock_direct:
             intervals = [3, 3, 6, 16, 37, 62, 122, 193]
-            
+
             # We will send 8 batches and verify the interval/headers progression
             for i, interval in enumerate(intervals):
                 # Queue one notification
@@ -163,9 +164,9 @@ async def test_email_bulking_progression_headers_and_limit(db_session):
                 result = await db_session.execute(select(QueuedEmail))
                 queued = result.scalars().all()
                 assert len(queued) == 1
-                
+
                 # Make it expire the current debounce limit (interval + 1 minute)
-                queued[0].created_at = datetime.now(tz=tz.utc) - timedelta(minutes=interval + 1)
+                queued[0].created_at = datetime.now(tz=UTC) - timedelta(minutes=interval + 1)
                 await db_session.commit()
 
                 # Process the queue
@@ -174,18 +175,22 @@ async def test_email_bulking_progression_headers_and_limit(db_session):
 
                 # Check it was sent
                 mock_direct.assert_called_once()
-                to_email, subject, html_body, *rest = mock_direct.call_args[0]
+                to_email, subject, html_body, *_rest = mock_direct.call_args[0]
                 assert to_email == "test_bulk@example.com"
                 assert "[Bulk]" not in subject
                 assert f"10.0.0.{i}" in html_body
-                assert "This email contains 1 bulk events." in html_body
-                
                 # Check next interval text in the body
                 if i + 1 < len(intervals):
                     next_int = intervals[i + 1]
                 else:
                     next_int = intervals[-1]
-                assert f"The next bulk email will arrive in {next_int} minutes if more events occur." in html_body
+
+                if next_int > 10:
+                    assert "This email contains 1 bulk events." in html_body
+                    assert f"The next bulk email will arrive in {next_int} minutes if more events occur." in html_body
+                else:
+                    assert "This email contains 1 bulk events." not in html_body
+                    assert f"The next bulk email will arrive in {next_int} minutes if more events occur." not in html_body
 
                 # Verify queue is empty after sending
                 result = await db_session.execute(select(QueuedEmail))
@@ -194,10 +199,7 @@ async def test_email_bulking_progression_headers_and_limit(db_session):
                 # Verify state in database
                 db_session.expire_all()
                 result_state = await db_session.execute(
-                    select(EmailBulkState).where(
-                        EmailBulkState.email_to == "test_bulk@example.com",
-                        EmailBulkState.email_type == "login"
-                    )
+                    select(EmailBulkState).where(EmailBulkState.email_to == "test_bulk@example.com", EmailBulkState.email_type == "login")
                 )
                 state = result_state.scalar_one()
                 assert state.sent_count == i + 1
@@ -211,7 +213,7 @@ async def test_email_bulking_progression_headers_and_limit(db_session):
             assert len(queued) == 1
 
             # Make it look expired for 193 minutes (194 minutes ago)
-            queued[0].created_at = datetime.now(tz=tz.utc) - timedelta(minutes=194)
+            queued[0].created_at = datetime.now(tz=UTC) - timedelta(minutes=194)
             await db_session.commit()
 
             mock_direct.reset_mock()
@@ -219,20 +221,17 @@ async def test_email_bulking_progression_headers_and_limit(db_session):
 
             # Ensure send_email_direct was called and the email was sent
             mock_direct.assert_called_once()
-            to_email, subject, html_body, *rest = mock_direct.call_args[0]
+            to_email, subject, html_body, *_rest = mock_direct.call_args[0]
             assert "10.0.0.8" in html_body
             assert "The next bulk email will arrive in 193 minutes if more events occur." in html_body
-            
+
             result = await db_session.execute(select(QueuedEmail))
             assert len(result.scalars().all()) == 0
 
             # Verify sent_count is now 9
             db_session.expire_all()
             result_state = await db_session.execute(
-                select(EmailBulkState).where(
-                    EmailBulkState.email_to == "test_bulk@example.com",
-                    EmailBulkState.email_type == "login"
-                )
+                select(EmailBulkState).where(EmailBulkState.email_to == "test_bulk@example.com", EmailBulkState.email_type == "login")
             )
             state = result_state.scalar_one()
             assert state.sent_count == 9
@@ -244,8 +243,8 @@ async def test_email_bulking_progression_headers_and_limit(db_session):
             assert len(queued) == 1
 
             # Manually set the state's last_sent_at to 25 hours ago, and queued email to 4 minutes ago
-            state.last_sent_at = datetime.now(tz=tz.utc) - timedelta(hours=25)
-            queued[0].created_at = datetime.now(tz=tz.utc) - timedelta(minutes=4)
+            state.last_sent_at = datetime.now(tz=UTC) - timedelta(hours=25)
+            queued[0].created_at = datetime.now(tz=UTC) - timedelta(minutes=4)
             await db_session.commit()
 
             # Process the queue - it should reset the sequence (sent_count becomes 0)
@@ -254,9 +253,9 @@ async def test_email_bulking_progression_headers_and_limit(db_session):
             await process_email_queue()
 
             mock_direct.assert_called_once()
-            to_email, subject, html_body, *rest = mock_direct.call_args[0]
+            to_email, subject, html_body, *_rest = mock_direct.call_args[0]
             assert "10.0.0.9" in html_body
-            assert "The next bulk email will arrive in 3 minutes if more events occur." in html_body
+            assert "The next bulk email will arrive in 3 minutes if more events occur." not in html_body
 
             # Check queue is empty and state reset correctly
             result = await db_session.execute(select(QueuedEmail))
@@ -264,10 +263,7 @@ async def test_email_bulking_progression_headers_and_limit(db_session):
 
             db_session.expire_all()
             result_state = await db_session.execute(
-                select(EmailBulkState).where(
-                    EmailBulkState.email_to == "test_bulk@example.com",
-                    EmailBulkState.email_type == "login"
-                )
+                select(EmailBulkState).where(EmailBulkState.email_to == "test_bulk@example.com", EmailBulkState.email_type == "login")
             )
             state = result_state.scalar_one()
             assert state.sent_count == 1
@@ -289,12 +285,12 @@ async def test_bulk_subject_prefix_depends_on_count(db_session):
             result = await db_session.execute(select(QueuedEmail))
             queued = result.scalars().all()
             assert len(queued) == 1
-            queued[0].created_at = datetime.now(tz=tz.utc) - timedelta(minutes=4)
+            queued[0].created_at = datetime.now(tz=UTC) - timedelta(minutes=4)
             await db_session.commit()
 
             await process_email_queue()
             mock_direct.assert_called_once()
-            to_email, subject, html_body, *rest = mock_direct.call_args[0]
+            to_email, subject, _html_body, *_rest = mock_direct.call_args[0]
             assert to_email == "single@example.com"
             assert "[Bulk]" not in subject
 
@@ -306,12 +302,12 @@ async def test_bulk_subject_prefix_depends_on_count(db_session):
             queued = result.scalars().all()
             assert len(queued) == 2
             for q in queued:
-                q.created_at = datetime.now(tz=tz.utc) - timedelta(minutes=4)
+                q.created_at = datetime.now(tz=UTC) - timedelta(minutes=4)
             await db_session.commit()
 
             await process_email_queue()
             mock_direct.assert_called_once()
-            to_email, subject, html_body, *rest = mock_direct.call_args[0]
+            to_email, subject, _html_body, *_rest = mock_direct.call_args[0]
             assert to_email == "multi@example.com"
             assert subject.startswith("[Bulk]")
 

@@ -4,6 +4,7 @@ Tests for MFA required-level enforcement:
 - Disabling OTP or deleting the last hardware token is blocked when it would
   leave the user below their required MFA level
 """
+
 from unittest.mock import MagicMock, patch
 
 import pyotp
@@ -18,6 +19,7 @@ from app.services.auth import hash_password
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 async def _create_user(db_engine, email: str, password: str, role: UserRole = UserRole.user) -> User:
     session_factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
@@ -77,13 +79,12 @@ async def _enable_otp(client: AsyncClient) -> str:
 # Login method filtering
 # ===========================================================================
 
+
 class TestLoginMethodFiltering:
     """When required_level is hardware_token, OTP must not appear in methods."""
 
     @pytest.mark.asyncio
-    async def test_admin_with_hardware_token_required_only_sees_hardware_token_in_login(
-        self, client: AsyncClient, db_engine
-    ):
+    async def test_admin_with_hardware_token_required_only_sees_hardware_token_in_login(self, client: AsyncClient, db_engine):
         original = settings.mfa_required_level_admin
         settings.mfa_required_level_admin = "hardware_token"
         try:
@@ -112,9 +113,7 @@ class TestLoginMethodFiltering:
             settings.mfa_required_level_admin = original
 
     @pytest.mark.asyncio
-    async def test_user_with_otp_required_sees_otp_and_hardware_token_in_login(
-        self, client: AsyncClient, db_engine
-    ):
+    async def test_user_with_otp_required_sees_otp_and_hardware_token_in_login(self, client: AsyncClient, db_engine):
         original = settings.mfa_required_level_user
         settings.mfa_required_level_user = "otp"
         try:
@@ -141,9 +140,7 @@ class TestLoginMethodFiltering:
             settings.mfa_required_level_user = original
 
     @pytest.mark.asyncio
-    async def test_admin_with_only_otp_and_hardware_token_required_sees_only_hardware_token(
-        self, client: AsyncClient, db_engine
-    ):
+    async def test_admin_with_only_otp_and_hardware_token_required_sees_only_hardware_token(self, client: AsyncClient, db_engine):
         """Admin has OTP but no hardware token, and required level is hardware_token.
         OTP should still not appear (it can't satisfy the requirement on its own)."""
         original = settings.mfa_required_level_admin
@@ -176,13 +173,12 @@ class TestLoginMethodFiltering:
 # OTP disable protection
 # ===========================================================================
 
+
 class TestOtpDisableProtection:
     """Cannot disable OTP when it is the only factor satisfying the required level."""
 
     @pytest.mark.asyncio
-    async def test_cannot_disable_otp_when_required_and_no_hardware_token(
-        self, client: AsyncClient, db_engine
-    ):
+    async def test_cannot_disable_otp_when_required_and_no_hardware_token(self, client: AsyncClient, db_engine):
         original = settings.mfa_required_level_user
         settings.mfa_required_level_user = "otp"
         try:
@@ -202,9 +198,7 @@ class TestOtpDisableProtection:
             settings.mfa_required_level_user = original
 
     @pytest.mark.asyncio
-    async def test_can_disable_otp_when_hardware_token_satisfies_requirement(
-        self, client: AsyncClient, db_engine
-    ):
+    async def test_can_disable_otp_when_hardware_token_satisfies_requirement(self, client: AsyncClient, db_engine):
         original = settings.mfa_required_level_user
         settings.mfa_required_level_user = "otp"
         try:
@@ -224,9 +218,7 @@ class TestOtpDisableProtection:
             settings.mfa_required_level_user = original
 
     @pytest.mark.asyncio
-    async def test_can_disable_otp_when_hardware_token_required_and_token_present(
-        self, client: AsyncClient, db_engine
-    ):
+    async def test_can_disable_otp_when_hardware_token_required_and_token_present(self, client: AsyncClient, db_engine):
         """hardware_token requirement: OTP is irrelevant, so disabling it is always fine
         as long as the user still has a hardware token."""
         original = settings.mfa_required_level_admin
@@ -248,9 +240,7 @@ class TestOtpDisableProtection:
             settings.mfa_required_level_admin = original
 
     @pytest.mark.asyncio
-    async def test_cannot_disable_otp_when_hardware_token_required_and_no_token(
-        self, client: AsyncClient, db_engine
-    ):
+    async def test_cannot_disable_otp_when_hardware_token_required_and_no_token(self, client: AsyncClient, db_engine):
         """hardware_token required, user only has OTP → cannot disable OTP."""
         original = settings.mfa_required_level_admin
         settings.mfa_required_level_admin = "hardware_token"
@@ -269,9 +259,7 @@ class TestOtpDisableProtection:
             settings.mfa_required_level_admin = original
 
     @pytest.mark.asyncio
-    async def test_can_disable_otp_when_no_mfa_required(
-        self, client: AsyncClient, db_engine
-    ):
+    async def test_can_disable_otp_when_no_mfa_required(self, client: AsyncClient, db_engine):
         original = settings.mfa_required_level_user
         settings.mfa_required_level_user = "none"
         try:
@@ -293,13 +281,12 @@ class TestOtpDisableProtection:
 # Hardware token delete protection
 # ===========================================================================
 
+
 class TestHardwareTokenDeleteProtection:
     """Cannot delete the last hardware token when hardware_token level is required."""
 
     @pytest.mark.asyncio
-    async def test_cannot_delete_last_hardware_token_when_required(
-        self, client: AsyncClient, db_engine
-    ):
+    async def test_cannot_delete_last_hardware_token_when_required(self, client: AsyncClient, db_engine):
         original = settings.mfa_required_level_admin
         settings.mfa_required_level_admin = "hardware_token"
         try:
@@ -318,9 +305,7 @@ class TestHardwareTokenDeleteProtection:
             settings.mfa_required_level_admin = original
 
     @pytest.mark.asyncio
-    async def test_can_delete_non_last_hardware_token_when_required(
-        self, client: AsyncClient, db_engine
-    ):
+    async def test_can_delete_non_last_hardware_token_when_required(self, client: AsyncClient, db_engine):
         original = settings.mfa_required_level_admin
         settings.mfa_required_level_admin = "hardware_token"
         try:
@@ -340,9 +325,7 @@ class TestHardwareTokenDeleteProtection:
             settings.mfa_required_level_admin = original
 
     @pytest.mark.asyncio
-    async def test_can_delete_last_hardware_token_when_not_required(
-        self, client: AsyncClient, db_engine
-    ):
+    async def test_can_delete_last_hardware_token_when_not_required(self, client: AsyncClient, db_engine):
         original = settings.mfa_required_level_user
         settings.mfa_required_level_user = "none"
         try:
@@ -360,9 +343,7 @@ class TestHardwareTokenDeleteProtection:
             settings.mfa_required_level_user = original
 
     @pytest.mark.asyncio
-    async def test_cannot_delete_last_hardware_token_when_otp_required_and_otp_disabled(
-        self, client: AsyncClient, db_engine
-    ):
+    async def test_cannot_delete_last_hardware_token_when_otp_required_and_otp_disabled(self, client: AsyncClient, db_engine):
         """otp required, user has hardware token but no OTP → deleting last token leaves
         them with no satisfying factor."""
         original = settings.mfa_required_level_user
@@ -384,9 +365,7 @@ class TestHardwareTokenDeleteProtection:
             settings.mfa_required_level_user = original
 
     @pytest.mark.asyncio
-    async def test_can_delete_last_hardware_token_when_otp_required_and_otp_enabled(
-        self, client: AsyncClient, db_engine
-    ):
+    async def test_can_delete_last_hardware_token_when_otp_required_and_otp_enabled(self, client: AsyncClient, db_engine):
         """otp required, user has both hardware token AND OTP → deleting hardware token
         is fine because OTP still satisfies the requirement."""
         original = settings.mfa_required_level_user

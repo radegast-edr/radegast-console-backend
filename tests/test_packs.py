@@ -13,7 +13,7 @@ from app.services.auth import create_signed_token
 def create_minimal_zip() -> bytes:
     """Create a minimal valid zip file with a sigma directory."""
     zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("sigma/test.yml", "title: Test\ndetection:\n  selection:\n    field: value\n  condition: selection\n")
     return zip_buffer.getvalue()
 
@@ -72,7 +72,6 @@ class TestPackCreation:
         )
         assert resp.status_code in (403, 404)
 
-
     async def test_create_duplicate_pack_fails(self, maintainer_client: AsyncClient):
         await maintainer_client.post(
             "/packs/",
@@ -85,9 +84,7 @@ class TestPackCreation:
         assert resp.status_code == 400
 
     async def test_list_packs(self, maintainer_client: AsyncClient):
-        await maintainer_client.post(
-            "/packs/", json={"name": "List Test Pack", "description": "For listing"}
-        )
+        await maintainer_client.post("/packs/", json={"name": "List Test Pack", "description": "For listing"})
         resp = await maintainer_client.get("/packs/")
         assert resp.status_code == 200
         assert len(resp.json()) >= 1
@@ -100,9 +97,7 @@ class TestPackCreation:
 @pytest.mark.asyncio
 class TestPackGet:
     async def test_get_pack(self, maintainer_client: AsyncClient):
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "Gettable Pack", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "Gettable Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 
         resp = await maintainer_client.get(f"/packs/{pack_id}")
@@ -120,9 +115,7 @@ class TestPackGet:
 class TestPackVersions:
     async def test_upload_version(self, maintainer_client: AsyncClient):
         # Create pack first
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "Versioned Pack", "description": "Has versions"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "Versioned Pack", "description": "Has versions"})
         pack_id = resp.json()["id"]
 
         # Upload version with release notes
@@ -154,9 +147,7 @@ class TestPackVersions:
         assert resp.status_code == 404
 
     async def test_upload_duplicate_version_fails(self, maintainer_client: AsyncClient):
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "Dup Version Pack", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "Dup Version Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 
         zip_content = create_minimal_zip()
@@ -171,9 +162,7 @@ class TestPackVersions:
         assert resp.status_code == 400
 
     async def test_list_versions(self, maintainer_client: AsyncClient):
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "Multi Version", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "Multi Version", "description": "Test"})
         pack_id = resp.json()["id"]
 
         zip_content = create_minimal_zip()
@@ -191,9 +180,7 @@ class TestPackVersions:
         assert len(resp.json()) == 2
 
     async def test_upload_invalid_version_format_fails(self, maintainer_client: AsyncClient):
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "Semver Format Pack", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "Semver Format Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 
         zip_content = create_minimal_zip()
@@ -205,9 +192,7 @@ class TestPackVersions:
             assert resp.status_code == 400
 
     async def test_upload_older_version_fails(self, maintainer_client: AsyncClient):
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "Older Version Pack", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "Older Version Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 
         zip_content = create_minimal_zip()
@@ -229,9 +214,7 @@ class TestPackVersions:
 class TestPackEnabling:
     async def test_enable_pack_for_group(self, maintainer_client: AsyncClient):
         # Create pack and version as maintainer
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "Enable Test Pack", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "Enable Test Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 
         zip_content = create_minimal_zip()
@@ -256,9 +239,7 @@ class TestPackEnabling:
 
     async def test_list_enabled_packs(self, maintainer_client: AsyncClient):
         # Create and enable pack
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "List Enabled Pack", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "List Enabled Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 
         zip_content = create_minimal_zip()
@@ -284,9 +265,7 @@ class TestPackEnabling:
 
     async def test_disable_pack(self, maintainer_client: AsyncClient):
         # Create and enable a pack
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "Disable Test Pack", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "Disable Test Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 
         zip_content = create_minimal_zip()
@@ -329,9 +308,7 @@ class TestPackEnabling:
 class TestDevicePacks:
     async def _setup_device_with_pack(self, maintainer_client: AsyncClient, client: AsyncClient):
         """Helper: create pack+version, device, add device to group, enable pack, login as device."""
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "Device Pack", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "Device Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 
         zip_content = create_minimal_zip()
@@ -385,9 +362,7 @@ class TestDevicePacks:
         assert resp.status_code == 200
         assert resp.json()["last_seen"] is not None
 
-    async def test_device_download_pack_not_found(
-        self, auth_client: AsyncClient, client: AsyncClient
-    ):
+    async def test_device_download_pack_not_found(self, auth_client: AsyncClient, client: AsyncClient):
         resp = await auth_client.get("/teams/")
         team_id = resp.json()[0]["id"]
         resp = await auth_client.get(f"/teams/{team_id}/groups")
@@ -400,23 +375,17 @@ class TestDevicePacks:
         resp = await client.get("/packs/device/download/99999")
         assert resp.status_code == 404
 
-    async def test_device_download_pack(
-        self, maintainer_client: AsyncClient, client: AsyncClient
-    ):
+    async def test_device_download_pack(self, maintainer_client: AsyncClient, client: AsyncClient):
         info = await self._setup_device_with_pack(maintainer_client, client)
         resp = await client.get(f"/packs/device/download/{info['version_id']}")
         assert resp.status_code == 200
 
-    async def test_device_available_packs_requires_device_session(
-        self, auth_client: AsyncClient
-    ):
+    async def test_device_available_packs_requires_device_session(self, auth_client: AsyncClient):
         resp = await auth_client.get("/packs/device/available")
         assert resp.status_code == 403
 
     async def test_user_download_pack(self, maintainer_client: AsyncClient):
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "User Download Pack", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "User Download Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 
         zip_content = create_minimal_zip()
@@ -440,9 +409,7 @@ class TestDevicePacks:
 
     async def test_autoupdate_enabled_on_publish(self, maintainer_client: AsyncClient):
         # 1. Create a pack
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "Autoupdate Pack", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "Autoupdate Pack", "description": "Test"})
         assert resp.status_code == 200
         pack_id = resp.json()["id"]
 
@@ -460,17 +427,11 @@ class TestDevicePacks:
         team_id = resp.json()[0]["id"]
 
         # 4. Create two groups under this team
-        resp = await maintainer_client.post(
-            f"/teams/{team_id}/groups",
-            json={"name": "Group AutoUpdate Enabled"}
-        )
+        resp = await maintainer_client.post(f"/teams/{team_id}/groups", json={"name": "Group AutoUpdate Enabled"})
         assert resp.status_code == 200
         group_autoupdate_id = resp.json()["id"]
 
-        resp = await maintainer_client.post(
-            f"/teams/{team_id}/groups",
-            json={"name": "Group AutoUpdate Disabled"}
-        )
+        resp = await maintainer_client.post(f"/teams/{team_id}/groups", json={"name": "Group AutoUpdate Disabled"})
         assert resp.status_code == 200
         group_no_autoupdate_id = resp.json()["id"]
 
@@ -714,16 +675,15 @@ class TestPackValidation:
 
     async def test_upload_empty_zip_fails(self, maintainer_client: AsyncClient):
         """Test that uploading an empty zip file fails validation."""
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "Validation Test Pack", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "Validation Test Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 
         # Create an empty zip file
         import io
         import zipfile
+
         zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             pass  # Empty zip
         zip_content = zip_buffer.getvalue()
 
@@ -737,16 +697,15 @@ class TestPackValidation:
 
     async def test_upload_zip_without_required_dirs_fails(self, maintainer_client: AsyncClient):
         """Test that uploading a zip without ioc/, sigma/, or yara/ fails."""
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "No Dir Pack", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "No Dir Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 
         # Create a zip with a random file
         import io
         import zipfile
+
         zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("random.txt", "content")
         zip_content = zip_buffer.getvalue()
 
@@ -760,16 +719,15 @@ class TestPackValidation:
 
     async def test_upload_zip_with_extra_file_fails(self, maintainer_client: AsyncClient):
         """Test that uploading a zip with unexpected files at top level fails."""
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "Extra File Pack", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "Extra File Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 
         # Create a zip with a sigma file and an extra file at top level
         import io
         import zipfile
+
         zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("sigma/rule.yml", "title: Test\nid: test\n")
             zf.writestr("extra.txt", "should not be allowed")
         zip_content = zip_buffer.getvalue()
@@ -784,16 +742,15 @@ class TestPackValidation:
 
     async def test_upload_zip_with_invalid_sigma_extension_fails(self, maintainer_client: AsyncClient):
         """Test that uploading a zip with non-yml/yaml files in sigma/ fails."""
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "Invalid Sigma Pack", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "Invalid Sigma Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 
         # Create a zip with a non-yml file in sigma/
         import io
         import zipfile
+
         zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("sigma/rule.txt", "not a yaml file")
         zip_content = zip_buffer.getvalue()
 
@@ -807,16 +764,15 @@ class TestPackValidation:
 
     async def test_upload_zip_with_invalid_yara_extension_fails(self, maintainer_client: AsyncClient):
         """Test that uploading a zip with non-yar files in yara/ fails."""
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "Invalid Yara Pack", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "Invalid Yara Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 
         # Create a zip with a non-yar file in yara/
         import io
         import zipfile
+
         zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("yara/rule.txt", "not a yara file")
         zip_content = zip_buffer.getvalue()
 
@@ -830,16 +786,15 @@ class TestPackValidation:
 
     async def test_upload_zip_with_invalid_ioc_file_fails(self, maintainer_client: AsyncClient):
         """Test that uploading a zip with unexpected files in ioc/ fails."""
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "Invalid IOC Pack", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "Invalid IOC Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 
         # Create a zip with an invalid file in ioc/
         import io
         import zipfile
+
         zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("ioc/invalid.txt", "not an allowed file")
         zip_content = zip_buffer.getvalue()
 
@@ -853,14 +808,13 @@ class TestPackValidation:
 
     async def test_upload_valid_zip_with_sigma(self, maintainer_client: AsyncClient):
         """Test that uploading a valid zip with sigma files passes validation."""
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "Valid Sigma Pack", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "Valid Sigma Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 
         # Create a zip with a valid sigma file
         import io
         import zipfile
+
         sigma_rule = """title: Test Rule
 id: test-rule-id
 status: experimental
@@ -876,7 +830,7 @@ detection:
   condition: selection
 """
         zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("sigma/test_rule.yml", sigma_rule)
         zip_content = zip_buffer.getvalue()
 
@@ -889,14 +843,13 @@ detection:
 
     async def test_upload_valid_zip_with_yara(self, maintainer_client: AsyncClient):
         """Test that uploading a valid zip with yara files passes validation."""
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "Valid Yara Pack", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "Valid Yara Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 
         # Create a zip with a valid yara file
         import io
         import zipfile
+
         yara_rule = """rule TestRule {
     strings:
         $test = "test"
@@ -904,7 +857,7 @@ detection:
         $test
 }"""
         zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("yara/test_rule.yar", yara_rule)
         zip_content = zip_buffer.getvalue()
 
@@ -917,16 +870,15 @@ detection:
 
     async def test_upload_valid_zip_with_ioc(self, maintainer_client: AsyncClient):
         """Test that uploading a valid zip with ioc files passes validation."""
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "Valid IOC Pack", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "Valid IOC Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 
         # Create a zip with valid ioc files
         import io
         import zipfile
+
         zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("ioc/paths_regex.txt", "test")
             zf.writestr("ioc/ips.txt", "127.0.0.1")
             zf.writestr("ioc/hashes.txt", "abc123")
@@ -941,20 +893,19 @@ detection:
 
     async def test_upload_invalid_yaml_sigma_fails(self, maintainer_client: AsyncClient):
         """Test that uploading a zip with invalid YAML in sigma/ fails."""
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "Invalid YAML Pack", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "Invalid YAML Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 
         # Create a zip with invalid YAML in sigma/
         import io
         import zipfile
+
         invalid_yaml = """title: Test Rule
 id: test-rule-id
   invalid: [indentation
 """
         zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("sigma/test_rule.yml", invalid_yaml)
         zip_content = zip_buffer.getvalue()
 
@@ -975,9 +926,7 @@ class TestPackSizeLimits:
         """Uploading a pack within the size limit should succeed."""
         from app.config import settings
 
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "SizeLimit Pack OK", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "SizeLimit Pack OK", "description": "Test"})
         pack_id = resp.json()["id"]
 
         zip_content = create_minimal_zip()
@@ -996,9 +945,7 @@ class TestPackSizeLimits:
         """Uploading a pack exceeding the general size limit should return 413."""
         from app.config import settings
 
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "SizeLimit Pack Fail", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "SizeLimit Pack Fail", "description": "Test"})
         pack_id = resp.json()["id"]
 
         zip_content = create_minimal_zip()
@@ -1018,9 +965,7 @@ class TestPackSizeLimits:
         """A role-specific limit (pack_max_size_mb_maintainer) takes priority over the general one."""
         from app.config import settings
 
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "SizeLimit Role Pack", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "SizeLimit Role Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 
         zip_content = create_minimal_zip()
@@ -1043,9 +988,7 @@ class TestPackSizeLimits:
         """When all size limits are None, uploads of any size should succeed."""
         from app.config import settings
 
-        resp = await maintainer_client.post(
-            "/packs/", json={"name": "SizeLimit NoLimit Pack", "description": "Test"}
-        )
+        resp = await maintainer_client.post("/packs/", json={"name": "SizeLimit NoLimit Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 
         zip_content = create_minimal_zip()

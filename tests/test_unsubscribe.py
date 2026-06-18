@@ -99,11 +99,7 @@ async def test_unsubscribe_api_success(client: AsyncClient, db_session):
 
     # Generate unsubscribe token for only "notify_login" (login alerts)
     expires_at = (utc_now() + timedelta(weeks=2)).isoformat()
-    token = create_signed_token({
-        "user_id": user.id,
-        "expires_at": expires_at,
-        "preference_field": "notify_login"
-    }, salt="unsubscribe")
+    token = create_signed_token({"user_id": user.id, "expires_at": expires_at, "preference_field": "notify_login"}, salt="unsubscribe")
 
     # Post to unsubscribe endpoint
     resp = await client.post("/user/unsubscribe", json={"token": token})
@@ -131,11 +127,7 @@ async def test_unsubscribe_api_expired_token(client: AsyncClient, db_session):
 
     # Token expires 1 second in the past
     expires_at = (utc_now() - timedelta(seconds=1)).isoformat()
-    token = create_signed_token({
-        "user_id": user.id,
-        "expires_at": expires_at,
-        "preference_field": "notify_login"
-    }, salt="unsubscribe")
+    token = create_signed_token({"user_id": user.id, "expires_at": expires_at, "preference_field": "notify_login"}, salt="unsubscribe")
 
     resp = await client.post("/user/unsubscribe", json={"token": token})
     assert resp.status_code == 400
@@ -214,23 +206,12 @@ async def test_one_click_unsubscribe_post_success(client: AsyncClient, db_sessio
     assert user.notify_login is True
 
     expires_at = (utc_now() + timedelta(weeks=2)).isoformat()
-    token = create_signed_token({
-        "user_id": user.id,
-        "expires_at": expires_at,
-        "preference_field": "notify_login"
-    }, salt="unsubscribe")
+    token = create_signed_token({"user_id": user.id, "expires_at": expires_at, "preference_field": "notify_login"}, salt="unsubscribe")
 
     # Perform RFC 8058 standard One-Click POST request
     # Token in query params, and body is "List-Unsubscribe=One-Click"
-    headers = {
-        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-        "Content-Type": "text/plain"
-    }
-    resp = await client.post(
-        f"/user/unsubscribe?token={token}",
-        content="List-Unsubscribe=One-Click",
-        headers=headers
-    )
+    headers = {"List-Unsubscribe-Post": "List-Unsubscribe=One-Click", "Content-Type": "text/plain"}
+    resp = await client.post(f"/user/unsubscribe?token={token}", content="List-Unsubscribe=One-Click", headers=headers)
     assert resp.status_code == 200
     assert "Successfully unsubscribed" in resp.json()["message"]
 

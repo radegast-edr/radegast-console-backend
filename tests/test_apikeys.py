@@ -15,16 +15,9 @@ class TestAPIKeys:
         assert "API keys support is disabled" in resp.json()["detail"]
 
         # 2. Creating should fail when API keys are disabled
-        resp = await auth_client.post("/apikeys/", json={
-            "name": "My Key",
-            "scopes": {
-                "devices": ["read"],
-                "teams": [],
-                "groups": [],
-                "packs": [],
-                "logs": []
-            }
-        })
+        resp = await auth_client.post(
+            "/apikeys/", json={"name": "My Key", "scopes": {"devices": ["read"], "teams": [], "groups": [], "packs": [], "logs": []}}
+        )
         assert resp.status_code == 403
 
     async def test_api_keys_crud_when_enabled(self, auth_client: AsyncClient, db_session: AsyncSession):
@@ -35,16 +28,13 @@ class TestAPIKeys:
         await db_session.commit()
 
         # 1. Create API key
-        resp = await auth_client.post("/apikeys/", json={
-            "name": "My New Key",
-            "scopes": {
-                "devices": ["read"],
-                "teams": ["read", "create", "write", "delete"],
-                "groups": [],
-                "packs": [],
-                "logs": []
-            }
-        })
+        resp = await auth_client.post(
+            "/apikeys/",
+            json={
+                "name": "My New Key",
+                "scopes": {"devices": ["read"], "teams": ["read", "create", "write", "delete"], "groups": [], "packs": [], "logs": []},
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["name"] == "My New Key"
@@ -80,16 +70,10 @@ class TestAPIKeys:
         await db_session.commit()
 
         # Create API key with read-only devices access, none for teams
-        resp = await auth_client.post("/apikeys/", json={
-            "name": "Restricted Key",
-            "scopes": {
-                "devices": ["read"],
-                "teams": [],
-                "groups": [],
-                "packs": [],
-                "logs": []
-            }
-        })
+        resp = await auth_client.post(
+            "/apikeys/",
+            json={"name": "Restricted Key", "scopes": {"devices": ["read"], "teams": [], "groups": [], "packs": [], "logs": []}},
+        )
         assert resp.status_code == 200
         raw_key = resp.json()["key"]
 
@@ -137,17 +121,15 @@ class TestAPIKeys:
         await db_session.commit()
 
         from unittest.mock import AsyncMock, patch
+
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
-            resp = await auth_client.post("/apikeys/", json={
-                "name": "Notify Key",
-                "scopes": {
-                    "devices": ["read"],
-                    "teams": ["read", "create", "write", "delete"],
-                    "groups": [],
-                    "packs": [],
-                    "logs": []
-                }
-            })
+            resp = await auth_client.post(
+                "/apikeys/",
+                json={
+                    "name": "Notify Key",
+                    "scopes": {"devices": ["read"], "teams": ["read", "create", "write", "delete"], "groups": [], "packs": [], "logs": []},
+                },
+            )
             assert resp.status_code == 200
 
         # Assert email was sent
@@ -169,17 +151,15 @@ class TestAPIKeys:
         await db_session.commit()
 
         from unittest.mock import AsyncMock, patch
+
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
-            resp = await auth_client.post("/apikeys/", json={
-                "name": "Silent Key",
-                "scopes": {
-                    "devices": ["read"],
-                    "teams": ["read", "create", "write", "delete"],
-                    "groups": [],
-                    "packs": [],
-                    "logs": []
-                }
-            })
+            resp = await auth_client.post(
+                "/apikeys/",
+                json={
+                    "name": "Silent Key",
+                    "scopes": {"devices": ["read"], "teams": ["read", "create", "write", "delete"], "groups": [], "packs": [], "logs": []},
+                },
+            )
             assert resp.status_code == 200
 
         # Assert no email was sent
@@ -194,6 +174,7 @@ class TestAPIKeys:
         await db_session.commit()
 
         from unittest.mock import AsyncMock, patch
+
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
             # 1. Enable
             resp = await auth_client.put("/user/api-keys-enabled", json={"api_keys_enabled": True})
@@ -229,6 +210,7 @@ class TestAPIKeys:
         await db_session.commit()
 
         from unittest.mock import AsyncMock, patch
+
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
             resp = await auth_client.put("/user/api-keys-enabled", json={"api_keys_enabled": True})
             assert resp.status_code == 200

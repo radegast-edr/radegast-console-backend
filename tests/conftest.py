@@ -113,11 +113,7 @@ async def client(db_engine):
         async def __call__(self, scope, receive, send):
             if scope["type"] == "http":
                 path = scope.get("path", "")
-                if not (
-                    path.startswith("/api/v1")
-                    or path in ("/favicon.ico", "/.well-known/security.txt")
-                    or path.startswith("/ui")
-                ):
+                if not (path.startswith("/api/v1") or path in ("/favicon.ico", "/.well-known/security.txt") or path.startswith("/ui")):
                     scope["path"] = f"/api/v1{path}"
                     raw_path = scope.get("raw_path", b"")
                     if raw_path:

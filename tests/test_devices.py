@@ -302,10 +302,7 @@ class TestDeviceReinstall:
         assert new_token != old_token
 
         # 4. Old session should be invalidated (since token_change was set)
-        resp = await device_client.post(
-            "/devices/signing-key",
-            json={"signature_public_key": "test-key"}
-        )
+        resp = await device_client.post("/devices/signing-key", json={"signature_public_key": "test-key"})
         assert resp.status_code == 401  # Session invalidated
 
         # 5. Login with new token - works
@@ -319,4 +316,3 @@ class TestDeviceReinstall:
     async def test_reinstall_unauthenticated(self, client: AsyncClient):
         resp = await client.post("/devices/1/reinstall")
         assert resp.status_code == 401
-

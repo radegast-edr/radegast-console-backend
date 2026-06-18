@@ -8,17 +8,19 @@ def test_build_parser():
     parser = build_parser()
 
     # Test 'run' subcommand
-    args = parser.parse_args([
-        "run",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        "9000",
-        "--workers",
-        "2",
-        "--database-url",
-        "sqlite+aiosqlite:///./test.db",
-    ])
+    args = parser.parse_args(
+        [
+            "run",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "9000",
+            "--workers",
+            "2",
+            "--database-url",
+            "sqlite+aiosqlite:///./test.db",
+        ]
+    )
     assert args.command == "run"
     assert args.host == "127.0.0.1"
     assert args.port == 9000
@@ -63,14 +65,9 @@ def test_cli_run_without_build_prompt_yes(mock_sub_run, mock_uvicorn_run):
             # Verify npm run build was called
             mock_sub_run.assert_any_call([ANY, "run", "build"], cwd=ANY, check=True)
             # Verify uvicorn was run
-            mock_uvicorn_run.assert_called_once_with(
-                "app.main:app", host="127.0.0.1", port=8500, workers=4
-            )
+            mock_uvicorn_run.assert_called_once_with("app.main:app", host="127.0.0.1", port=8500, workers=4)
             # Verify environment variables were set
-            assert (
-                os.environ.get("RADEGAST_DATABASE_URL")
-                == "sqlite+aiosqlite:///./cli_test.db"
-            )
+            assert os.environ.get("RADEGAST_DATABASE_URL") == "sqlite+aiosqlite:///./cli_test.db"
 
 
 @patch("uvicorn.run")
@@ -93,9 +90,7 @@ def test_cli_run_without_build_prompt_no(mock_sub_run, mock_uvicorn_run):
             for call in mock_sub_run.call_args_list:
                 assert "run" not in call[0] or "build" not in call[0]
             # Verify uvicorn was run
-            mock_uvicorn_run.assert_called_once_with(
-                "app.main:app", host="127.0.0.1", port=8501, workers=4
-            )
+            mock_uvicorn_run.assert_called_once_with("app.main:app", host="127.0.0.1", port=8501, workers=4)
 
 
 @patch("subprocess.run")

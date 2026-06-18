@@ -51,6 +51,7 @@ async def test_mfa_enforcement_by_role(client: AsyncClient, db_engine):
         hashed = hash_password(admin_pass)
 
         from sqlalchemy.ext.asyncio import async_sessionmaker
+
         session_factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
         async with session_factory() as session:
             admin_user = User(
@@ -103,6 +104,7 @@ async def test_mfa_redirected_login_otp(client: AsyncClient, db_engine):
 
     # Create user with OTP already enabled
     from sqlalchemy.ext.asyncio import async_sessionmaker
+
     session_factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
         user = User(
@@ -125,18 +127,12 @@ async def test_mfa_redirected_login_otp(client: AsyncClient, db_engine):
     mfa_token = data["mfa_token"]
 
     # Verify invalid OTP code
-    resp = await client.post(
-        "/auth/mfa/verify",
-        json={"mfa_token": mfa_token, "method": "otp", "otp_code": "000000"}
-    )
+    resp = await client.post("/auth/mfa/verify", json={"mfa_token": mfa_token, "method": "otp", "otp_code": "000000"})
     assert resp.status_code == 400
 
     # Verify valid OTP code
     totp = pyotp.TOTP(secret)
-    resp = await client.post(
-        "/auth/mfa/verify",
-        json={"mfa_token": mfa_token, "method": "otp", "otp_code": totp.now()}
-    )
+    resp = await client.post("/auth/mfa/verify", json={"mfa_token": mfa_token, "method": "otp", "otp_code": totp.now()})
     assert resp.status_code == 200
     assert resp.json()["message"] == "Login successful"
 
@@ -169,13 +165,14 @@ async def test_hardware_token_setup_and_login_flow(client: AsyncClient, db_engin
                 "registration_token": registration_token,
                 "credential_response": {"id": "mock_response_id"},
                 "name": "My Hardware token",
-            }
+            },
         )
         assert resp.status_code == 200
         assert resp.json()["message"] == "Hardware token registered successfully"
 
     # Verify Hardware token was saved in database
     from sqlalchemy.ext.asyncio import async_sessionmaker
+
     session_factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
         result = await session.execute(select(HardwareToken))
@@ -195,10 +192,7 @@ async def test_hardware_token_setup_and_login_flow(client: AsyncClient, db_engin
     mfa_token = login_data["mfa_token"]
 
     # 4. Request WebAuthn Assertion Options
-    resp = await client.post(
-        "/auth/mfa/hardware-token/assertion-options",
-        json={"mfa_token": mfa_token}
-    )
+    resp = await client.post("/auth/mfa/hardware-token/assertion-options", json={"mfa_token": mfa_token})
     assert resp.status_code == 200
     assert_data = resp.json()
     assert "options" in assert_data
@@ -217,7 +211,7 @@ async def test_hardware_token_setup_and_login_flow(client: AsyncClient, db_engin
                 "method": "hardware_token",
                 "assertion_token": assertion_token,
                 "webauthn_response": {"id": "bW9ja19jcmVkZW50aWFsX2lk"},  # base64url representation of b"mock_credential_id"
-            }
+            },
         )
         assert resp.status_code == 200
         assert resp.json()["message"] == "Login successful"
@@ -258,7 +252,7 @@ async def test_mfa_settings_management(client: AsyncClient, db_engine, registere
                 "registration_token": reg_token,
                 "credential_response": {"id": "device_id_123_b64"},
                 "name": "Settings Key",
-            }
+            },
         )
         assert resp.status_code == 200
 
@@ -322,6 +316,7 @@ async def test_mfa_grace_period_and_admin_reset_password(client: AsyncClient, db
 
         # Create admin user
         from sqlalchemy.ext.asyncio import async_sessionmaker
+
         session_factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
         async with session_factory() as session:
             admin_user = User(

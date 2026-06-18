@@ -28,7 +28,9 @@ class Log(Base):
     alert_resolution: Mapped[str | None] = mapped_column(String(50), default=None, server_default=None, nullable=True, index=True)
     rule_id: Mapped[str | None] = mapped_column(String(255), default=None, server_default=None, nullable=True, index=True)
     rule_type: Mapped[str | None] = mapped_column(String(20), default=None, server_default=None, nullable=True)
-    pack_version_rule_id: Mapped[int | None] = mapped_column(ForeignKey("pack_version_rules.id", ondelete="SET NULL"), nullable=True, index=True)
+    pack_version_rule_id: Mapped[int | None] = mapped_column(
+        ForeignKey("pack_version_rules.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     device = relationship("Device", back_populates="logs")
     pack_version_rule = relationship("PackVersionRule")

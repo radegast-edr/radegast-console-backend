@@ -107,9 +107,7 @@ class TestTeamInvitation:
         team_id = resp.json()[0]["id"]
 
         # Create invitation token
-        invite_token = create_signed_token(
-            {"email": "invitee@example.com", "team_id": team_id}, salt="team-invite"
-        )
+        invite_token = create_signed_token({"email": "invitee@example.com", "team_id": team_id}, salt="team-invite")
         resp = await client.get(f"/auth/invite/accept?token={invite_token}")
         assert resp.status_code == 200
 
@@ -156,9 +154,7 @@ class TestTeamMembers:
         # Add second user to team
         resp = await auth_client.get("/teams/")
         team_id = resp.json()[0]["id"]
-        invite_token = create_signed_token(
-            {"email": "second@example.com", "team_id": team_id}, salt="team-invite"
-        )
+        invite_token = create_signed_token({"email": "second@example.com", "team_id": team_id}, salt="team-invite")
         await client.get(f"/auth/invite/accept?token={invite_token}")
 
         # Find second user's ID
@@ -182,9 +178,7 @@ class TestTeamMembers:
 
         resp = await auth_client.get("/teams/")
         team_id = resp.json()[0]["id"]
-        invite_token = create_signed_token(
-            {"email": "extra@example.com", "team_id": team_id}, salt="team-invite"
-        )
+        invite_token = create_signed_token({"email": "extra@example.com", "team_id": team_id}, salt="team-invite")
         await client.get(f"/auth/invite/accept?token={invite_token}")
 
         # Now try to remove a user that doesn't exist in the team
@@ -250,6 +244,7 @@ class TestDeviceGroups:
         user1_email = "user1@example.com"
         await client.post("/auth/register", json={"email": user1_email, "password": "User1Pass123!"})
         from app.services.auth import create_signed_token
+
         token = create_signed_token({"email": user1_email}, salt="email-verify")
         await client.get(f"/auth/verify?token={token}")
 
@@ -281,6 +276,7 @@ class TestDeviceGroups:
         user1_email = "user1_dev@example.com"
         await client.post("/auth/register", json={"email": user1_email, "password": "User1Pass123!"})
         from app.services.auth import create_signed_token
+
         token = create_signed_token({"email": user1_email}, salt="email-verify")
         await client.get(f"/auth/verify?token={token}")
 
@@ -319,6 +315,7 @@ class TestDeviceGroups:
         user1_email = "user1_mt@example.com"
         await client.post("/auth/register", json={"email": user1_email, "password": "User1Pass123!"})
         from app.services.auth import create_signed_token
+
         token = create_signed_token({"email": user1_email}, salt="email-verify")
         await client.get(f"/auth/verify?token={token}")
 
@@ -329,41 +326,26 @@ class TestDeviceGroups:
         team1_id = user1_teams[0]["id"]
 
         # 2. Try to create Team 2 with admin=None and NO managing team (should fail with 400)
-        resp = await client.post(
-            "/teams/",
-            json={"name": "Team 2", "permission_admin": None}
-        )
+        resp = await client.post("/teams/", json={"name": "Team 2", "permission_admin": None})
         assert resp.status_code == 400
 
         # 3. Create Team 2 with admin=None and managing_team_id = team1_id (should succeed)
-        resp = await client.post(
-            "/teams/",
-            json={"name": "Team 2", "permission_admin": None, "managing_team_id": team1_id}
-        )
+        resp = await client.post("/teams/", json={"name": "Team 2", "permission_admin": None, "managing_team_id": team1_id})
         assert resp.status_code == 200
         team2_id = resp.json()["id"]
 
         # 4. Create Team 3 with admin=None and managing_team_id = team2_id (valid chain leading to team1_id -> admin=write)
-        resp = await client.post(
-            "/teams/",
-            json={"name": "Team 3", "permission_admin": None, "managing_team_id": team2_id}
-        )
+        resp = await client.post("/teams/", json={"name": "Team 3", "permission_admin": None, "managing_team_id": team2_id})
         assert resp.status_code == 200
         team3_id = resp.json()["id"]
 
         # 5. Try to create a circular dependency (Team 1 managed by Team 3, which is managed by Team 2, which is managed by Team 1)
         # Update Team 1 to be managed by Team 3. Since Team 1 has admin=write, this is valid.
-        resp = await client.put(
-            f"/teams/{team1_id}",
-            json={"managing_team_id": team3_id}
-        )
+        resp = await client.put(f"/teams/{team1_id}", json={"managing_team_id": team3_id})
         assert resp.status_code == 200
 
         # Now try to set Team 1 admin to None (this would create a cycle without admin=write anywhere)
-        resp = await client.put(
-            f"/teams/{team1_id}",
-            json={"permission_admin": None}
-        )
+        resp = await client.put(f"/teams/{team1_id}", json={"permission_admin": None})
         assert resp.status_code == 400
 
         # 6. Verify virtual membership:
@@ -407,4 +389,3 @@ class TestDeviceGroups:
         resp = await client.put(f"/teams/{team3_id}", json={"name": "Team 3 Updated"})
         assert resp.status_code == 200
         assert resp.json()["name"] == "Team 3 Updated"
-

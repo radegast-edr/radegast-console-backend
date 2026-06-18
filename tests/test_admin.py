@@ -17,11 +17,15 @@ class TestAdminUsers:
     @pytest.mark.asyncio
     async def test_delete_user(self, admin_client: AsyncClient, client: AsyncClient):
         # Register a user to delete
-        await client.post("/auth/register", json={
-            "email": "deleteme@example.com",
-            "password": "password123",
-        })
+        await client.post(
+            "/auth/register",
+            json={
+                "email": "deleteme@example.com",
+                "password": "password123",
+            },
+        )
         from app.services.auth import create_signed_token
+
         token = create_signed_token({"email": "deleteme@example.com"}, salt="email-verify")
         await client.get(f"/auth/verify?token={token}")
 
@@ -88,9 +92,13 @@ class TestAdminPacks:
     async def test_delete_pack_as_admin(self, admin_client: AsyncClient):
         # Create a pack (admin also has maintainer capabilities since admin > maintainer)
         # But admin role IS admin, so checking
-        resp = await admin_client.post("/packs/", json={
-            "name": "Admin Pack", "description": "for deletion",
-        })
+        resp = await admin_client.post(
+            "/packs/",
+            json={
+                "name": "Admin Pack",
+                "description": "for deletion",
+            },
+        )
         assert resp.status_code == 200
         pack_id = resp.json()["id"]
 

@@ -15,11 +15,7 @@ class TestExclusionCreation:
         group_id = await _get_default_group_id(auth_client)
         resp = await auth_client.post(
             f"/exclusions/groups/{group_id}",
-            json={
-                "name": "Test Exclusion",
-                "jsonata_query": "$contains(alert.rule.name, 'test')",
-                "description": "Test description"
-            }
+            json={"name": "Test Exclusion", "jsonata_query": "$contains(alert.rule.name, 'test')", "description": "Test description"},
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -32,21 +28,13 @@ class TestExclusionCreation:
 
     async def test_create_exclusion_unauthenticated(self, client: AsyncClient):
         resp = await client.post(
-            "/exclusions/groups/1",
-            json={
-                "name": "Test Exclusion",
-                "jsonata_query": "$contains(alert.rule.name, 'test')"
-            }
+            "/exclusions/groups/1", json={"name": "Test Exclusion", "jsonata_query": "$contains(alert.rule.name, 'test')"}
         )
         assert resp.status_code == 401
 
     async def test_create_exclusion_nonexistent_group(self, auth_client: AsyncClient):
         resp = await auth_client.post(
-            "/exclusions/groups/99999",
-            json={
-                "name": "Test Exclusion",
-                "jsonata_query": "$contains(alert.rule.name, 'test')"
-            }
+            "/exclusions/groups/99999", json={"name": "Test Exclusion", "jsonata_query": "$contains(alert.rule.name, 'test')"}
         )
         assert resp.status_code == 404
 
@@ -55,11 +43,7 @@ class TestExclusionCreation:
 
         # Create an exclusion
         await auth_client.post(
-            f"/exclusions/groups/{group_id}",
-            json={
-                "name": "List Test Exclusion",
-                "jsonata_query": "$contains(alert.rule.name, 'list')"
-            }
+            f"/exclusions/groups/{group_id}", json={"name": "List Test Exclusion", "jsonata_query": "$contains(alert.rule.name, 'list')"}
         )
 
         # List exclusions for the group
@@ -76,10 +60,7 @@ class TestExclusionCreation:
         # Create an exclusion
         create_resp = await auth_client.post(
             f"/exclusions/groups/{group_id}",
-            json={
-                "name": "Delete Test Exclusion",
-                "jsonata_query": "$contains(alert.rule.name, 'delete')"
-            }
+            json={"name": "Delete Test Exclusion", "jsonata_query": "$contains(alert.rule.name, 'delete')"},
         )
         exclusion_id = create_resp.json()["id"]
 
@@ -103,11 +84,7 @@ class TestExclusionCreation:
         # Create an exclusion
         create_resp = await auth_client.post(
             f"/exclusions/groups/{group_id}",
-            json={
-                "name": "Get Test Exclusion",
-                "jsonata_query": "$contains(alert.rule.name, 'get')",
-                "description": "Get test"
-            }
+            json={"name": "Get Test Exclusion", "jsonata_query": "$contains(alert.rule.name, 'get')", "description": "Get test"},
         )
         exclusion_id = create_resp.json()["id"]
 
@@ -130,10 +107,7 @@ class TestExclusionCreation:
         # Create an exclusion
         await auth_client.post(
             f"/exclusions/groups/{group_id}",
-            json={
-                "name": "Group Detail Test Exclusion",
-                "jsonata_query": "$contains(alert.rule.name, 'detail')"
-            }
+            json={"name": "Group Detail Test Exclusion", "jsonata_query": "$contains(alert.rule.name, 'detail')"},
         )
 
         # Get group detail
@@ -164,8 +138,8 @@ class TestDeviceExclusionDownload:
             json={
                 "name": "Device Test Exclusion",
                 "jsonata_query": '$contains(alert.rule.name, "test")',
-                "description": "Test exclusion for device"
-            }
+                "description": "Test exclusion for device",
+            },
         )
         assert resp.status_code == 200
 
@@ -204,10 +178,7 @@ class TestExclusionPermissions:
         # For now, just verify the endpoint works with auth
         resp = await auth_client.post(
             f"/exclusions/groups/{group_id}",
-            json={
-                "name": "Permission Test Exclusion",
-                "jsonata_query": "$contains(alert.rule.name, 'perm')"
-            }
+            json={"name": "Permission Test Exclusion", "jsonata_query": "$contains(alert.rule.name, 'perm')"},
         )
         # This will pass because the auth_client has admin in conftest
         assert resp.status_code in [200, 403]  # May be 200 if user has admin, 403 if not

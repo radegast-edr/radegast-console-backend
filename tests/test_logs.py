@@ -60,6 +60,7 @@ class TestLogSubmission:
         assert resp.status_code == 200
         data = resp.json()
         assert data["severity"] is None
+
     async def test_submit_log_requires_device_session(self, auth_client: AsyncClient):
         resp = await auth_client.post(
             "/logs/",
@@ -112,9 +113,7 @@ class TestLogRetrieval:
         resp = await client.get("/logs/")
         assert resp.status_code == 401
 
-    async def test_list_logs_filtered_by_device(
-        self, auth_client: AsyncClient, client: AsyncClient
-    ):
+    async def test_list_logs_filtered_by_device(self, auth_client: AsyncClient, client: AsyncClient):
         # Get default group first
         resp = await auth_client.get("/teams/")
         team_id = resp.json()[0]["id"]
@@ -288,9 +287,7 @@ class TestLogSeenAndResolution:
         # Cleanup: restore basic EDR mode
         await auth_client.put("/user/extended-edr", json={"extended_edr_enabled": False})
 
-    async def test_basic_mode_unread_count_tracks_seen_not_resolution(
-        self, auth_client: AsyncClient, client: AsyncClient
-    ):
+    async def test_basic_mode_unread_count_tracks_seen_not_resolution(self, auth_client: AsyncClient, client: AsyncClient):
         """In basic mode the unread counter tracks 'seen' status only.
         A log that has been seen but not resolved should NOT appear in the count."""
         resp = await auth_client.get("/teams/")
@@ -325,9 +322,7 @@ class TestLogSeenAndResolution:
         resp = await auth_client.get("/logs/count?unread_only=true")
         assert resp.json()["total_count"] == before - 1
 
-    async def test_extended_edr_unread_count_tracks_resolution_not_seen(
-        self, auth_client: AsyncClient, client: AsyncClient
-    ):
+    async def test_extended_edr_unread_count_tracks_resolution_not_seen(self, auth_client: AsyncClient, client: AsyncClient):
         """In extended EDR mode the unread counter tracks resolution status.
         A log that has been seen but not resolved should STILL appear in the count."""
         resp = await auth_client.get("/teams/")
@@ -537,9 +532,7 @@ class TestTriggeredRule:
 
         return token, group_id
 
-    async def test_submit_log_with_rule_type_stored(
-        self, auth_client: AsyncClient, client: AsyncClient
-    ) -> None:
+    async def test_submit_log_with_rule_type_stored(self, auth_client: AsyncClient, client: AsyncClient) -> None:
         """Submitting a log with rule_id + rule_type persists rule_type on the log row."""
         resp = await auth_client.get("/teams/")
         team_id = resp.json()[0]["id"]
@@ -564,9 +557,7 @@ class TestTriggeredRule:
         assert data["rule_id"] == "test_rule"
         assert data["rule_type"] == "sigma"
 
-    async def test_submit_log_with_invalid_rule_type_ignored(
-        self, auth_client: AsyncClient, client: AsyncClient
-    ) -> None:
+    async def test_submit_log_with_invalid_rule_type_ignored(self, auth_client: AsyncClient, client: AsyncClient) -> None:
         """An unrecognised rule_type value is silently ignored (None stored)."""
         resp = await auth_client.get("/teams/")
         team_id = resp.json()[0]["id"]
@@ -681,10 +672,7 @@ class TestTriggeredRule:
         assert matching_ioc[0]["triggered_rule"] is not None
         assert matching_ioc[0]["triggered_rule"]["rule_content"] == ioc_content
 
-
-    async def test_triggered_rule_not_found_returns_null(
-        self, auth_client: AsyncClient, client: AsyncClient
-    ) -> None:
+    async def test_triggered_rule_not_found_returns_null(self, auth_client: AsyncClient, client: AsyncClient) -> None:
         """If the rule_id doesn't exist in any enabled pack, triggered_rule is null."""
         resp = await auth_client.get("/teams/")
         team_id = resp.json()[0]["id"]

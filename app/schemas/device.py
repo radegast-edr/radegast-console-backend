@@ -17,6 +17,7 @@ class DeviceResponse(BaseModel):
     last_seen: datetime | None = None
     agent_version: str | None = None
     rustinel_version: str | None = None
+    os: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -28,6 +29,7 @@ class DeviceDetailResponse(BaseModel):
     last_seen: datetime | None = None
     agent_version: str | None = None
     rustinel_version: str | None = None
+    os: str | None = None
     groups: list[DeviceGroupResponse]
 
     model_config = {"from_attributes": True}

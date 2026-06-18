@@ -28,6 +28,7 @@ class AdminAlertStatsResponse(BaseModel):
 class AdminDeviceStatsResponse(BaseModel):
     agent_distribution: dict[str, int]
     rustinel_distribution: dict[str, int]
+    os_distribution: dict[str, int]
 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -263,6 +264,7 @@ async def get_admin_device_stats(
 
     agent_distribution = {}
     rustinel_distribution = {}
+    os_distribution = {}
 
     now_utc = datetime.now(UTC)
     ten_minutes_ago = now_utc - timedelta(minutes=10)
@@ -291,9 +293,17 @@ async def get_admin_device_stats(
             ver_key = rustinel_ver if (rustinel_ver and rustinel_ver.strip() != "") else "unknown"
             rustinel_distribution[ver_key] = rustinel_distribution.get(ver_key, 0) + 1
 
+        os_val = d.os
+        if exclude_no_version and (not os_val or os_val.strip() == ""):
+            pass
+        else:
+            ver_key = os_val if (os_val and os_val.strip() != "") else "unknown"
+            os_distribution[ver_key] = os_distribution.get(ver_key, 0) + 1
+
     return AdminDeviceStatsResponse(
         agent_distribution=agent_distribution,
         rustinel_distribution=rustinel_distribution,
+        os_distribution=os_distribution,
     )
 
 

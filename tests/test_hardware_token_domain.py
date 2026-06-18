@@ -11,6 +11,7 @@ Scenarios covered:
  - Full split-domain registration-and-login flow (API on api.radegast.app,
    web on console.radegast.app, RP ID pinned to parent radegast.app)
 """
+
 import base64
 from unittest.mock import MagicMock, patch
 
@@ -29,6 +30,7 @@ from app.services.auth import verify_signed_token
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _b64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
 
@@ -42,6 +44,7 @@ def _mock_request(origin: str) -> MagicMock:
 # ---------------------------------------------------------------------------
 # Unit: _normalize_origin
 # ---------------------------------------------------------------------------
+
 
 class TestNormalizeOrigin:
     def test_https_plain(self):
@@ -69,6 +72,7 @@ class TestNormalizeOrigin:
 # ---------------------------------------------------------------------------
 # Unit: _configured_webauthn_origins
 # ---------------------------------------------------------------------------
+
 
 class TestConfiguredWebauthnOrigins:
     def test_includes_base_url(self):
@@ -127,6 +131,7 @@ class TestConfiguredWebauthnOrigins:
 # ---------------------------------------------------------------------------
 # Unit: _resolve_webauthn_rp_id
 # ---------------------------------------------------------------------------
+
 
 class TestResolveWebauthnRpId:
     def test_explicit_config_wins_over_request_origin(self):
@@ -190,10 +195,9 @@ class TestResolveWebauthnRpId:
 # Integration: registration options carry the configured RP ID
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
-async def test_registration_options_embed_configured_rp_id(
-    client: AsyncClient, registered_user
-):
+async def test_registration_options_embed_configured_rp_id(client: AsyncClient, registered_user):
     """Setup response includes configured RP ID in options JSON, and the signed
     registration_token also embeds it so the verify endpoint uses it later."""
     orig_rp = settings.webauthn_rp_id
@@ -211,9 +215,7 @@ async def test_registration_options_embed_configured_rp_id(
 
         assert data["options"]["rp"]["id"] == "radegast.app"
 
-        token_payload = verify_signed_token(
-            data["registration_token"], salt="hardware-token-register", max_age=300
-        )
+        token_payload = verify_signed_token(data["registration_token"], salt="hardware-token-register", max_age=300)
         assert token_payload is not None
         assert token_payload["rp_id"] == "radegast.app"
     finally:
@@ -225,10 +227,9 @@ async def test_registration_options_embed_configured_rp_id(
 # Integration: verify_registration_response receives correct args
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
-async def test_registration_verify_passes_correct_rp_id_and_origins(
-    client: AsyncClient, registered_user
-):
+async def test_registration_verify_passes_correct_rp_id_and_origins(client: AsyncClient, registered_user):
     """verify_registration_response is called with the RP ID from the signed token
     and the allowed origins from settings, not hardcoded test values."""
     orig_rp = settings.webauthn_rp_id
@@ -269,10 +270,9 @@ async def test_registration_verify_passes_correct_rp_id_and_origins(
 # Integration: assertion options carry the configured RP ID
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
-async def test_assertion_options_embed_configured_rp_id(
-    client: AsyncClient, registered_user
-):
+async def test_assertion_options_embed_configured_rp_id(client: AsyncClient, registered_user):
     """Assertion options JSON and signed assertion_token both carry the configured RP ID."""
     orig_rp = settings.webauthn_rp_id
     orig_cors = settings.cors_origins
@@ -315,9 +315,7 @@ async def test_assertion_options_embed_configured_rp_id(
 
         assert assert_data["options"]["rpId"] == "radegast.app"
 
-        token_payload = verify_signed_token(
-            assert_data["assertion_token"], salt="hardware-token-login", max_age=300
-        )
+        token_payload = verify_signed_token(assert_data["assertion_token"], salt="hardware-token-login", max_age=300)
         assert token_payload is not None
         assert token_payload["rp_id"] == "radegast.app"
     finally:
@@ -329,10 +327,9 @@ async def test_assertion_options_embed_configured_rp_id(
 # Integration: verify_authentication_response receives correct args
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
-async def test_login_verify_passes_rp_id_from_assertion_token(
-    client: AsyncClient, registered_user
-):
+async def test_login_verify_passes_rp_id_from_assertion_token(client: AsyncClient, registered_user):
     """verify_authentication_response is called with the RP ID stored in the
     assertion token, and the allowed origins list from settings."""
     orig_rp = settings.webauthn_rp_id
@@ -401,6 +398,7 @@ async def test_login_verify_passes_rp_id_from_assertion_token(
 # ---------------------------------------------------------------------------
 # Integration: full split-domain end-to-end flow
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_full_split_domain_flow(client: AsyncClient, registered_user):

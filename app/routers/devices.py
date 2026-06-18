@@ -96,6 +96,7 @@ async def list_devices(
             last_seen=d.last_seen,
             agent_version=d.agent_version,
             rustinel_version=d.rustinel_version,
+            os=d.os,
         )
         for d in devices
     ]
@@ -135,6 +136,7 @@ async def get_device(
         last_seen=device.last_seen,
         agent_version=device.agent_version,
         rustinel_version=device.rustinel_version,
+        os=device.os,
         groups=[{"id": g.id, "name": g.name} for g in device.groups],
     )
 
@@ -254,6 +256,7 @@ async def rename_device(
         last_seen=device.last_seen,
         agent_version=device.agent_version,
         rustinel_version=device.rustinel_version,
+        os=device.os,
     )
 
 

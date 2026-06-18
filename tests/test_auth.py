@@ -30,6 +30,7 @@ class TestRegistration:
 
     async def test_register_with_turnstile_enabled_missing_token_fails(self, client: AsyncClient):
         from app.config import settings
+
         old_site = settings.turnstile_site_key
         old_secret = settings.turnstile_secret_key
         settings.turnstile_site_key = "dummy-site-key"
@@ -51,12 +52,14 @@ class TestRegistration:
         import httpx
 
         from app.config import settings
+
         old_site = settings.turnstile_site_key
         old_secret = settings.turnstile_secret_key
         settings.turnstile_site_key = "dummy-site-key"
         settings.turnstile_secret_key = "dummy-secret-key"
 
         original_post = httpx.AsyncClient.post
+
         async def mock_post(self_client, url, *args, **kwargs):
             if "siteverify" in str(url):
                 return httpx.Response(200, json={"success": False})
@@ -80,12 +83,14 @@ class TestRegistration:
         import httpx
 
         from app.config import settings
+
         old_site = settings.turnstile_site_key
         old_secret = settings.turnstile_secret_key
         settings.turnstile_site_key = "dummy-site-key"
         settings.turnstile_secret_key = "dummy-secret-key"
 
         original_post = httpx.AsyncClient.post
+
         async def mock_post(self_client, url, *args, **kwargs):
             if "siteverify" in str(url):
                 return httpx.Response(200, json={"success": True})
@@ -102,7 +107,6 @@ class TestRegistration:
         finally:
             settings.turnstile_site_key = old_site
             settings.turnstile_secret_key = old_secret
-
 
 
 @pytest.mark.asyncio
@@ -185,19 +189,19 @@ def helper_aes_encrypt(plaintext: str, key_hex: str) -> str:
     import os
 
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
     key = bytes.fromhex(key_hex)
     aesgcm = AESGCM(key)
     iv = os.urandom(12)
     ciphertext = aesgcm.encrypt(iv, plaintext.encode(), None)
-    return json.dumps({
-        "iv": iv.hex(),
-        "ciphertext": ciphertext.hex()
-    })
+    return json.dumps({"iv": iv.hex(), "ciphertext": ciphertext.hex()})
+
 
 def helper_aes_decrypt(encrypted_json: str, key_hex: str) -> str:
     import json
 
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
     data = json.loads(encrypted_json)
     key = bytes.fromhex(key_hex)
     aesgcm = AESGCM(key)
@@ -212,6 +216,7 @@ class TestKeySetup:
         import secrets
 
         from app.services.crypto import generate_age_keypair
+
         main_pub, main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
@@ -232,6 +237,7 @@ class TestKeySetup:
         import secrets
 
         from app.services.crypto import generate_age_keypair
+
         main_pub, main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
@@ -255,6 +261,7 @@ class TestKeySetup:
         import secrets
 
         from app.services.crypto import generate_age_keypair
+
         main_pub, main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
@@ -278,6 +285,7 @@ class TestKeySetup:
         import secrets
 
         from app.services.crypto import generate_age_keypair
+
         main_pub, main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
@@ -304,6 +312,7 @@ class TestKeyRecover:
         import secrets
 
         from app.services.crypto import generate_age_keypair
+
         main_pub, main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
@@ -335,6 +344,7 @@ class TestKeyTransfer:
         import secrets
 
         from app.services.crypto import generate_age_keypair
+
         main_pub, main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
@@ -351,6 +361,7 @@ class TestKeyTransfer:
 
     async def test_initiate_transfer(self, auth_client: AsyncClient):
         from app.services.crypto import generate_age_keypair
+
         eph_pub, _ = generate_age_keypair()
         resp = await auth_client.post(
             "/user/keys/transfer/initiate",
@@ -363,6 +374,7 @@ class TestKeyTransfer:
 
     async def test_initiate_transfer_unauthenticated(self, client: AsyncClient):
         from app.services.crypto import generate_age_keypair
+
         eph_pub, _ = generate_age_keypair()
         resp = await client.post(
             "/user/keys/transfer/initiate",
@@ -372,6 +384,7 @@ class TestKeyTransfer:
 
     async def test_get_transfer_pending(self, auth_client: AsyncClient):
         from app.services.crypto import generate_age_keypair
+
         eph_pub, _ = generate_age_keypair()
         init_resp = await auth_client.post(
             "/user/keys/transfer/initiate",
@@ -392,6 +405,7 @@ class TestKeyTransfer:
 
     async def test_complete_transfer(self, auth_client: AsyncClient):
         from app.services.crypto import age_decrypt, age_encrypt, generate_age_keypair
+
         # Receiver generates ephemeral keypair
         eph_pub, eph_priv = generate_age_keypair()
         init_resp = await auth_client.post(
@@ -422,6 +436,7 @@ class TestKeyTransfer:
 
     async def test_complete_transfer_already_done(self, auth_client: AsyncClient):
         from app.services.crypto import age_encrypt, generate_age_keypair
+
         eph_pub, _ = generate_age_keypair()
         init_resp = await auth_client.post(
             "/user/keys/transfer/initiate",
@@ -444,6 +459,7 @@ class TestKeySecondary:
         import secrets
 
         from app.services.crypto import generate_age_keypair
+
         main_pub, main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
@@ -460,6 +476,7 @@ class TestKeySecondary:
 
     async def test_setup_secondary_key(self, auth_client: AsyncClient):
         from app.services.crypto import generate_age_keypair
+
         await self._setup_main_key(auth_client)
 
         sec_pub, sec_priv = generate_age_keypair()
@@ -475,6 +492,7 @@ class TestKeySecondary:
 
     async def test_setup_secondary_without_main_fails(self, auth_client: AsyncClient):
         from app.services.crypto import generate_age_keypair
+
         sec_pub, sec_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
@@ -487,6 +505,7 @@ class TestKeySecondary:
 
     async def test_setup_secondary_duplicate_fails(self, auth_client: AsyncClient):
         from app.services.crypto import generate_age_keypair
+
         await self._setup_main_key(auth_client)
 
         sec_pub, sec_priv = generate_age_keypair()
@@ -500,6 +519,7 @@ class TestKeySecondary:
 
     async def test_secondary_key_unauthenticated(self, client: AsyncClient):
         from app.services.crypto import generate_age_keypair
+
         sec_pub, sec_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
@@ -517,6 +537,7 @@ class TestDeleteKeys:
         import secrets
 
         from app.services.crypto import generate_age_keypair
+
         main_pub, main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
@@ -576,9 +597,7 @@ class TestInviteAccept:
     async def test_accept_invite_user_not_found(self, client: AsyncClient):
         from app.services.auth import create_signed_token
 
-        token = create_signed_token(
-            {"email": "nobody@example.com", "team_id": 999}, salt="team-invite"
-        )
+        token = create_signed_token({"email": "nobody@example.com", "team_id": 999}, salt="team-invite")
         resp = await client.get(f"/auth/invite/accept?token={token}")
         assert resp.status_code == 404
 
@@ -588,9 +607,7 @@ class TestInviteAccept:
         resp = await auth_client.get("/teams/")
         team_id = resp.json()[0]["id"]
 
-        token = create_signed_token(
-            {"email": "test@example.com", "team_id": team_id}, salt="team-invite"
-        )
+        token = create_signed_token({"email": "test@example.com", "team_id": team_id}, salt="team-invite")
         resp = await auth_client.get(f"/auth/invite/accept?token={token}")
         assert resp.status_code == 200
         assert "Already a member" in resp.json()["message"]
@@ -633,6 +650,7 @@ class TestSessionInvalidation:
 class TestChangePassword:
     async def _setup(self, client: AsyncClient):
         from app.services.auth import create_signed_token
+
         email = "pwchange@example.com"
         password = "OldPass123!"
         await client.post("/auth/register", json={"email": email, "password": password})
@@ -680,6 +698,7 @@ class TestChangePassword:
 class TestNotificationSettings:
     async def _setup(self, client: AsyncClient):
         from app.services.auth import create_signed_token
+
         email = "notif@example.com"
         password = "Password123!"
         await client.post("/auth/register", json={"email": email, "password": password})
@@ -700,6 +719,7 @@ class TestNotificationSettings:
 
     async def test_update_notifications(self, client: AsyncClient):
         from unittest.mock import AsyncMock, patch
+
         await self._setup(client)
         payload = {
             "notify_login": False,
@@ -749,59 +769,45 @@ class TestNotificationSettings:
         assert resp.status_code in (401, 403)
 
 
-
 def test_client_ip_headers():
     from fastapi import Request
 
     from app.routers.auth import _client_ip
 
     # 1. CF-Connecting-IP has priority
-    req1 = Request(scope={
-        "type": "http",
-        "headers": [
-            (b"cf-connecting-ip", b"203.0.113.1"),
-            (b"x-real-ip", b"198.51.100.2"),
-            (b"x-forwarded-for", b"192.0.2.3, 192.0.2.4")
-        ],
-        "client": ("127.0.0.1", 12345)
-    })
+    req1 = Request(
+        scope={
+            "type": "http",
+            "headers": [
+                (b"cf-connecting-ip", b"203.0.113.1"),
+                (b"x-real-ip", b"198.51.100.2"),
+                (b"x-forwarded-for", b"192.0.2.3, 192.0.2.4"),
+            ],
+            "client": ("127.0.0.1", 12345),
+        }
+    )
     assert _client_ip(req1) == "203.0.113.1"
 
     # 2. X-Real-IP has priority over X-Forwarded-For
-    req2 = Request(scope={
-        "type": "http",
-        "headers": [
-            (b"x-real-ip", b"198.51.100.2"),
-            (b"x-forwarded-for", b"192.0.2.3, 192.0.2.4")
-        ],
-        "client": ("127.0.0.1", 12345)
-    })
+    req2 = Request(
+        scope={
+            "type": "http",
+            "headers": [(b"x-real-ip", b"198.51.100.2"), (b"x-forwarded-for", b"192.0.2.3, 192.0.2.4")],
+            "client": ("127.0.0.1", 12345),
+        }
+    )
     assert _client_ip(req2) == "198.51.100.2"
 
     # 3. X-Forwarded-For gets first IP
-    req3 = Request(scope={
-        "type": "http",
-        "headers": [
-            (b"x-forwarded-for", b"192.0.2.3, 192.0.2.4")
-        ],
-        "client": ("127.0.0.1", 12345)
-    })
+    req3 = Request(scope={"type": "http", "headers": [(b"x-forwarded-for", b"192.0.2.3, 192.0.2.4")], "client": ("127.0.0.1", 12345)})
     assert _client_ip(req3) == "192.0.2.3"
 
     # 4. Fallback to request client host
-    req4 = Request(scope={
-        "type": "http",
-        "headers": [],
-        "client": ("127.0.0.1", 12345)
-    })
+    req4 = Request(scope={"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
     assert _client_ip(req4) == "127.0.0.1"
 
     # 5. Fallback to unknown when client is None
-    req5 = Request(scope={
-        "type": "http",
-        "headers": [],
-        "client": None
-    })
+    req5 = Request(scope={"type": "http", "headers": [], "client": None})
     assert _client_ip(req5) == "unknown"
 
 
@@ -809,10 +815,7 @@ def test_client_ip_headers():
 class TestTokenAuth:
     async def test_token_auth_success(self, client: AsyncClient, registered_user):
         # Authenticate via form data on /auth/token
-        resp = await client.post(
-            "/auth/token",
-            data={"username": registered_user["email"], "password": registered_user["password"]}
-        )
+        resp = await client.post("/auth/token", data={"username": registered_user["email"], "password": registered_user["password"]})
         assert resp.status_code == 200
         data = resp.json()
         assert "access_token" in data
@@ -820,18 +823,12 @@ class TestTokenAuth:
 
         # Try to use this access token to authenticate subsequent requests
         access_token = data["access_token"]
-        resp_me = await client.get(
-            "/user/me",
-            headers={"Authorization": f"Bearer {access_token}"}
-        )
+        resp_me = await client.get("/user/me", headers={"Authorization": f"Bearer {access_token}"})
         assert resp_me.status_code == 200
         assert resp_me.json()["email"] == registered_user["email"]
 
     async def test_token_auth_invalid_credentials(self, client: AsyncClient, registered_user):
-        resp = await client.post(
-            "/auth/token",
-            data={"username": registered_user["email"], "password": "wrongpassword"}
-        )
+        resp = await client.post("/auth/token", data={"username": registered_user["email"], "password": "wrongpassword"})
         assert resp.status_code == 401
 
     async def test_token_auth_mfa_enabled_fails(self, client: AsyncClient, registered_user, db_session):
@@ -839,6 +836,7 @@ class TestTokenAuth:
         from sqlalchemy import select
 
         from app.models.user import User
+
         res = await db_session.execute(select(User).where(User.email == registered_user["email"]))
         user = res.scalar_one()
         user.otp_enabled = True
@@ -846,11 +844,6 @@ class TestTokenAuth:
         await db_session.commit()
 
         # Try to login via /auth/token
-        resp = await client.post(
-            "/auth/token",
-            data={"username": registered_user["email"], "password": registered_user["password"]}
-        )
+        resp = await client.post("/auth/token", data={"username": registered_user["email"], "password": registered_user["password"]})
         assert resp.status_code == 403
         assert "MFA is required" in resp.json()["detail"]
-
-

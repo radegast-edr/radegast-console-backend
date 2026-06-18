@@ -1,4 +1,5 @@
 """Tests that email notifications are sent (or suppressed) when security events occur."""
+
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 
@@ -13,6 +14,7 @@ from app.services.auth import create_signed_token
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 async def _register_and_verify(client: AsyncClient, email: str, password: str):
     await client.post("/auth/register", json={"email": email, "password": password})
@@ -40,17 +42,14 @@ async def _setup_keys(client: AsyncClient):
     """Submit a minimal key-setup payload (no real AGE crypto needed for notification tests)."""
     return await client.post(
         "/user/keys/setup",
-        json={
-            "public_key": "age1pub",
-            "recovery_public_key": "age1rec",
-            "recovery_encrypted_private_key": "enc-priv"
-        },
+        json={"public_key": "age1pub", "recovery_public_key": "age1rec", "recovery_encrypted_private_key": "enc-priv"},
     )
 
 
 # ---------------------------------------------------------------------------
 # Login notification
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 class TestLoginNotification:
@@ -66,9 +65,7 @@ class TestLoginNotification:
         subjects = [call.args[1] for call in mock_send.call_args_list]
         assert any("Login Alert" in s for s in subjects)
 
-    async def test_login_skips_notification_when_disabled(
-        self, client: AsyncClient, db_engine
-    ):
+    async def test_login_skips_notification_when_disabled(self, client: AsyncClient, db_engine):
         email = "login_notif_off@example.com"
         password = "Password123!"
         await _register_and_verify(client, email, password)
@@ -98,6 +95,7 @@ class TestLoginNotification:
 # ---------------------------------------------------------------------------
 # New keys notification
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 class TestNewKeysNotification:
@@ -129,9 +127,7 @@ class TestNewKeysNotification:
         subjects = [call.args[1] for call in mock_send.call_args_list]
         assert any("New Encryption Keys" in s for s in subjects)
 
-    async def test_setup_key_skips_notification_when_disabled(
-        self, client: AsyncClient, db_engine
-    ):
+    async def test_setup_key_skips_notification_when_disabled(self, client: AsyncClient, db_engine):
         email = "newkeys_off@example.com"
         password = "Password123!"
         await _register_and_verify(client, email, password)
@@ -163,6 +159,7 @@ class TestNewKeysNotification:
 # Recovery key notification
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 class TestRecoveryNotification:
     async def test_recovery_sends_notification_when_enabled(self, client: AsyncClient):
@@ -178,9 +175,7 @@ class TestRecoveryNotification:
         subjects = [call.args[1] for call in mock_send.call_args_list]
         assert any("Recovery Key Used" in s for s in subjects)
 
-    async def test_recovery_skips_notification_when_disabled(
-        self, client: AsyncClient, db_engine
-    ):
+    async def test_recovery_skips_notification_when_disabled(self, client: AsyncClient, db_engine):
         email = "recovery_off@example.com"
         password = "Password123!"
         await _register_and_verify(client, email, password)
@@ -214,6 +209,7 @@ class TestRecoveryNotification:
 # Key transfer notification
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 class TestTransferNotification:
     async def _setup_transfer(self, client: AsyncClient, email: str, password: str):
@@ -227,9 +223,7 @@ class TestTransferNotification:
         return resp.json()["transfer_id"]
 
     async def test_transfer_complete_sends_notification(self, client: AsyncClient):
-        transfer_id = await self._setup_transfer(
-            client, "transfer_on@example.com", "Password123!"
-        )
+        transfer_id = await self._setup_transfer(client, "transfer_on@example.com", "Password123!")
 
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
             await client.post(
@@ -240,9 +234,7 @@ class TestTransferNotification:
         subjects = [call.args[1] for call in mock_send.call_args_list]
         assert any("Keys Transferred" in s for s in subjects)
 
-    async def test_transfer_skips_notification_when_disabled(
-        self, client: AsyncClient, db_engine
-    ):
+    async def test_transfer_skips_notification_when_disabled(self, client: AsyncClient, db_engine):
         email = "transfer_off@example.com"
         transfer_id = await self._setup_transfer(client, email, "Password123!")
         await _set_notify_flag(db_engine, email, notify_keys_transferred=False)
@@ -257,9 +249,7 @@ class TestTransferNotification:
         assert not any("Keys Transferred" in s for s in subjects)
 
     async def test_transfer_notification_includes_ip(self, client: AsyncClient):
-        transfer_id = await self._setup_transfer(
-            client, "transfer_ip@example.com", "Password123!"
-        )
+        transfer_id = await self._setup_transfer(client, "transfer_ip@example.com", "Password123!")
 
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
             await client.post(
@@ -276,6 +266,7 @@ class TestTransferNotification:
 # ---------------------------------------------------------------------------
 # Device log notification
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 class TestDeviceLogNotification:
@@ -294,9 +285,7 @@ class TestDeviceLogNotification:
         resp = await client.post("/devices/", json={"name": "NotifDevice", "group_id": group_id})
         return resp.json()["token"]
 
-    async def test_device_log_sends_notification_when_enabled(
-        self, client: AsyncClient, db_engine
-    ):
+    async def test_device_log_sends_notification_when_enabled(self, client: AsyncClient, db_engine):
         token = await self._setup(client, db_engine, "devlog_on@example.com", notify=True)
 
         device_client = client  # reuse — we'll log in as device separately
@@ -311,9 +300,7 @@ class TestDeviceLogNotification:
         subjects = [call.args[1] for call in mock_send.call_args_list]
         assert any("New Alert" in s for s in subjects)
 
-    async def test_device_log_skips_notification_when_disabled(
-        self, client: AsyncClient, db_engine
-    ):
+    async def test_device_log_skips_notification_when_disabled(self, client: AsyncClient, db_engine):
         token = await self._setup(client, db_engine, "devlog_off@example.com", notify=False)
         await client.post("/auth/device/login", json={"token": token})
 

@@ -81,6 +81,7 @@ async def get_dashboard_data(
             last_seen=d.last_seen,
             agent_version=d.agent_version,
             rustinel_version=d.rustinel_version,
+            os=d.os,
         )
         for d in devices_dict.values()
     ]

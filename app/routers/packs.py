@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_device, get_current_user, get_session
 from app.models.device import Device
@@ -39,6 +40,24 @@ async def get_latest_version(pack: Pack, db: AsyncSession) -> PackVersion | None
     """Get the latest version for a pack."""
     result = await db.execute(select(PackVersion).where(PackVersion.pack_id == pack.id).order_by(PackVersion.released.desc()).limit(1))
     return result.scalar_one_or_none()
+
+
+def resolve_pack_size_limit(user: User) -> int | None:
+    """Return the effective max pack zip size in MB for the given user's role.
+
+    Lookup order (first non-None wins):
+    1. Role-specific limit  (pack_max_size_mb_<role>)
+    2. General fallback     (pack_max_size_mb)
+    3. None  →  no limit
+    """
+    role_limit: int | None
+    if user.role == UserRole.admin:
+        role_limit = settings.pack_max_size_mb_admin
+    elif user.role == UserRole.maintainer:
+        role_limit = settings.pack_max_size_mb_maintainer
+    else:
+        role_limit = settings.pack_max_size_mb_user
+    return role_limit if role_limit is not None else settings.pack_max_size_mb
 
 
 async def check_pack_write_permission(pack: Pack, user: User, db: AsyncSession) -> bool:
@@ -107,12 +126,15 @@ async def create_pack(
     db: AsyncSession = Depends(get_db),
 ):
     if not data.team_ids:
+        # Global (public) packs: maintainers and admins only
         if user.role not in (UserRole.maintainer, UserRole.admin):
             raise HTTPException(
                 status_code=403,
-                detail="Maintainer or admin role required to create public packs",
+                detail="Maintainer or admin role required to create global packs",
             )
     else:
+        # Team-scoped packs: any authenticated user who is a member of those teams.
+        # Admins and maintainers bypass the membership check.
         for team_id in data.team_ids:
             res_t = await db.execute(select(Team).where(Team.id == team_id))
             team = res_t.scalar_one_or_none()
@@ -120,10 +142,10 @@ async def create_pack(
                 raise HTTPException(status_code=404, detail=f"Team with ID {team_id} not found")
             if user.role not in (UserRole.admin, UserRole.maintainer):
                 is_member = await is_user_member_of_team_transitive(team_id, user.id, db)
-                if not (is_member and team.permission_pack == "write"):
+                if not is_member or team.permission_pack != "write":
                     raise HTTPException(
                         status_code=403,
-                        detail=f"No pack write permission on team {team_id}",
+                        detail=f"You must be a member of team {team_id} with write permissions to create a pack for it",
                     )
 
     # Validate or generate pack_id
@@ -267,10 +289,10 @@ async def update_pack(
                     raise HTTPException(status_code=404, detail=f"Team with ID {team_id} not found")
                 if user.role not in (UserRole.admin, UserRole.maintainer):
                     is_member = await is_user_member_of_team_transitive(team_id, user.id, db)
-                    if not (is_member and team.permission_pack == "write"):
+                    if not is_member or team.permission_pack != "write":
                         raise HTTPException(
                             status_code=403,
-                            detail=f"No pack write permission on team {team_id}",
+                            detail=f"You must be a member of team {team_id} with write permissions to scope a pack to it",
                         )
 
             res_teams = await db.execute(select(Team).where(Team.id.in_(data.team_ids)))
@@ -361,6 +383,14 @@ async def upload_version(
 
     # Read and validate the zip file contents
     content = await file.read()
+
+    # Enforce per-role size limit (falls back to general limit if role-specific is unset)
+    size_limit_mb = resolve_pack_size_limit(user)
+    if size_limit_mb is not None and len(content) > size_limit_mb * 1024 * 1024:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Pack zip exceeds the maximum allowed size of {size_limit_mb} MB for your account",
+        )
 
     # Validate the zip contents
     validation_result = await validate_zip_contents(content)

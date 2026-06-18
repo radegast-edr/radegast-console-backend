@@ -1,7 +1,6 @@
 import os
-import sys
-from unittest.mock import patch, MagicMock, ANY
-import pytest
+from unittest.mock import ANY, patch
+
 from app.cli import build_parser, cli
 
 

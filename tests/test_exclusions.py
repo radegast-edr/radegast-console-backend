@@ -52,7 +52,7 @@ class TestExclusionCreation:
 
     async def test_list_group_exclusions(self, auth_client: AsyncClient):
         group_id = await _get_default_group_id(auth_client)
-        
+
         # Create an exclusion
         await auth_client.post(
             f"/exclusions/groups/{group_id}",
@@ -61,7 +61,7 @@ class TestExclusionCreation:
                 "jsonata_query": "$contains(alert.rule.name, 'list')"
             }
         )
-        
+
         # List exclusions for the group
         resp = await auth_client.get(f"/exclusions/groups/{group_id}")
         assert resp.status_code == 200
@@ -72,7 +72,7 @@ class TestExclusionCreation:
 
     async def test_delete_exclusion(self, auth_client: AsyncClient):
         group_id = await _get_default_group_id(auth_client)
-        
+
         # Create an exclusion
         create_resp = await auth_client.post(
             f"/exclusions/groups/{group_id}",
@@ -82,12 +82,12 @@ class TestExclusionCreation:
             }
         )
         exclusion_id = create_resp.json()["id"]
-        
+
         # Delete the exclusion
         resp = await auth_client.delete(f"/exclusions/{exclusion_id}")
         assert resp.status_code == 200
         assert resp.json()["message"] == "Exclusion deleted"
-        
+
         # Verify it's gone
         list_resp = await auth_client.get(f"/exclusions/groups/{group_id}")
         data = list_resp.json()
@@ -99,7 +99,7 @@ class TestExclusionCreation:
 
     async def test_get_exclusion(self, auth_client: AsyncClient):
         group_id = await _get_default_group_id(auth_client)
-        
+
         # Create an exclusion
         create_resp = await auth_client.post(
             f"/exclusions/groups/{group_id}",
@@ -110,7 +110,7 @@ class TestExclusionCreation:
             }
         )
         exclusion_id = create_resp.json()["id"]
-        
+
         # Get the exclusion
         resp = await auth_client.get(f"/exclusions/{exclusion_id}")
         assert resp.status_code == 200
@@ -126,7 +126,7 @@ class TestExclusionCreation:
 
     async def test_exclusion_in_group_detail(self, auth_client: AsyncClient):
         group_id = await _get_default_group_id(auth_client)
-        
+
         # Create an exclusion
         await auth_client.post(
             f"/exclusions/groups/{group_id}",
@@ -135,7 +135,7 @@ class TestExclusionCreation:
                 "jsonata_query": "$contains(alert.rule.name, 'detail')"
             }
         )
-        
+
         # Get group detail
         resp = await auth_client.get(f"/groups/{group_id}")
         assert resp.status_code == 200
@@ -151,13 +151,13 @@ class TestDeviceExclusionDownload:
         """Test that a device can download its exclusions."""
         # 1. Create a device group and device
         group_id = await _get_default_group_id(auth_client)
-        
+
         # Create a device
         resp = await auth_client.post("/devices/", json={"name": "Test-Device", "group_id": group_id})
         assert resp.status_code == 200
         device_token = resp.json()["token"]
         device_id = resp.json()["id"]
-        
+
         # 2. Create an exclusion for the group
         resp = await auth_client.post(
             f"/exclusions/groups/{group_id}",
@@ -168,11 +168,11 @@ class TestDeviceExclusionDownload:
             }
         )
         assert resp.status_code == 200
-        
+
         # 3. Login as the device
         resp = await client.post("/auth/device/login", json={"token": device_token})
         assert resp.status_code == 200
-        
+
         # 4. Test that device can download its exclusions
         resp = await client.get("/exclusions/device")
         assert resp.status_code == 200
@@ -180,11 +180,11 @@ class TestDeviceExclusionDownload:
         assert "exclusions" in data
         assert isinstance(data["exclusions"], list)
         assert len(data["exclusions"]) >= 1
-        
+
         # Verify the exclusion we created is in the list
         exclusions = data["exclusions"]
         assert any(e["name"] == "Device Test Exclusion" for e in exclusions)
-        
+
         # Verify the structure of the exclusion data
         device_exclusion = next(e for e in exclusions if e["name"] == "Device Test Exclusion")
         assert "id" in device_exclusion
@@ -200,7 +200,7 @@ class TestExclusionPermissions:
         # This test assumes the registered user doesn't have admin on the default group
         # In a real scenario, we'd need to set up specific permissions
         group_id = await _get_default_group_id(auth_client)
-        
+
         # For now, just verify the endpoint works with auth
         resp = await auth_client.post(
             f"/exclusions/groups/{group_id}",

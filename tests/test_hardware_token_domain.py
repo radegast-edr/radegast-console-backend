@@ -12,10 +12,10 @@ Scenarios covered:
    web on console.radegast.app, RP ID pinned to parent radegast.app)
 """
 import base64
+from unittest.mock import MagicMock, patch
 
 import pytest
 from httpx import AsyncClient
-from unittest.mock import MagicMock, patch
 
 from app.config import settings
 from app.routers.auth import (
@@ -24,7 +24,6 @@ from app.routers.auth import (
     _resolve_webauthn_rp_id,
 )
 from app.services.auth import verify_signed_token
-
 
 # ---------------------------------------------------------------------------
 # Helpers

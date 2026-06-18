@@ -1,5 +1,7 @@
-import pytest
 import secrets
+from datetime import UTC
+
+import pytest
 from httpx import AsyncClient
 
 
@@ -44,14 +46,16 @@ class TestRegistration:
             settings.turnstile_secret_key = old_secret
 
     async def test_register_with_turnstile_enabled_invalid_token_fails(self, client: AsyncClient):
-        from app.config import settings
-        import httpx
         from unittest.mock import patch
+
+        import httpx
+
+        from app.config import settings
         old_site = settings.turnstile_site_key
         old_secret = settings.turnstile_secret_key
         settings.turnstile_site_key = "dummy-site-key"
         settings.turnstile_secret_key = "dummy-secret-key"
-        
+
         original_post = httpx.AsyncClient.post
         async def mock_post(self_client, url, *args, **kwargs):
             if "siteverify" in str(url):
@@ -71,9 +75,11 @@ class TestRegistration:
             settings.turnstile_secret_key = old_secret
 
     async def test_register_with_turnstile_enabled_success(self, client: AsyncClient):
-        from app.config import settings
-        import httpx
         from unittest.mock import patch
+
+        import httpx
+
+        from app.config import settings
         old_site = settings.turnstile_site_key
         old_secret = settings.turnstile_secret_key
         settings.turnstile_site_key = "dummy-site-key"
@@ -175,8 +181,9 @@ class TestMe:
 
 
 def helper_aes_encrypt(plaintext: str, key_hex: str) -> str:
-    import os
     import json
+    import os
+
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
     key = bytes.fromhex(key_hex)
     aesgcm = AESGCM(key)
@@ -189,6 +196,7 @@ def helper_aes_encrypt(plaintext: str, key_hex: str) -> str:
 
 def helper_aes_decrypt(encrypted_json: str, key_hex: str) -> str:
     import json
+
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
     data = json.loads(encrypted_json)
     key = bytes.fromhex(key_hex)
@@ -201,8 +209,9 @@ def helper_aes_decrypt(encrypted_json: str, key_hex: str) -> str:
 @pytest.mark.asyncio
 class TestKeySetup:
     async def test_setup_keys(self, auth_client: AsyncClient):
-        from app.services.crypto import generate_age_keypair
         import secrets
+
+        from app.services.crypto import generate_age_keypair
         main_pub, main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
@@ -220,8 +229,9 @@ class TestKeySetup:
         assert resp.json()["message"] == "Keys set up successfully"
 
     async def test_setup_keys_unauthenticated(self, client: AsyncClient):
-        from app.services.crypto import generate_age_keypair
         import secrets
+
+        from app.services.crypto import generate_age_keypair
         main_pub, main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
@@ -242,8 +252,9 @@ class TestKeySetup:
         assert resp.status_code == 422
 
     async def test_setup_keys_duplicate_fails(self, auth_client: AsyncClient):
-        from app.services.crypto import generate_age_keypair
         import secrets
+
+        from app.services.crypto import generate_age_keypair
         main_pub, main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
@@ -264,8 +275,9 @@ class TestKeySetup:
         assert resp.json()["has_keys"] is False
 
     async def test_me_has_keys_true(self, auth_client: AsyncClient):
-        from app.services.crypto import generate_age_keypair
         import secrets
+
+        from app.services.crypto import generate_age_keypair
         main_pub, main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
@@ -289,8 +301,9 @@ class TestKeyRecover:
         assert resp.status_code == 404
 
     async def test_recover_keys_success(self, auth_client: AsyncClient):
-        from app.services.crypto import generate_age_keypair
         import secrets
+
+        from app.services.crypto import generate_age_keypair
         main_pub, main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
@@ -319,8 +332,9 @@ class TestKeyRecover:
 @pytest.mark.asyncio
 class TestKeyTransfer:
     async def _setup_keys(self, client):
-        from app.services.crypto import generate_age_keypair
         import secrets
+
+        from app.services.crypto import generate_age_keypair
         main_pub, main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
@@ -377,7 +391,7 @@ class TestKeyTransfer:
         assert resp.status_code == 404
 
     async def test_complete_transfer(self, auth_client: AsyncClient):
-        from app.services.crypto import generate_age_keypair, age_encrypt, age_decrypt
+        from app.services.crypto import age_decrypt, age_encrypt, generate_age_keypair
         # Receiver generates ephemeral keypair
         eph_pub, eph_priv = generate_age_keypair()
         init_resp = await auth_client.post(
@@ -407,7 +421,7 @@ class TestKeyTransfer:
         assert recovered == main_priv
 
     async def test_complete_transfer_already_done(self, auth_client: AsyncClient):
-        from app.services.crypto import generate_age_keypair, age_encrypt
+        from app.services.crypto import age_encrypt, generate_age_keypair
         eph_pub, _ = generate_age_keypair()
         init_resp = await auth_client.post(
             "/user/keys/transfer/initiate",
@@ -427,8 +441,9 @@ class TestKeyTransfer:
 @pytest.mark.asyncio
 class TestKeySecondary:
     async def _setup_main_key(self, client):
-        from app.services.crypto import generate_age_keypair
         import secrets
+
+        from app.services.crypto import generate_age_keypair
         main_pub, main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
@@ -499,8 +514,9 @@ class TestKeySecondary:
 @pytest.mark.asyncio
 class TestDeleteKeys:
     async def _setup_main_key(self, client):
-        from app.services.crypto import generate_age_keypair
         import secrets
+
+        from app.services.crypto import generate_age_keypair
         main_pub, main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
@@ -583,11 +599,13 @@ class TestInviteAccept:
 @pytest.mark.asyncio
 class TestSessionInvalidation:
     async def test_session_invalid_after_password_change(self, client: AsyncClient, db_engine):
-        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+        from datetime import datetime, timedelta
+
         from sqlalchemy import select
+        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
         from app.models.user import User
         from app.services.auth import create_signed_token
-        from datetime import datetime, timedelta, timezone
 
         email = "sesstest@example.com"
         password = "Password123!"
@@ -603,7 +621,7 @@ class TestSessionInvalidation:
         async with session_factory() as session:
             result = await session.execute(select(User).where(User.email == email))
             user = result.scalar_one()
-            user.password_change = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1)
+            user.password_change = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)
             await session.commit()
 
         # Session should now be invalid
@@ -734,6 +752,7 @@ class TestNotificationSettings:
 
 def test_client_ip_headers():
     from fastapi import Request
+
     from app.routers.auth import _client_ip
 
     # 1. CF-Connecting-IP has priority
@@ -817,8 +836,9 @@ class TestTokenAuth:
 
     async def test_token_auth_mfa_enabled_fails(self, client: AsyncClient, registered_user, db_session):
         # Find the user in the database and enable OTP MFA
-        from app.models.user import User
         from sqlalchemy import select
+
+        from app.models.user import User
         res = await db_session.execute(select(User).where(User.email == registered_user["email"]))
         user = res.scalar_one()
         user.otp_enabled = True

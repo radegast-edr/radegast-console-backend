@@ -1,14 +1,14 @@
-import pytest
-from datetime import datetime, timezone as tz, timedelta
+from datetime import timedelta
 from unittest.mock import AsyncMock, patch
+
+import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
 
 from app.config import settings
 from app.models.user import User
-from app.services.email import send_email_direct, send_verification_email
-from app.services.auth import create_signed_token
 from app.routers.auth import _configured_webauthn_origins
+from app.services.auth import create_signed_token
+from app.services.email import send_email_direct, send_verification_email
 from app.utils import utc_now
 
 
@@ -161,7 +161,7 @@ async def test_web_ui_url_config_and_origins(db_session):
     orig_web_ui_url = settings.web_ui_url
     try:
         settings.web_ui_url = "https://custom-ui.radegast.app"
-        
+
         # Test WebAuthn origins lists custom-ui.radegast.app
         origins = _configured_webauthn_origins()
         assert "https://custom-ui.radegast.app" in origins
@@ -169,7 +169,7 @@ async def test_web_ui_url_config_and_origins(db_session):
         # Test verification email link has custom web UI URL
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
             await send_verification_email("verify_config@example.com")
-        
+
         mock_send.assert_called_once()
         html_body = mock_send.call_args[0][2]
         assert "https://custom-ui.radegast.app/verify" in html_body
@@ -193,7 +193,7 @@ async def test_list_unsubscribe_headers_added(db_session):
 
         mock_send.assert_called_once()
         msg = mock_send.call_args[0][0]
-        
+
         # Verify unsubscribe headers exist in the MIME message object
         assert "List-Unsubscribe" in msg
         assert "List-Unsubscribe-Post" in msg
@@ -244,7 +244,7 @@ async def test_unsubscribe_get_redirect(client: AsyncClient):
     orig_web_ui = settings.web_ui_url
     try:
         settings.web_ui_url = "https://custom-ui.radegast.app"
-        
+
         # Test redirect with token
         resp = await client.get("/user/unsubscribe?token=my_dummy_token", follow_redirects=False)
         assert resp.status_code == 307

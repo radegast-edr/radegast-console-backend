@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     webauthn_rp_id: str | None = None
     webauthn_origins: str = ""
     web_ui_url: str | None = None
+    pack_max_size_mb: int | None = None
+    pack_max_size_mb_user: int | None = None
+    pack_max_size_mb_admin: int | None = None
+    pack_max_size_mb_maintainer: int | None = None
 
     model_config = {"env_prefix": "radegast_"}
 

@@ -10,6 +10,7 @@ from app.models.log import Log, LogSeen
 from app.models.pack import Pack
 from app.models.pack_enabled import PackEnabled
 from app.models.pack_version import PackVersion
+from app.models.pack_version_rule import PackVersionRule, RuleType
 from app.models.public_key import PublicKey
 from app.models.queued_email import QueuedEmail
 from app.models.team import Team
@@ -28,8 +29,10 @@ __all__ = [
     "Pack",
     "PackEnabled",
     "PackVersion",
+    "PackVersionRule",
     "PublicKey",
     "QueuedEmail",
+    "RuleType",
     "Team",
     "User",
     "device_group_devices",

@@ -6,12 +6,20 @@ from pydantic import BaseModel, field_validator
 from app.models.log import LogSeverity
 
 
+class TriggeredRuleResponse(BaseModel):
+    rule_id: str
+    rule_type: str
+    pack_version_id: int
+    rule_content: str
+
+
 class LogCreate(BaseModel):
     time: datetime
     content: str
     signature: str | None = None
     severity: LogSeverity | None = None
     rule_id: str | None = None
+    rule_type: str | None = None
 
     @field_validator("severity", mode="before")
     @classmethod
@@ -20,6 +28,15 @@ class LogCreate(BaseModel):
             return LogSeverity(v)
         except (ValueError, TypeError):
             return None
+
+    @field_validator("rule_type", mode="before")
+    @classmethod
+    def validate_rule_type(cls, v: Any) -> str | None:
+        if v is None:
+            return None
+        if v in ("sigma", "ioc", "yara"):
+            return v
+        return None
 
 
 class LogResponse(BaseModel):
@@ -33,6 +50,8 @@ class LogResponse(BaseModel):
     alert_resolution: str | None = None
     triage_note: str | None = None
     rule_id: str | None = None
+    rule_type: str | None = None
+    triggered_rule: TriggeredRuleResponse | None = None
 
     model_config = {"from_attributes": True}
 

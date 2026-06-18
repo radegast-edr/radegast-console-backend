@@ -2,8 +2,8 @@ import asyncio
 
 import pytest
 
-from app.config import Settings, settings
 import app.services.email as email_service
+from app.config import Settings, settings
 
 
 def test_worker_lock_path_default_and_env_override(monkeypatch):

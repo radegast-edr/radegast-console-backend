@@ -11,9 +11,16 @@ from app.models.associations import device_group_devices, team_device_groups, te
 from app.models.device import Device
 from app.models.device_group import DeviceGroup
 from app.models.log import Log, LogSeen, LogSeverity
+from app.models.pack_version_rule import PackVersionRule
 from app.models.team import Team
 from app.models.user import User
-from app.schemas.log import LogCountResponse, LogCreate, LogResolveRequest, LogResponse
+from app.schemas.log import (
+    LogCountResponse,
+    LogCreate,
+    LogResolveRequest,
+    LogResponse,
+    TriggeredRuleResponse,
+)
 from app.services.email import send_device_log_notification
 from app.services.logs import (
     filter_logs,
@@ -21,9 +28,38 @@ from app.services.logs import (
     is_sufficient_severity,
 )
 from app.services.permissions import get_device_encryption_keys_list
+from app.services.rule_lookup import find_and_cache_triggered_rule
 from app.utils import ensure_utc
 
 router = APIRouter(prefix="/logs", tags=["logs"])
+
+
+def _make_triggered_rule(pack_version_rule: PackVersionRule | None) -> TriggeredRuleResponse | None:
+    if pack_version_rule is None:
+        return None
+    return TriggeredRuleResponse(
+        rule_id=pack_version_rule.rule_id,
+        rule_type=pack_version_rule.rule_type,
+        pack_version_id=pack_version_rule.pack_version_id,
+        rule_content=pack_version_rule.rule_content,
+    )
+
+
+def _make_log_response(log: Log, seen: bool, pack_version_rule: PackVersionRule | None = None) -> LogResponse:
+    return LogResponse(
+        id=log.id,
+        device_id=log.device_id,
+        time=log.time,
+        content=log.content,
+        signature=log.signature,
+        seen=seen,
+        severity=log.severity,
+        alert_resolution=log.alert_resolution,
+        triage_note=log.triage_note,
+        rule_id=log.rule_id,
+        rule_type=log.rule_type,
+        triggered_rule=_make_triggered_rule(pack_version_rule),
+    )
 
 
 @router.post("/", response_model=LogResponse)
@@ -40,8 +76,18 @@ async def submit_log(
         signature=data.signature,
         severity=data.severity,
         rule_id=data.rule_id,
+        rule_type=data.rule_type,
     )
     db.add(log)
+    await db.flush()  # get log.id before resolving the rule
+
+    # If rule_id and rule_type are provided, look up the rule in enabled packs and cache it
+    pack_version_rule: PackVersionRule | None = None
+    if data.rule_id and data.rule_type:
+        pack_version_rule = await find_and_cache_triggered_rule(device, data.rule_id, data.rule_type, db)
+        if pack_version_rule is not None:
+            log.pack_version_rule_id = pack_version_rule.id
+
     await db.commit()
     await db.refresh(log)
 
@@ -78,7 +124,7 @@ async def submit_log(
 
     await db.commit()
 
-    return log
+    return _make_log_response(log, seen=False, pack_version_rule=pack_version_rule)
 
 
 @router.post("/seen/all")
@@ -212,7 +258,7 @@ async def list_logs(
         query = select(Log).where(Log.device_id.in_(visible_device_ids))
 
     query = filter_logs(query, from_time, to_time, min_level, user)
-    query = query.order_by(Log.time.desc()).offset(offset).limit(limit)
+    query = query.options(selectinload(Log.pack_version_rule)).order_by(Log.time.desc()).offset(offset).limit(limit)
 
     result = await db.execute(query)
     logs = result.scalars().all()
@@ -223,25 +269,7 @@ async def list_logs(
         seen_res = await db.execute(select(LogSeen.log_id).where(LogSeen.user_id == user.id, LogSeen.log_id.in_(log_ids)))
         seen_log_ids = set(seen_res.scalars().all())
 
-    response_logs = []
-    for log in logs:
-        seen = log.id in seen_log_ids
-
-        response_logs.append(
-            LogResponse(
-                id=log.id,
-                device_id=log.device_id,
-                time=log.time,
-                content=log.content,
-                signature=log.signature,
-                seen=seen,
-                severity=log.severity,
-                alert_resolution=log.alert_resolution,
-                triage_note=log.triage_note,
-                rule_id=log.rule_id,
-            )
-        )
-    return response_logs
+    return [_make_log_response(log, seen=log.id in seen_log_ids, pack_version_rule=log.pack_version_rule) for log in logs]
 
 
 @router.patch("/{log_id}/resolve", response_model=LogResponse)
@@ -251,7 +279,7 @@ async def resolve_log(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Log).where(Log.id == log_id))
+    result = await db.execute(select(Log).options(selectinload(Log.pack_version_rule)).where(Log.id == log_id))
     log = result.scalar_one_or_none()
     if not log:
         raise HTTPException(status_code=404, detail="Log not found")
@@ -276,18 +304,7 @@ async def resolve_log(
     seen_result = await db.execute(select(LogSeen).where(LogSeen.user_id == user.id, LogSeen.log_id == log_id))
     seen = seen_result.scalar_one_or_none() is not None
 
-    return LogResponse(
-        id=log.id,
-        device_id=log.device_id,
-        time=log.time,
-        content=log.content,
-        signature=log.signature,
-        seen=seen,
-        severity=log.severity,
-        alert_resolution=log.alert_resolution,
-        triage_note=log.triage_note,
-        rule_id=log.rule_id,
-    )
+    return _make_log_response(log, seen=seen, pack_version_rule=log.pack_version_rule)
 
 
 @router.get("/encryption-keys")

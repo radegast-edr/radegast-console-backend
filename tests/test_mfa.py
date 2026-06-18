@@ -1,13 +1,14 @@
-import pytest
-import pyotp
 from unittest.mock import MagicMock, patch
+
+import pyotp
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models.user import User, UserRole
 from app.models.hardware_token import HardwareToken
+from app.models.user import User, UserRole
 from app.services.auth import hash_password
 
 
@@ -367,7 +368,7 @@ async def test_mfa_grace_period_and_admin_reset_password(client: AsyncClient, db
         mfa_token = resp.json()["mfa_token"]
 
         # If they try to access protected endpoint using a fresh session without MFA verify, they get 403
-        # Wait, the client session cookie is not set yet because login returned mfa_required. 
+        # Wait, the client session cookie is not set yet because login returned mfa_required.
         # But we can verify with the admin reset password feature next.
 
         # Let's perform admin reset password

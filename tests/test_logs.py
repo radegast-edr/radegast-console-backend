@@ -1,5 +1,6 @@
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime, timezone
 from httpx import AsyncClient
 
 
@@ -23,7 +24,7 @@ class TestLogSubmission:
         resp = await client.post(
             "/logs/",
             json={
-                "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+                "time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
                 "content": "encrypted-log-content-here",
                 "signature": "sig-data",
                 "severity": "low",
@@ -51,7 +52,7 @@ class TestLogSubmission:
         resp = await client.post(
             "/logs/",
             json={
-                "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+                "time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
                 "content": "encrypted-log-content-here",
                 "severity": "invalid-severity",
             },
@@ -63,7 +64,7 @@ class TestLogSubmission:
         resp = await auth_client.post(
             "/logs/",
             json={
-                "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+                "time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
                 "content": "some-content",
             },
         )
@@ -88,7 +89,7 @@ class TestLogRetrieval:
         await client.post(
             "/logs/",
             json={
-                "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+                "time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
                 "content": "test-log-data",
                 "severity": "critical",
             },
@@ -102,7 +103,7 @@ class TestLogRetrieval:
         assert resp.status_code == 200
         logs = resp.json()
         assert len(logs) >= 1
-        
+
         # Check that severity is returned correctly in log list
         test_log = next(log for log in logs if log["content"] == "test-log-data")
         assert test_log["severity"] == "critical"
@@ -129,7 +130,7 @@ class TestLogRetrieval:
         await client.post("/auth/device/login", json={"token": token})
         await client.post(
             "/logs/",
-            json={"time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(), "content": "filtered-log"},
+            json={"time": datetime.now(UTC).replace(tzinfo=None).isoformat(), "content": "filtered-log"},
         )
 
         # Re-login as user to query logs (client == auth_client)
@@ -186,7 +187,7 @@ class TestLogSeenAndResolution:
         resp = await client.post(
             "/logs/",
             json={
-                "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+                "time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
                 "content": "seen-test-log",
                 "severity": "high",
             },
@@ -304,7 +305,7 @@ class TestLogSeenAndResolution:
         resp = await client.post(
             "/logs/",
             json={
-                "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+                "time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
                 "content": "basic-count-test-log",
                 "severity": "medium",
             },
@@ -341,7 +342,7 @@ class TestLogSeenAndResolution:
         resp = await client.post(
             "/logs/",
             json={
-                "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+                "time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
                 "content": "edr-count-test-log",
                 "severity": "high",
             },
@@ -390,7 +391,7 @@ class TestLogSeenAndResolution:
         resp = await client.post(
             "/logs/",
             json={
-                "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+                "time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
                 "content": "key-test-log",
             },
         )
@@ -425,7 +426,7 @@ class TestLogSeenAndResolution:
         resp = await client.post(
             "/logs/",
             json={
-                "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+                "time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
                 "content": "device-keys-test-log",
             },
         )
@@ -464,7 +465,7 @@ class TestLogSeenAndResolution:
         resp = await client.post(
             "/logs/",
             json={
-                "time": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+                "time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
                 "content": "auth-test-log",
             },
         )
@@ -475,3 +476,234 @@ class TestLogSeenAndResolution:
         resp = await client.get(f"/logs/{log_id}/device-keys")
         assert resp.status_code in (401, 403)
 
+
+@pytest.mark.asyncio
+class TestTriggeredRule:
+    """Tests for rule_type submission and triggered_rule lookup from enabled pack zips."""
+
+    def _make_pack_zip(self, pack_files: dict[str, str]) -> bytes:
+        """Create a valid pack zip containing the specified files."""
+        import io
+        import zipfile
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for path, content in pack_files.items():
+                zf.writestr(path, content)
+        return buf.getvalue()
+
+    async def _setup_device_with_pack(
+        self,
+        auth_client: AsyncClient,
+        client: AsyncClient,
+        pack_files: dict[str, str],
+        device_name: str = "Logger-Rule",
+        pack_name: str = "Rule-Pack",
+    ) -> tuple[str, int]:
+        """
+        Create a device, create a pack with a sigma rule, enable the pack for the
+        device's group, and return (device_token, group_id).
+        """
+        # Get group
+        resp = await auth_client.get("/teams/")
+        team_id = resp.json()[0]["id"]
+        resp = await auth_client.get(f"/teams/{team_id}/groups")
+        group_id = resp.json()[0]["id"]
+
+        # Create device
+        resp = await auth_client.post("/devices/", json={"name": device_name, "group_id": group_id})
+        assert resp.status_code == 200
+        token = resp.json()["token"]
+
+        # Create pack + upload version
+        resp = await auth_client.post("/packs/", json={"name": pack_name, "description": "Test pack"})
+        assert resp.status_code == 200
+        pack_id = resp.json()["id"]
+
+        zip_bytes = self._make_pack_zip(pack_files)
+        resp = await auth_client.post(
+            f"/packs/{pack_id}/versions?version=1.0.0",
+            files={"file": ("pack.zip", zip_bytes, "application/zip")},
+        )
+        assert resp.status_code == 200
+        pack_version_id = resp.json()["id"]
+
+        # Enable pack for the device group
+        resp = await auth_client.post(
+            f"/packs/groups/{group_id}/enable",
+            json={"pack_version_id": pack_version_id, "autoupdate": False},
+        )
+        assert resp.status_code == 200
+
+        return token, group_id
+
+    async def test_submit_log_with_rule_type_stored(
+        self, auth_client: AsyncClient, client: AsyncClient
+    ) -> None:
+        """Submitting a log with rule_id + rule_type persists rule_type on the log row."""
+        resp = await auth_client.get("/teams/")
+        team_id = resp.json()[0]["id"]
+        resp = await auth_client.get(f"/teams/{team_id}/groups")
+        group_id = resp.json()[0]["id"]
+
+        resp = await auth_client.post("/devices/", json={"name": "Logger-RuleType", "group_id": group_id})
+        token = resp.json()["token"]
+
+        await client.post("/auth/device/login", json={"token": token})
+        resp = await client.post(
+            "/logs/",
+            json={
+                "time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                "content": "encrypted-content",
+                "rule_id": "test_rule",
+                "rule_type": "sigma",
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["rule_id"] == "test_rule"
+        assert data["rule_type"] == "sigma"
+
+    async def test_submit_log_with_invalid_rule_type_ignored(
+        self, auth_client: AsyncClient, client: AsyncClient
+    ) -> None:
+        """An unrecognised rule_type value is silently ignored (None stored)."""
+        resp = await auth_client.get("/teams/")
+        team_id = resp.json()[0]["id"]
+        resp = await auth_client.get(f"/teams/{team_id}/groups")
+        group_id = resp.json()[0]["id"]
+
+        resp = await auth_client.post("/devices/", json={"name": "Logger-BadType", "group_id": group_id})
+        token = resp.json()["token"]
+
+        await client.post("/auth/device/login", json={"token": token})
+        resp = await client.post(
+            "/logs/",
+            json={
+                "time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                "content": "encrypted-content",
+                "rule_id": "some_rule",
+                "rule_type": "unknown_type",
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        # rule_type was invalid so it gets coerced to None
+        assert data["rule_type"] is None
+
+    async def test_triggered_rule_from_pack_all_types(
+        self, auth_client: AsyncClient, client: AsyncClient, maintainer_client: AsyncClient
+    ) -> None:
+        """When rule_id + rule_type match a rule in an enabled pack, triggered_rule is returned inline."""
+        sigma_id = "a3c5c821-004a-4e52-8684-0f7f9ea0404c"
+        sigma_content = f"id: {sigma_id}\ntitle: Linux Reverse Shell via /dev/tcp\ndetection:\n  condition: selection\n"
+
+        yara_id = "lnx_susp_xmrig_coinminer"
+        yara_content = f'rule {yara_id} {{\n    strings:\n        $a = "xmrig"\n    condition:\n        $a\n}}\n'
+
+        ioc_id = "domain::example.com"
+        ioc_content = "example.com\n"
+
+        pack_files = {
+            "sigma/proc_creation_lnx_shell_dev_tcp_reverse_shell.yml": sigma_content,
+            "yara/lnx_susp_xmrig_coinminer.yar": yara_content,
+            "ioc/domains.txt": ioc_content,
+        }
+
+        token, _ = await self._setup_device_with_pack(
+            maintainer_client,
+            client,
+            pack_files=pack_files,
+            device_name="Logger-TriggeredRule",
+            pack_name="TriggeredRule-Pack",
+        )
+
+        # Submit log as device
+        await client.post("/auth/device/login", json={"token": token})
+
+        # 1) Sigma
+        resp = await client.post(
+            "/logs/",
+            json={
+                "time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                "content": "encrypted-content-1",
+                "rule_id": sigma_id,
+                "rule_type": "sigma",
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["triggered_rule"]["rule_content"] == sigma_content
+
+        # 2) Yara
+        resp = await client.post(
+            "/logs/",
+            json={
+                "time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                "content": "encrypted-content-2",
+                "rule_id": yara_id,
+                "rule_type": "yara",
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["triggered_rule"]["rule_content"] == yara_content
+
+        # 3) IOC
+        resp = await client.post(
+            "/logs/",
+            json={
+                "time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                "content": "encrypted-content-3",
+                "rule_id": ioc_id,
+                "rule_type": "ioc",
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["triggered_rule"]["rule_content"] == ioc_content
+
+        # Re-login as maintainer and verify triggered_rules come back in list endpoint
+        await client.post("/auth/login", json={"email": "maintainer@example.com", "password": "MaintainerPass123!"})
+        resp = await maintainer_client.get("/logs/")
+        assert resp.status_code == 200
+        logs = resp.json()
+
+        matching_sigma = [lg for lg in logs if lg.get("rule_id") == sigma_id]
+        assert len(matching_sigma) >= 1
+        assert matching_sigma[0]["triggered_rule"] is not None
+        assert matching_sigma[0]["triggered_rule"]["rule_content"] == sigma_content
+
+        matching_yara = [lg for lg in logs if lg.get("rule_id") == yara_id]
+        assert len(matching_yara) >= 1
+        assert matching_yara[0]["triggered_rule"] is not None
+        assert matching_yara[0]["triggered_rule"]["rule_content"] == yara_content
+
+        matching_ioc = [lg for lg in logs if lg.get("rule_id") == ioc_id]
+        assert len(matching_ioc) >= 1
+        assert matching_ioc[0]["triggered_rule"] is not None
+        assert matching_ioc[0]["triggered_rule"]["rule_content"] == ioc_content
+
+
+    async def test_triggered_rule_not_found_returns_null(
+        self, auth_client: AsyncClient, client: AsyncClient
+    ) -> None:
+        """If the rule_id doesn't exist in any enabled pack, triggered_rule is null."""
+        resp = await auth_client.get("/teams/")
+        team_id = resp.json()[0]["id"]
+        resp = await auth_client.get(f"/teams/{team_id}/groups")
+        group_id = resp.json()[0]["id"]
+
+        resp = await auth_client.post("/devices/", json={"name": "Logger-NoRule", "group_id": group_id})
+        token = resp.json()["token"]
+
+        await client.post("/auth/device/login", json={"token": token})
+        resp = await client.post(
+            "/logs/",
+            json={
+                "time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                "content": "encrypted-content",
+                "rule_id": "nonexistent_rule_xyz",
+                "rule_type": "sigma",
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["triggered_rule"] is None

@@ -4,16 +4,16 @@ Tests for MFA required-level enforcement:
 - Disabling OTP or deleting the last hardware token is blocked when it would
   leave the user below their required MFA level
 """
-import pytest
-import pyotp
 from unittest.mock import MagicMock, patch
+
+import pyotp
+import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import settings
 from app.models.user import User, UserRole
 from app.services.auth import hash_password
-
 
 # ---------------------------------------------------------------------------
 # Helpers

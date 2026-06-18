@@ -42,6 +42,7 @@ class User(Base):
     notification_level: Mapped[LogSeverity] = mapped_column(Enum(LogSeverity), default="medium", server_default="medium", nullable=False)
     extended_edr_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
     api_keys_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
+    ai_analysis_tool: Mapped[str] = mapped_column(String(50), default="lumo-guest", server_default="lumo-guest", nullable=False)
     public_keys = relationship("PublicKey", back_populates="user", cascade="all, delete-orphan")
     teams = relationship("Team", secondary=team_users, back_populates="users")
     hardware_tokens = relationship("HardwareToken", back_populates="user", cascade="all, delete-orphan")

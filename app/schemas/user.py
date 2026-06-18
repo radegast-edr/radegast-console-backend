@@ -29,6 +29,7 @@ class UserResponse(BaseModel):
     extended_edr_enabled: bool = False
     api_keys_enabled: bool = False
     notification_level: str = "medium"
+    ai_analysis_tool: str = "lumo-guest"
 
     model_config = {"from_attributes": True}
 
@@ -131,6 +132,12 @@ class ExtendedEdrSettings(BaseModel):
 
 class ApiKeysEnabledSettings(BaseModel):
     api_keys_enabled: bool
+
+    model_config = {"from_attributes": True}
+
+
+class AiAnalysisToolSettings(BaseModel):
+    ai_analysis_tool: str
 
     model_config = {"from_attributes": True}
 

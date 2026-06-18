@@ -25,6 +25,7 @@ from app.models.key_transfer import KeyTransfer
 from app.models.public_key import PublicKey
 from app.models.user import User
 from app.schemas.user import (
+    AiAnalysisToolSettings,
     ApiKeysEnabledSettings,
     ChangePasswordRequest,
     ExtendedEdrSettings,
@@ -365,6 +366,7 @@ async def me(user: User = Depends(get_current_user), db: AsyncSession = Depends(
         mfa_configured_level=conf_level,
         extended_edr_enabled=user.extended_edr_enabled,
         api_keys_enabled=user.api_keys_enabled,
+        ai_analysis_tool=user.ai_analysis_tool,
     )
 
 
@@ -465,6 +467,17 @@ async def update_api_keys_enabled(
         background_tasks.add_task(send_api_keys_toggled_notification, user.email, data.api_keys_enabled)
 
     return ApiKeysEnabledSettings.model_validate(user)
+
+
+@router.put("/ai-analysis-tool", response_model=AiAnalysisToolSettings)
+async def update_ai_analysis_tool(
+    data: AiAnalysisToolSettings,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user.ai_analysis_tool = data.ai_analysis_tool
+    await db.commit()
+    return AiAnalysisToolSettings.model_validate(user)
 
 
 @router.post("/keys/transfer/initiate", response_model=KeyTransferInitiateResponse)

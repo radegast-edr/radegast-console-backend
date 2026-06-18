@@ -768,6 +768,27 @@ class TestNotificationSettings:
         resp = await client.put("/user/extended-edr", json={"extended_edr_enabled": True})
         assert resp.status_code in (401, 403)
 
+    async def test_update_ai_analysis_tool(self, client: AsyncClient):
+        await self._setup(client)
+
+        # Verify default value from me
+        me_resp = await client.get("/user/me")
+        assert me_resp.status_code == 200
+        assert me_resp.json()["ai_analysis_tool"] == "lumo-guest"
+
+        payload = {"ai_analysis_tool": "gemini"}
+        resp = await client.put("/user/ai-analysis-tool", json=payload)
+        assert resp.status_code == 200
+        assert resp.json()["ai_analysis_tool"] == "gemini"
+
+        # Check in /me
+        resp2 = await client.get("/user/me")
+        assert resp2.json()["ai_analysis_tool"] == "gemini"
+
+    async def test_ai_analysis_tool_requires_auth(self, client: AsyncClient):
+        resp = await client.put("/user/ai-analysis-tool", json={"ai_analysis_tool": "gemini"})
+        assert resp.status_code in (401, 403)
+
 
 def test_client_ip_headers():
     from fastapi import Request

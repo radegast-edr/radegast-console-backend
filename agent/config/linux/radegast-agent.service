@@ -9,6 +9,7 @@ WorkingDirectory=/opt/radegast/home
 Restart=on-failure
 RestartSec=5
 User=radegast-agent
+Environment=PATH=/opt/radegast/home/.local/bin:/opt/radegast/home/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=RADEGAST_AGENT_BACKEND_URL={{RADEGAST_AGENT_BACKEND_URL}}/api/v1
 Environment=RADEGAST_AGENT_DEVICE_TOKEN=%REPLACE_WITH_YOUR_AGENT_TOKEN%
 Environment=RADEGAST_AGENT_RUSTINEL_BINARY=/opt/radegast/rustinel/rustinel

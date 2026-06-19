@@ -87,7 +87,14 @@ if not exist "%UV_EXE%" (
     )
 ) else (
     echo uv is already installed.
+    echo Attempting to upgrade uv to the newest version...
+    "%UV_EXE%" self update
+    if errorlevel 1 (
+        echo Update not available or failed, continuing with current version.
+    )
 )
+
+set "PATH=%SCRIPTS_DIR%;%PATH%"
 
 :install_app
 echo.

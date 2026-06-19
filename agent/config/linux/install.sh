@@ -137,12 +137,20 @@ if [ -z "$UV_BIN" ]; then
         echo "ERROR: Failed to install uv." >&2
         exit 1
     fi
+else
+    echo "uv is already installed at: $UV_BIN"
+    echo "Attempting to upgrade uv to the newest version..."
+    if [[ "$UV_BIN" == /opt/radegast/home/* ]]; then
+        sudo -u radegast-agent -i "$UV_BIN" self update || echo "Update not available or failed, continuing with current version"
+    else
+        "$UV_BIN" self update || echo "Update not available or failed, continuing with current version"
+    fi
 fi
 echo "uv found at: $UV_BIN"
 
 # 5. Install radegast-agent via uv
-echo "Installing radegast-agent tool..."
-sudo -u radegast-agent -i "$UV_BIN" tool install radegast-edr-agent
+echo "Installing/upgrading radegast-agent tool..."
+sudo -u radegast-agent -i "$UV_BIN" tool install --upgrade radegast-edr-agent
 
 # Verify agent executable exists
 if [ ! -f "/opt/radegast/home/.local/bin/radegast-edr-agent" ]; then

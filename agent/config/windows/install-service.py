@@ -1,12 +1,12 @@
-import os
-import sys
 import base64
+import os
 import platform
+import shutil
+import subprocess
+import sys
+import time
 import urllib.request
 import zipfile
-import subprocess
-import shutil
-import time
 from pathlib import Path
 
 
@@ -148,6 +148,13 @@ def main():
     agent_pyproject = agent_home_dir / "pyproject.toml"
     if agent_pyproject.exists():
         agent_pyproject.unlink()
+
+    # Delete existing virtual environment to force agent upgrade on next service start
+    agent_venv = agent_home_dir / ".venv"
+    if agent_venv.exists():
+        print("Removing existing agent virtual environment to force upgrade...")
+        shutil.rmtree(agent_venv, ignore_errors=True)
+
     subprocess.run(
         [str(uv_exe), "init",  ".", "--python", python_exe_path],
         check=True,
@@ -186,6 +193,9 @@ def main():
     </service>"""
     (rustinel_service_dir / "radegast-rustinel-service.xml").write_text(rustinel_xml, encoding="utf-8")
 
+    # Construct PATH containing uv.exe for the agent service
+    service_path = f"{python_dir}\\Scripts;{os.environ.get('PATH', '')}"
+
     agent_xml = f"""<service>
       <id>RadegastAgent</id>
       <name>Radegast EDR Agent</name>
@@ -194,6 +204,7 @@ def main():
       <arguments>run --with radegast-edr-agent --python "{python_exe_path}" radegast-edr-agent</arguments>
       <workingdirectory>{agent_home_dir}</workingdirectory>
       <env name="PYTHONUNBUFFERED" value="1" />
+      <env name="PATH" value="{service_path}" />
       <env name="RADEGAST_AGENT_BACKEND_URL" value="{backend_url}/api/v1" />
       <env name="RADEGAST_AGENT_DEVICE_TOKEN" value="{token}" />
       <env name="RADEGAST_AGENT_RUSTINEL_BINARY" value="{rustinel_core_dir}\\rustinel.exe" />
@@ -259,17 +270,17 @@ def main():
         "    exit /b 0\r\n"
         ")\r\n"
         "echo WARNING: The signing key cannot be changed and must be backed-up manually if moving to another device.\r\n"
-        "set /p \"confirm=Have you backed-up your device signing key manually? (y/n): \"\r\n"
-        "if /i \"%confirm%\" neq \"y\" exit /b 1\r\n"
+        'set /p "confirm=Have you backed-up your device signing key manually? (y/n): "\r\n'
+        'if /i "%confirm%" neq "y" exit /b 1\r\n'
         "echo === Uninstalling Radegast Services ===\r\n"
-        f"\"{agent_service_exe}\" stop >nul 2>&1\r\n"
-        f"\"{rustinel_service_exe}\" stop >nul 2>&1\r\n"
-        f"\"{agent_service_exe}\" uninstall >nul 2>&1\r\n"
-        f"\"{rustinel_service_exe}\" uninstall >nul 2>&1\r\n"
+        f'"{agent_service_exe}" stop >nul 2>&1\r\n'
+        f'"{rustinel_service_exe}" stop >nul 2>&1\r\n'
+        f'"{agent_service_exe}" uninstall >nul 2>&1\r\n'
+        f'"{rustinel_service_exe}" uninstall >nul 2>&1\r\n'
         "taskkill /f /im rustinel.exe >nul 2>&1\r\n"
         "reg delete HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Radegast /f >nul 2>&1\r\n"
         "echo === Removing Files ===\r\n"
-        f"start /b \"\" cmd /c \"timeout /t 3 >nul & rmdir /s /q \"{radegast_dir}\" >nul 2>&1\"\r\n"
+        f'start /b "" cmd /c "timeout /t 3 >nul & rmdir /s /q "{radegast_dir}" >nul 2>&1"\r\n'
     )
     uninstall_bat.write_text(uninstall_content, encoding="utf-8")
 

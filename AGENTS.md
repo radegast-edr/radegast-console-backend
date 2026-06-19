@@ -59,13 +59,22 @@ npm run build
 
 Make sure the build output contains no compile, Svelte, or accessibility warnings. Any warnings must be fixed before ending the task.
 
-3. Run all frontend tests:
+3. **Run ESLint checking** on frontend code:
+
+```bash
+cd web
+npm run lint
+```
+
+Fix any style or linting issues reported by ESLint.
+
+4. Run all frontend tests:
 
 ```bash
 npm run test
 ```
 
-4. Run all backend tests:
+5. Run all backend tests:
 
 ```bash
 cd ..

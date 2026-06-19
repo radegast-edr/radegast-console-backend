@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, field_validator
@@ -52,6 +52,13 @@ class LogResponse(BaseModel):
     rule_id: str | None = None
     rule_type: str | None = None
     triggered_rule: TriggeredRuleResponse | None = None
+
+    @field_validator("time", mode="after")
+    @classmethod
+    def ensure_time_utc(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            return v.replace(tzinfo=UTC)
+        return v.astimezone(UTC)
 
     model_config = {"from_attributes": True}
 

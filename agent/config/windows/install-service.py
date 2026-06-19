@@ -123,19 +123,37 @@ def main():
     zip_path = rustinel_core_dir / "rustinel.zip"
 
     print("Downloading rustinel...")
-    try:
-        req = urllib.request.Request(download_url, headers={'User-Agent': 'Mozilla/5.0'})
-        import ssl
-        ssl_context = ssl._create_unverified_context() if hasattr(ssl, '_create_unverified_context') else None
-        with urllib.request.urlopen(req, context=ssl_context) as response, open(zip_path, 'wb') as out_file:
-            out_file.write(response.read())
+    success = False
+    last_error = None
+    urls_to_try = [
+        download_url,
+        f"https://console-api.radegast.app/api/v1/device/agent/download?os=windows&arch={arch}"
+    ]
+    for url in urls_to_try:
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})  # noqa: S310
+            import ssl
+            ssl_context = ssl._create_unverified_context() if hasattr(ssl, '_create_unverified_context') else None  # noqa: S323
+            with urllib.request.urlopen(req, context=ssl_context) as response, open(zip_path, 'wb') as out_file:  # noqa: S310
+                out_file.write(response.read())
 
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(rustinel_core_dir)
-        if zip_path.exists():
-            zip_path.unlink()
-    except Exception as e:
-        print(f"ERROR: Failed to download/extract rustinel: {e}", file=sys.stderr)
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(rustinel_core_dir)
+            if zip_path.exists():
+                zip_path.unlink()
+            success = True
+            break
+        except Exception as e:
+            last_error = e
+            if zip_path.exists():
+                try:
+                    zip_path.unlink()
+                except Exception:  # noqa: S110
+                    pass
+            print(f"INFO: Failed to download/extract from {url}: {e}", file=sys.stderr)
+
+    if not success:
+        print(f"ERROR: Failed to download/extract rustinel after trying all locations. Last error: {last_error}", file=sys.stderr)
         sys.exit(1)
 
     # 4. Write configuration file config.toml
@@ -205,6 +223,9 @@ def main():
       <workingdirectory>{agent_home_dir}</workingdirectory>
       <env name="PYTHONUNBUFFERED" value="1" />
       <env name="PATH" value="{service_path}" />
+      <env name="UV_CACHE_DIR" value="{cache_dir}" />
+      <env name="LOCALAPPDATA" value="{agent_dir}" />
+      <env name="APPDATA" value="{agent_dir}" />
       <env name="RADEGAST_AGENT_BACKEND_URL" value="{backend_url}/api/v1" />
       <env name="RADEGAST_AGENT_DEVICE_TOKEN" value="{token}" />
       <env name="RADEGAST_AGENT_RUSTINEL_BINARY" value="{rustinel_core_dir}\\rustinel.exe" />

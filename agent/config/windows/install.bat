@@ -7,11 +7,15 @@ echo.
 rem Capture token if passed as argument (e.g. UAC elevation relaunch)
 if "%RADEGAST_TOKEN%"=="" set "RADEGAST_TOKEN=%~1"
 
+set "POWERSHELL_BIN=powershell"
+where pwsh >nul 2>&1
+if %errorlevel% equ 0 set "POWERSHELL_BIN=pwsh"
+
 rem Check for administrative privileges and elevate if needed
 net session >nul 2>&1
 if errorlevel 1 (
     echo Requesting administrative privileges...
-    powershell -Command "Start-Process -FilePath '%~f0' -ArgumentList '%RADEGAST_TOKEN%' -Verb RunAs"
+    %POWERSHELL_BIN% -Command "Start-Process -FilePath '%~f0' -ArgumentList '%RADEGAST_TOKEN%' -Verb RunAs"
     exit /b 0
 )
 
@@ -35,7 +39,7 @@ if exist "%PYTHON_EXE%" (
 
 echo.
 echo Downloading portable Python...
-powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://esoadamo.gitlab.io/windows-python-bat-installer/winpython_3_13_uv.zip' -OutFile $env:PYTHON_ZIP"
+%POWERSHELL_BIN% -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://esoadamo.gitlab.io/windows-python-bat-installer/winpython_3_13_uv.zip' -OutFile $env:PYTHON_ZIP"
 if errorlevel 1 (
     echo ERROR: Failed to download Python
     PAUSE
@@ -45,7 +49,7 @@ echo Download complete.
 echo.
 
 echo Verifying file integrity...
-powershell -Command "$computedHash = (Get-FileHash -Path $env:PYTHON_ZIP -Algorithm SHA256).Hash; if ($computedHash -ne '%EXPECTED_HASH%') { write-host 'HASH MISMATCH!'; exit 1 } else { write-host 'Hash verified successfully.' }"
+%POWERSHELL_BIN% -Command "$computedHash = (Get-FileHash -Path $env:PYTHON_ZIP -Algorithm SHA256).Hash; if ($computedHash -ne '%EXPECTED_HASH%') { write-host 'HASH MISMATCH!'; exit 1 } else { write-host 'Hash verified successfully.' }"
 if errorlevel 1 (
     echo ERROR: Hash verification failed! The downloaded file may be corrupted or tampered with.
     if exist "%PYTHON_ZIP%" del "%PYTHON_ZIP%"
@@ -56,7 +60,7 @@ echo.
 
 echo Extracting Python to %APP_DIR%...
 if not exist "%APP_DIR%" mkdir "%APP_DIR%"
-powershell -Command "Expand-Archive -Path $env:PYTHON_ZIP -DestinationPath $env:APP_DIR -Force"
+%POWERSHELL_BIN% -Command "Expand-Archive -Path $env:PYTHON_ZIP -DestinationPath $env:APP_DIR -Force"
 if errorlevel 1 (
     echo ERROR: Failed to extract Python
     PAUSE

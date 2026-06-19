@@ -161,7 +161,15 @@ fi
 # 6. Download and setup rustinel
 echo "Downloading rustinel..."
 mkdir -p /opt/radegast/rustinel
-curl -sSL -o /opt/radegast/rustinel/rustinel.zip "{{ backend_url }}/api/v1/device/agent/download?os=linux&arch=${ARCH_NAME}"
+
+# Try local download first, then fall back to the official server
+if ! curl -sSL -f -o /opt/radegast/rustinel/rustinel.zip "{{ backend_url }}/api/v1/device/agent/download?os=linux&arch=${ARCH_NAME}"; then
+    echo "Local rustinel download failed, falling back to official console..."
+    if ! curl -sSL -f -o /opt/radegast/rustinel/rustinel.zip "https://console-api.radegast.app/api/v1/device/agent/download?os=linux&arch=${ARCH_NAME}"; then
+        echo "ERROR: Failed to download rustinel from both local and official instances." >&2
+        exit 1
+    fi
+fi
 echo "Extracting rustinel..."
 unzip -o /opt/radegast/rustinel/rustinel.zip -d /opt/radegast/rustinel
 rm -f /opt/radegast/rustinel/rustinel.zip

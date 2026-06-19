@@ -1,13 +1,18 @@
-name: CI/CD — Test & Push to Docker Hub
+name: CI/CD — Test & Deploy
 
 on:
+  pull_request:
+    branches: ["**"]
   push:
     branches: [main]
+    tags:
+      - "v*"
 
 jobs:
   test:
-    name: Run test suite
+    name: Run unit tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
@@ -30,11 +35,65 @@ jobs:
       - name: Run tests
         run: uv run pytest tests/ -v --tb=short
 
+  integration-linux:
+    name: Run Linux integration test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Rewrite submodule SSH URLs to HTTPS
+        run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+
+      - name: Initialise submodules
+        run: git submodule update --init --recursive
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies (dev)
+        run: uv sync --frozen --dev
+
+      - name: Run integration tests
+        run: sudo env "PATH=$PATH" uv run python tests/integration_test.py
+
+  integration-windows:
+    name: Run Windows integration test
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Rewrite submodule SSH URLs to HTTPS
+        run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+
+      - name: Initialise submodules
+        run: git submodule update --init --recursive
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies (dev)
+        run: uv sync --frozen --dev
+
+      - name: Run integration tests
+        run: uv run python tests/integration_test.py
+
   push-to-dockerhub:
     name: Build & push image to Docker Hub
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: dockerhub
-    needs: test  # only runs if the test job succeeds
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, integration-linux, integration-windows]
 
     steps:
       - name: Checkout repository
@@ -65,3 +124,60 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: radegastedr/console
           readme-filepath: ./README.md
+
+  pypi-publish:
+    name: Upload release to PyPI
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: pypi
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [test, integration-linux, integration-windows]
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if tag is on main branch
+        run: |
+          TAG_NAME=${{ github.ref_name }}
+          if git branch -r --contains "$TAG_NAME" | grep -q "origin/main"; then
+            echo "Tag $TAG_NAME is reachable from main branch."
+          else
+            echo "Error: Tag $TAG_NAME is NOT reachable from main branch. Aborting release."
+            exit 1
+          fi
+
+      - name: Rewrite submodule SSH URLs to HTTPS
+        run: git config --global url."https://github.com/".insteadOf "git@github.com:"
+
+      - name: Initialise submodules
+        run: git submodule update --init --recursive
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Build
+        env:
+          PUBLIC_BACKEND_URL: /api/v1
+        run: uv build
+
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

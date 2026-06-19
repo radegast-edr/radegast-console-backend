@@ -104,7 +104,7 @@ def build_base64_write_and_decode_block(
         block += f'(echo {chunk}){op}"%{base64_file_env_var}%"\r\n'
         block += f"echo {progress_label}: {current}/{total} ({percent}%)\r\n"
 
-    block += f'powershell -Command "$b = Get-Content -Path $env:{base64_file_env_var} -Raw; $x = [System.Convert]::FromBase64String($b); [System.IO.File]::WriteAllBytes($env:{output_file_env_var}, $x)"\r\n'
+    block += f'%POWERSHELL_BIN% -Command "$b = Get-Content -Path $env:{base64_file_env_var} -Raw; $x = [System.Convert]::FromBase64String($b); [System.IO.File]::WriteAllBytes($env:{output_file_env_var}, $x)"\r\n'
     return block
 
 

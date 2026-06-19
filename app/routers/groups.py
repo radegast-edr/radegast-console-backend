@@ -80,6 +80,7 @@ def _group_detail(group: DeviceGroup) -> dict:
                 "description": e.description,
                 "jsonata_query": e.jsonata_query,
                 "created_at": e.created_at,
+                "alert_id": e.alert_id,
             }
             for e in group.exclusions
         ],

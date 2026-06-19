@@ -376,3 +376,27 @@ async def get_log_device_keys_for_triage(
 
     # 3. Return all public keys of all users with log-read access for this device's groups
     return await get_device_encryption_keys_list(log.device_id, db)
+
+
+@router.get("/{log_id}", response_model=LogResponse)
+async def get_log(
+    log_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    visible_device_ids = await get_visible_device_ids(user, db)
+    if not visible_device_ids:
+        raise HTTPException(status_code=403, detail="No log permission")
+
+    result = await db.execute(select(Log).options(selectinload(Log.pack_version_rule)).where(Log.id == log_id))
+    log = result.scalar_one_or_none()
+    if not log:
+        raise HTTPException(status_code=404, detail="Log not found")
+
+    if log.device_id not in visible_device_ids:
+        raise HTTPException(status_code=403, detail="No log permission for this device")
+
+    seen_result = await db.execute(select(LogSeen).where(LogSeen.user_id == user.id, LogSeen.log_id == log_id))
+    seen = seen_result.scalar_one_or_none() is not None
+
+    return _make_log_response(log, seen=seen, pack_version_rule=log.pack_version_rule)

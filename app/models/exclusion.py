@@ -16,4 +16,6 @@ class Exclusion(Base):
     jsonata_query: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
+    alert_id: Mapped[int | None] = mapped_column(ForeignKey("logs.id", ondelete="SET NULL"), nullable=True)
+
     device_group = relationship("DeviceGroup", back_populates="exclusions")

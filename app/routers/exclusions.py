@@ -31,6 +31,7 @@ class ExclusionListResponse(BaseModel):
     description: str | None
     jsonata_query: str
     created_at: datetime
+    alert_id: int | None = None
 
 
 class MessageResponse(BaseModel):
@@ -86,6 +87,7 @@ async def list_all_exclusions(
             "description": e.description,
             "jsonata_query": e.jsonata_query,
             "created_at": e.created_at,
+            "alert_id": e.alert_id,
         }
         for e in exclusions
     ]
@@ -117,6 +119,7 @@ async def list_group_exclusions(
             description=e.description,
             jsonata_query=e.jsonata_query,
             created_at=e.created_at,
+            alert_id=e.alert_id,
         )
         for e in exclusions
     ]
@@ -143,6 +146,7 @@ async def create_exclusion(
         name=data.name,
         description=data.description,
         jsonata_query=data.jsonata_query,
+        alert_id=data.alert_id,
     )
     db.add(exclusion)
     await db.commit()
@@ -155,6 +159,7 @@ async def create_exclusion(
         description=exclusion.description,
         jsonata_query=exclusion.jsonata_query,
         created_at=exclusion.created_at,
+        alert_id=exclusion.alert_id,
     )
 
 
@@ -258,4 +263,5 @@ async def get_exclusion(
         description=exclusion.description,
         jsonata_query=exclusion.jsonata_query,
         created_at=exclusion.created_at,
+        alert_id=exclusion.alert_id,
     )

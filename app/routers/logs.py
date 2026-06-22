@@ -120,6 +120,8 @@ async def submit_log(
                     device.name,
                     device.id,
                     log.severity,
+                    log.id,
+                    log.time,
                 )
 
     await db.commit()

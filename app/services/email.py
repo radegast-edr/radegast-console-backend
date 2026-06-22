@@ -92,7 +92,7 @@ DEVICE_LOG_TEMPLATE = Template("""
 <h2>New Alert{% if severity %} [{{ severity|upper }}]{% endif %} — Radegast EDR</h2>
 <p>A new alert was submitted by device <strong>{{ device_name }}</strong> (ID: {{ device_id }}).{% if severity %} Severity: <strong>{{ severity }}</strong>.{% endif %}</p>
 <p><strong>Time:</strong> {{ time }} UTC</p>
-<p><a href="{{ base_url }}/alerts">View Alerts</a></p>
+<p><a href="{{ base_url }}/alerts{% if log_id %}#focused_alert={{ log_id }}{% endif %}{% if from_time %}&from={{ from_time }}{% endif %}{% if to_time %}&to={{ to_time }}{% endif %}">View This Alert</a></p>
 </body>
 </html>
 """)
@@ -321,14 +321,29 @@ async def send_keys_transferred_notification(email: str, ip: str):
     )
 
 
-async def send_device_log_notification(email: str, device_name: str, device_id: int, severity: str | None = None):
+async def send_device_log_notification(
+    email: str, device_name: str, device_id: int, severity: str | None = None, log_id: int | None = None, alert_time: datetime | None = None
+):
     ui_base = get_web_ui_base()
+
+    # Format time range filters if alert_time is provided
+    from_time = None
+    to_time = None
+    if alert_time:
+        # Create a time range around the alert (+/- 5 minutes)
+        time_format = "%Y-%m-%dT%H:%M"
+        from_time = (alert_time - timedelta(minutes=5)).strftime(time_format)
+        to_time = (alert_time + timedelta(minutes=5)).strftime(time_format)
+
     html = DEVICE_LOG_TEMPLATE.render(
         device_name=device_name,
         device_id=device_id,
         time=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
         base_url=ui_base,
         severity=severity,
+        log_id=log_id,
+        from_time=from_time,
+        to_time=to_time,
     )
     subject = (
         f"New Alert [{severity.upper()}] from {device_name} — Radegast EDR" if severity else f"New Alert from {device_name} — Radegast EDR"

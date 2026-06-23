@@ -336,7 +336,10 @@ async def list_team_devices(
     for g in groups:
         for d in g.devices:
             seen[d.id] = d
-    return [DeviceResponse(id=d.id, name=d.name, signature_public_key=d.signature_public_key) for d in seen.values()]
+    return [
+        DeviceResponse(id=d.id, name=d.name, signature_public_key=d.signature_public_key, encryption_public_key=d.encryption_public_key)
+        for d in seen.values()
+    ]
 
 
 async def _get_user_team(team_id: int, user: User, db: AsyncSession) -> Team:

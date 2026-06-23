@@ -15,6 +15,7 @@ class Device(Base):
     token: Mapped[str] = mapped_column(String(255), nullable=False)
     token_change: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     signature_public_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    encryption_public_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     agent_version: Mapped[str | None] = mapped_column(String(255), nullable=True)
     rustinel_version: Mapped[str | None] = mapped_column(String(255), nullable=True)

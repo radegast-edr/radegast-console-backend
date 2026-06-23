@@ -16,6 +16,7 @@ from app.schemas.device import (
     DeviceDetailResponse,
     DeviceRename,
     DeviceResponse,
+    DeviceSetEncryptionKey,
     DeviceSetSigningKey,
 )
 from app.services.auth import generate_token, hash_token
@@ -93,6 +94,7 @@ async def list_devices(
             id=d.id,
             name=d.name,
             signature_public_key=d.signature_public_key,
+            encryption_public_key=d.encryption_public_key,
             last_seen=d.last_seen,
             agent_version=d.agent_version,
             rustinel_version=d.rustinel_version,
@@ -133,6 +135,7 @@ async def get_device(
         id=device.id,
         name=device.name,
         signature_public_key=device.signature_public_key,
+        encryption_public_key=device.encryption_public_key,
         last_seen=device.last_seen,
         agent_version=device.agent_version,
         rustinel_version=device.rustinel_version,
@@ -253,6 +256,7 @@ async def rename_device(
         id=device.id,
         name=device.name,
         signature_public_key=device.signature_public_key,
+        encryption_public_key=device.encryption_public_key,
         last_seen=device.last_seen,
         agent_version=device.agent_version,
         rustinel_version=device.rustinel_version,
@@ -271,6 +275,19 @@ async def set_signing_key(
     device.signature_public_key = data.signature_public_key
     await db.commit()
     return {"message": "Signing key set"}
+
+
+@router.post("/encryption-key")
+async def set_encryption_key(
+    data: DeviceSetEncryptionKey,
+    device: Device = Depends(get_current_device),
+    db: AsyncSession = Depends(get_db),
+):
+    if device.encryption_public_key is not None:
+        raise HTTPException(status_code=400, detail="Encryption key already set")
+    device.encryption_public_key = data.encryption_public_key
+    await db.commit()
+    return {"message": "Encryption key set"}
 
 
 @router.post("/{device_id}/reinstall", response_model=DeviceCreateResponse)

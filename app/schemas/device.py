@@ -14,6 +14,7 @@ class DeviceResponse(BaseModel):
     id: int
     name: str
     signature_public_key: str | None
+    encryption_public_key: str | None = None
     last_seen: datetime | None = None
     agent_version: str | None = None
     rustinel_version: str | None = None
@@ -26,6 +27,7 @@ class DeviceDetailResponse(BaseModel):
     id: int
     name: str
     signature_public_key: str | None
+    encryption_public_key: str | None = None
     last_seen: datetime | None = None
     agent_version: str | None = None
     rustinel_version: str | None = None
@@ -51,3 +53,7 @@ class DeviceRename(BaseModel):
 
 class DeviceSetSigningKey(BaseModel):
     signature_public_key: str
+
+
+class DeviceSetEncryptionKey(BaseModel):
+    encryption_public_key: str

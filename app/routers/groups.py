@@ -68,6 +68,7 @@ def _group_detail(group: DeviceGroup) -> dict:
                 "id": d.id,
                 "name": d.name,
                 "signature_public_key": d.signature_public_key,
+                "encryption_public_key": d.encryption_public_key,
                 "last_seen": d.last_seen,
             }
             for d in group.devices

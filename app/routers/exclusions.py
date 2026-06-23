@@ -12,6 +12,7 @@ from app.dependencies import get_current_device, get_current_user
 from app.models.device import Device
 from app.models.device_group import DeviceGroup
 from app.models.exclusion import Exclusion
+from app.models.log import Log
 from app.models.team import Team
 from app.models.user import User
 from app.schemas.exclusion import ExclusionCreate, ExclusionResponse
@@ -156,6 +157,14 @@ async def create_exclusion(
         exclusion_type=data.exclusion_type,
     )
     db.add(exclusion)
+    await db.flush()
+
+    if data.alert_id:
+        result = await db.execute(select(Log).where(Log.id == data.alert_id))
+        log = result.scalar_one_or_none()
+        if log:
+            log.excluded_by = exclusion.id
+
     await db.commit()
     await db.refresh(exclusion)
 

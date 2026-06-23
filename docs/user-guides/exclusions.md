@@ -4,6 +4,9 @@
 
 Exclusions allow you to filter out specific security events that you know are safe or expected, reducing alert fatigue and false positives. Using JSONata query expressions, you can define precise patterns to exclude from triggering alerts, helping your team focus on genuine security threats.
 
+> [!WARNING]
+> Exclusions are **not End-to-End Encrypted (E2EE)**. Because exclusion queries must be evaluated by the agent and console in plaintext, they are stored and transmitted unencrypted. Avoid including highly sensitive information or credentials directly in your exclusion query expressions.
+
 ### Hard vs. Soft Exclusions (Extended EDR Only)
 
 When Extended EDR is enabled, you can choose between two different exclusion behaviors:

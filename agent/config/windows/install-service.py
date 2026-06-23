@@ -161,23 +161,40 @@ def main():
     config_content = base64.b64decode(config_b64.encode("utf-8")).decode("utf-8")
     (agent_dir / "config.toml").write_text(config_content, encoding="utf-8")
 
-    # 5. Install radegast-agent-python
+    # 5. Install radegast-agent-python as a tool
     uv_exe = python_dir / "Scripts" / "uv.exe"
     agent_pyproject = agent_home_dir / "pyproject.toml"
     if agent_pyproject.exists():
         agent_pyproject.unlink()
 
-    # Delete existing virtual environment to force agent upgrade on next service start
+    # Delete existing virtual environment to clean up old layout
     agent_venv = agent_home_dir / ".venv"
     if agent_venv.exists():
-        print("Removing existing agent virtual environment to force upgrade...")
+        print("Removing legacy agent virtual environment...")
         shutil.rmtree(agent_venv, ignore_errors=True)
 
+    agent_tools_dir = agent_dir / ".tools"
+    if agent_tools_dir.exists():
+        print("Removing existing agent tool environment to force upgrade...")
+        shutil.rmtree(agent_tools_dir, ignore_errors=True)
+
+    tool_bin_dir = agent_home_dir / ".local" / "bin"
+    tool_bin_dir.mkdir(parents=True, exist_ok=True)
+
+    print("Installing/upgrading radegast-edr-agent as a tool...")
+    env = os.environ.copy()
+    env["UV_TOOL_DIR"] = str(agent_tools_dir)
+    env["UV_TOOL_BIN_DIR"] = str(tool_bin_dir)
+    env["UV_CACHE_DIR"] = str(cache_dir)
+    env["UV_PYTHON"] = str(python_exe_path)
+
     subprocess.run(
-        [str(uv_exe), "init",  ".", "--python", python_exe_path],
+        [str(uv_exe), "tool", "install", "--upgrade", "radegast-edr-agent"],
         check=True,
+        env=env,
         cwd=agent_home_dir
     )
+    agent_exe = tool_bin_dir / "radegast-edr-agent.exe"
 
     # 6. Download WinSW and Setup Service XMLs
     print("Downloading WinSW Wrapper...")
@@ -218,12 +235,14 @@ def main():
       <id>RadegastAgent</id>
       <name>Radegast EDR Agent</name>
       <description>Management agent for Radegast EDR communications.</description>
-      <executable>{uv_exe}</executable>
-      <arguments>run --with radegast-edr-agent --python "{python_exe_path}" radegast-edr-agent</arguments>
+      <executable>{agent_exe}</executable>
+      <arguments></arguments>
       <workingdirectory>{agent_home_dir}</workingdirectory>
       <env name="PYTHONUNBUFFERED" value="1" />
       <env name="PATH" value="{service_path}" />
       <env name="UV_CACHE_DIR" value="{cache_dir}" />
+      <env name="UV_TOOL_DIR" value="{agent_tools_dir}" />
+      <env name="UV_TOOL_BIN_DIR" value="{tool_bin_dir}" />
       <env name="LOCALAPPDATA" value="{agent_dir}" />
       <env name="APPDATA" value="{agent_dir}" />
       <env name="RADEGAST_AGENT_BACKEND_URL" value="{backend_url}/api/v1" />

@@ -182,3 +182,41 @@ class TestExclusionPermissions:
         )
         # This will pass because the auth_client has admin in conftest
         assert resp.status_code in [200, 403]  # May be 200 if user has admin, 403 if not
+
+
+@pytest.mark.asyncio
+class TestExclusionTypes:
+    async def test_create_exclusion_with_types(self, auth_client: AsyncClient):
+        group_id = await _get_default_group_id(auth_client)
+
+        # 1. By default (extended_edr_enabled is False), creating a soft exclusion should fail with 400
+        resp = await auth_client.post(
+            f"/exclusions/groups/{group_id}",
+            json={"name": "Soft Exclusion Fail", "jsonata_query": "$contains(alert.rule.name, 'soft_fail')", "exclusion_type": "soft"},
+        )
+        assert resp.status_code == 400
+        assert "Soft exclusions are only available in extended EDR mode" in resp.json()["detail"]
+
+        # 2. Creating a hard exclusion when extended_edr_enabled is False should succeed (default behavior)
+        resp = await auth_client.post(
+            f"/exclusions/groups/{group_id}",
+            json={"name": "Hard Exclusion Success", "jsonata_query": "$contains(alert.rule.name, 'hard_success')", "exclusion_type": "hard"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["exclusion_type"] == "hard"
+
+        # 3. Enable extended EDR mode
+        resp = await auth_client.put("/user/extended-edr", json={"extended_edr_enabled": True})
+        assert resp.status_code == 200
+
+        # 4. Creating a soft exclusion should now succeed
+        resp = await auth_client.post(
+            f"/exclusions/groups/{group_id}",
+            json={"name": "Soft Exclusion Success", "jsonata_query": "$contains(alert.rule.name, 'soft_success')", "exclusion_type": "soft"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["exclusion_type"] == "soft"
+
+        # 5. Disable extended EDR mode to clean up
+        await auth_client.put("/user/extended-edr", json={"extended_edr_enabled": False})
+

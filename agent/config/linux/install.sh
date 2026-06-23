@@ -180,10 +180,11 @@ chmod 755 /opt/radegast/rustinel/rustinel
 
 # 7. Write configs and service files
 echo "Writing configuration files..."
-cat << 'EOF' > /opt/radegast/rustinel/config.toml
+cat << 'EOF' > /etc/rustinel/config.toml
 {{ config_content }}
 EOF
-chmod 644 /opt/radegast/rustinel/config.toml
+chown radegast-agent:root /etc/rustinel/config.toml
+chmod 660 /etc/rustinel/config.toml
 
 echo "Writing uninstall script..."
 cat << 'EOF' > /opt/radegast/uninstall.sh

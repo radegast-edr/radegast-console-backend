@@ -61,6 +61,69 @@ class TestLogSubmission:
         data = resp.json()
         assert data["severity"] is None
 
+    async def test_submit_log_with_exclusions(self, auth_client: AsyncClient, client: AsyncClient):
+        # 1. Get default group first
+        resp = await auth_client.get("/teams/")
+        team_id = resp.json()[0]["id"]
+        resp = await auth_client.get(f"/teams/{team_id}/groups")
+        group_id = resp.json()[0]["id"]
+
+        # 2. Enable extended EDR mode
+        resp = await auth_client.put("/user/extended-edr", json={"extended_edr_enabled": True})
+        assert resp.status_code == 200
+
+        # 3. Create a soft exclusion and a hard exclusion
+        resp = await auth_client.post(
+            f"/exclusions/groups/{group_id}",
+            json={"name": "Soft Exclusion", "jsonata_query": "$contains(alert.rule.name, 'soft')", "exclusion_type": "soft"},
+        )
+        assert resp.status_code == 200
+        soft_exclusion_id = resp.json()["id"]
+
+        resp = await auth_client.post(
+            f"/exclusions/groups/{group_id}",
+            json={"name": "Hard Exclusion", "jsonata_query": "$contains(alert.rule.name, 'hard')", "exclusion_type": "hard"},
+        )
+        assert resp.status_code == 200
+        hard_exclusion_id = resp.json()["id"]
+
+        # 4. Create device and login
+        resp = await auth_client.post("/devices/", json={"name": "Exclusion-Logger", "group_id": group_id})
+        token = resp.json()["token"]
+        await client.post("/auth/device/login", json={"token": token})
+
+        # 5. Submit log with soft exclusion id
+        resp = await client.post(
+            "/logs/",
+            json={
+                "time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                "content": "encrypted-log-content-here",
+                "severity": "high",
+                "excluded_by": soft_exclusion_id,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["severity"] == "informational"
+        assert data["excluded_by"]["id"] == soft_exclusion_id
+        assert data["excluded_by"]["group"]["id"] == group_id
+
+        # 6. Submit log with hard exclusion id
+        resp = await client.post(
+            "/logs/",
+            json={
+                "time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                "content": "encrypted-log-content-here",
+                "severity": "high",
+                "excluded_by": hard_exclusion_id,
+            },
+        )
+        assert resp.status_code == 400
+        assert "Cannot submit log matching a hard exclusion" in resp.json()["detail"]
+
+        # 7. Disable extended EDR mode
+        await auth_client.put("/user/extended-edr", json={"extended_edr_enabled": False})
+
     async def test_submit_log_requires_device_session(self, auth_client: AsyncClient):
         resp = await auth_client.post(
             "/logs/",

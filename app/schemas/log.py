@@ -20,6 +20,7 @@ class LogCreate(BaseModel):
     severity: LogSeverity | None = None
     rule_id: str | None = None
     rule_type: str | None = None
+    excluded_by: int | None = None
 
     @field_validator("severity", mode="before")
     @classmethod
@@ -39,6 +40,16 @@ class LogCreate(BaseModel):
         return None
 
 
+class ExclusionGroupResponse(BaseModel):
+    id: int
+    name: str
+
+
+class ExclusionRefResponse(BaseModel):
+    id: int
+    group: ExclusionGroupResponse
+
+
 class LogResponse(BaseModel):
     id: int
     device_id: int
@@ -52,6 +63,7 @@ class LogResponse(BaseModel):
     rule_id: str | None = None
     rule_type: str | None = None
     triggered_rule: TriggeredRuleResponse | None = None
+    excluded_by: ExclusionRefResponse | None = None
 
     @field_validator("time", mode="after")
     @classmethod

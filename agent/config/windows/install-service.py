@@ -159,7 +159,7 @@ def main():
     # 4. Write configuration file config.toml
     config_b64 = "{{ config_b64 }}"
     config_content = base64.b64decode(config_b64.encode("utf-8")).decode("utf-8")
-    (rustinel_core_dir / "config.toml").write_text(config_content, encoding="utf-8")
+    (agent_dir / "config.toml").write_text(config_content, encoding="utf-8")
 
     # 5. Install radegast-agent-python
     uv_exe = python_dir / "Scripts" / "uv.exe"
@@ -200,7 +200,7 @@ def main():
       <description>Low-level sensor for the Radegast EDR.</description>
       <executable>{rustinel_core_dir}\\rustinel.exe</executable>
       <arguments>run</arguments>
-      <workingdirectory>{rustinel_core_dir}</workingdirectory>
+      <workingdirectory>{agent_dir}</workingdirectory>
       <log mode="roll" logpath="{logs_dir}" />
       <onfailure action="restart" delay="5000" />
       <stopparentfirst>true</stopparentfirst>
@@ -229,6 +229,7 @@ def main():
       <env name="RADEGAST_AGENT_BACKEND_URL" value="{backend_url}/api/v1" />
       <env name="RADEGAST_AGENT_DEVICE_TOKEN" value="{token}" />
       <env name="RADEGAST_AGENT_RUSTINEL_BINARY" value="{rustinel_core_dir}\\rustinel.exe" />
+      <env name="RADEGAST_AGENT_RUSTINEL_CONFIG" value="{agent_dir}\\config.toml" />
       <env name="RADEGAST_AGENT_RULES_DIR" value="{rules_dir}\\" />
       <env name="RADEGAST_AGENT_ALERTS_DIR" value="{logs_dir}\\" />
       <env name="RADEGAST_AGENT_STATE_DIR" value="{state_dir}\\" />

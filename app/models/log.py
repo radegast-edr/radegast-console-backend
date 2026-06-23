@@ -31,9 +31,11 @@ class Log(Base):
     pack_version_rule_id: Mapped[int | None] = mapped_column(
         ForeignKey("pack_version_rules.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    excluded_by: Mapped[int | None] = mapped_column(ForeignKey("exclusions.id", ondelete="SET NULL"), nullable=True, index=True)
 
     device = relationship("Device", back_populates="logs")
     pack_version_rule = relationship("PackVersionRule")
+    exclusion = relationship("Exclusion", foreign_keys=[excluded_by])
 
     __table_args__ = (
         Index("idx_logs_device_id_time", "device_id", "time"),

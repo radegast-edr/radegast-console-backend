@@ -32,6 +32,7 @@ class ExclusionListResponse(BaseModel):
     jsonata_query: str
     created_at: datetime
     alert_id: int | None = None
+    exclusion_type: str = "hard"
 
 
 class MessageResponse(BaseModel):
@@ -88,6 +89,7 @@ async def list_all_exclusions(
             "jsonata_query": e.jsonata_query,
             "created_at": e.created_at,
             "alert_id": e.alert_id,
+            "exclusion_type": e.exclusion_type,
         }
         for e in exclusions
     ]
@@ -120,6 +122,7 @@ async def list_group_exclusions(
             jsonata_query=e.jsonata_query,
             created_at=e.created_at,
             alert_id=e.alert_id,
+            exclusion_type=e.exclusion_type,
         )
         for e in exclusions
     ]
@@ -141,12 +144,16 @@ async def create_exclusion(
     if not await _user_has_pack_write_on_group(group, user, db):
         raise HTTPException(status_code=403, detail="No pack write permission")
 
+    if data.exclusion_type == "soft" and not user.extended_edr_enabled:
+        raise HTTPException(status_code=400, detail="Soft exclusions are only available in extended EDR mode")
+
     exclusion = Exclusion(
         device_group_id=group_id,
         name=data.name,
         description=data.description,
         jsonata_query=data.jsonata_query,
         alert_id=data.alert_id,
+        exclusion_type=data.exclusion_type,
     )
     db.add(exclusion)
     await db.commit()
@@ -160,6 +167,7 @@ async def create_exclusion(
         jsonata_query=exclusion.jsonata_query,
         created_at=exclusion.created_at,
         alert_id=exclusion.alert_id,
+        exclusion_type=exclusion.exclusion_type,
     )
 
 
@@ -197,6 +205,7 @@ async def get_device_exclusions(
                     "name": e.name,
                     "jsonata_query": e.jsonata_query,
                     "device_group_id": e.device_group_id,
+                    "exclusion_type": e.exclusion_type,
                 }
                 for e in exclusions
             ]
@@ -264,4 +273,5 @@ async def get_exclusion(
         jsonata_query=exclusion.jsonata_query,
         created_at=exclusion.created_at,
         alert_id=exclusion.alert_id,
+        exclusion_type=exclusion.exclusion_type,
     )

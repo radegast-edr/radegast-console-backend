@@ -10,11 +10,14 @@ from app.dependencies import get_current_device, get_current_user
 from app.models.associations import device_group_devices, team_device_groups, team_users
 from app.models.device import Device
 from app.models.device_group import DeviceGroup
+from app.models.exclusion import Exclusion
 from app.models.log import Log, LogSeen, LogSeverity
 from app.models.pack_version_rule import PackVersionRule
 from app.models.team import Team
 from app.models.user import User
 from app.schemas.log import (
+    ExclusionGroupResponse,
+    ExclusionRefResponse,
     LogCountResponse,
     LogCreate,
     LogResolveRequest,
@@ -46,6 +49,15 @@ def _make_triggered_rule(pack_version_rule: PackVersionRule | None) -> Triggered
 
 
 def _make_log_response(log: Log, seen: bool, pack_version_rule: PackVersionRule | None = None) -> LogResponse:
+    excluded_by_val = None
+    if log.exclusion is not None:
+        excluded_by_val = ExclusionRefResponse(
+            id=log.exclusion.id,
+            group=ExclusionGroupResponse(
+                id=log.exclusion.device_group.id,
+                name=log.exclusion.device_group.name,
+            ),
+        )
     return LogResponse(
         id=log.id,
         device_id=log.device_id,
@@ -59,6 +71,7 @@ def _make_log_response(log: Log, seen: bool, pack_version_rule: PackVersionRule 
         rule_id=log.rule_id,
         rule_type=log.rule_type,
         triggered_rule=_make_triggered_rule(pack_version_rule),
+        excluded_by=excluded_by_val,
     )
 
 
@@ -78,6 +91,17 @@ async def submit_log(
         rule_id=data.rule_id,
         rule_type=data.rule_type,
     )
+
+    if data.excluded_by is not None:
+        result = await db.execute(select(Exclusion).where(Exclusion.id == data.excluded_by))
+        exclusion = result.scalar_one_or_none()
+        if exclusion:
+            if exclusion.exclusion_type == "soft":
+                log.severity = LogSeverity.informational
+                log.excluded_by = exclusion.id
+            elif exclusion.exclusion_type == "hard":
+                raise HTTPException(status_code=400, detail="Cannot submit log matching a hard exclusion")
+
     db.add(log)
     await db.flush()  # get log.id before resolving the rule
 
@@ -126,7 +150,18 @@ async def submit_log(
 
     await db.commit()
 
-    return _make_log_response(log, seen=False, pack_version_rule=pack_version_rule)
+    stmt = (
+        select(Log)
+        .options(
+            selectinload(Log.pack_version_rule),
+            selectinload(Log.exclusion).selectinload(Exclusion.device_group),
+        )
+        .where(Log.id == log.id)
+    )
+    result = await db.execute(stmt)
+    log = result.scalar_one()
+
+    return _make_log_response(log, seen=False, pack_version_rule=log.pack_version_rule)
 
 
 @router.post("/seen/all")
@@ -260,7 +295,15 @@ async def list_logs(
         query = select(Log).where(Log.device_id.in_(visible_device_ids))
 
     query = filter_logs(query, from_time, to_time, min_level, user)
-    query = query.options(selectinload(Log.pack_version_rule)).order_by(Log.time.desc()).offset(offset).limit(limit)
+    query = (
+        query.options(
+            selectinload(Log.pack_version_rule),
+            selectinload(Log.exclusion).selectinload(Exclusion.device_group),
+        )
+        .order_by(Log.time.desc())
+        .offset(offset)
+        .limit(limit)
+    )
 
     result = await db.execute(query)
     logs = result.scalars().all()
@@ -281,7 +324,14 @@ async def resolve_log(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Log).options(selectinload(Log.pack_version_rule)).where(Log.id == log_id))
+    result = await db.execute(
+        select(Log)
+        .options(
+            selectinload(Log.pack_version_rule),
+            selectinload(Log.exclusion).selectinload(Exclusion.device_group),
+        )
+        .where(Log.id == log_id)
+    )
     log = result.scalar_one_or_none()
     if not log:
         raise HTTPException(status_code=404, detail="Log not found")
@@ -300,7 +350,18 @@ async def resolve_log(
             db.add(log_seen)
 
     await db.commit()
-    await db.refresh(log)
+
+    # Reload log to load all needed relationships for make_log_response
+    stmt = (
+        select(Log)
+        .options(
+            selectinload(Log.pack_version_rule),
+            selectinload(Log.exclusion).selectinload(Exclusion.device_group),
+        )
+        .where(Log.id == log_id)
+    )
+    result = await db.execute(stmt)
+    log = result.scalar_one()
 
     # Determine seen status for response
     seen_result = await db.execute(select(LogSeen).where(LogSeen.user_id == user.id, LogSeen.log_id == log_id))
@@ -390,7 +451,14 @@ async def get_log(
     if not visible_device_ids:
         raise HTTPException(status_code=403, detail="No log permission")
 
-    result = await db.execute(select(Log).options(selectinload(Log.pack_version_rule)).where(Log.id == log_id))
+    result = await db.execute(
+        select(Log)
+        .options(
+            selectinload(Log.pack_version_rule),
+            selectinload(Log.exclusion).selectinload(Exclusion.device_group),
+        )
+        .where(Log.id == log_id)
+    )
     log = result.scalar_one_or_none()
     if not log:
         raise HTTPException(status_code=404, detail="Log not found")

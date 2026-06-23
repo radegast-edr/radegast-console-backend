@@ -4,6 +4,13 @@
 
 Exclusions allow you to filter out specific security events that you know are safe or expected, reducing alert fatigue and false positives. Using JSONata query expressions, you can define precise patterns to exclude from triggering alerts, helping your team focus on genuine security threats.
 
+### Hard vs. Soft Exclusions (Extended EDR Only)
+
+When Extended EDR is enabled, you can choose between two different exclusion behaviors:
+
+- **Hard Exclusion** (Default): The agent filters matching events completely. These events are never sent to the console database, preventing any console visibility.
+- **Soft Exclusion**: The events are still sent to the console database, but their severity is automatically downgraded to `informational`, and they are visually marked with an `Excluded` badge in the threat triage view. This preserves visibility and queryability of these events for threat hunting without causing alert fatigue.
+
 ## What Value Does This Feature Add?
 
 - **False Positive Reduction**: Eliminate known-safe events from your alerts
@@ -45,6 +52,9 @@ The Exclusions page shows:
    - **Name**: Enter a descriptive name (e.g., "Ignore Scheduled Scans", "Allow Development Tools")
    - **Description**: Explain what events this exclusion filters out
    - **JSONata Query**: Enter the JSONata expression that matches events to exclude
+   - **Exclusion Type** (Extended EDR only): Select the exclusion behavior from the dropdown:
+     - **Hard Exclusion**: Completely filter out matching events on the agent.
+     - **Soft Exclusion**: Downgrade matching events to informational severity.
 4. Click **"Create Exclusion"**
 
 **Note**: You need pack write permissions on the selected device group's teams to create exclusions.

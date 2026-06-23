@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -8,6 +9,7 @@ class ExclusionCreate(BaseModel):
     jsonata_query: str
     description: str | None = None
     alert_id: int | None = None
+    exclusion_type: Literal["hard", "soft"] = "hard"
 
 
 class ExclusionResponse(BaseModel):
@@ -18,6 +20,7 @@ class ExclusionResponse(BaseModel):
     jsonata_query: str
     created_at: datetime
     alert_id: int | None = None
+    exclusion_type: Literal["hard", "soft"] = "hard"
 
     model_config = {"from_attributes": True}
 
@@ -30,5 +33,6 @@ class ExclusionDetailResponse(BaseModel):
     jsonata_query: str
     created_at: datetime
     alert_id: int | None = None
+    exclusion_type: Literal["hard", "soft"] = "hard"
 
     model_config = {"from_attributes": True}

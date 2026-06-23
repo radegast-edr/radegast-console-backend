@@ -5,7 +5,7 @@ After=network.target
 
 [Service]
 ExecStart=/opt/radegast/rustinel/rustinel run
-WorkingDirectory=/opt/radegast/rustinel
+WorkingDirectory=/etc/rustinel
 Restart=on-failure
 RestartSec=5
 

@@ -344,7 +344,7 @@ exec "$@"
             print("Starting rustinel...")
             rustinel_process = subprocess.Popen(
                 ["/opt/radegast/rustinel/rustinel", "run"],
-                cwd="/opt/radegast/rustinel",
+                cwd="/etc/rustinel",
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -368,6 +368,7 @@ exec "$@"
             agent_env["RADEGAST_AGENT_BACKEND_URL"] = "http://127.0.0.1:8000/api/v1"
             agent_env["RADEGAST_AGENT_DEVICE_TOKEN"] = device_token
             agent_env["RADEGAST_AGENT_RUSTINEL_BINARY"] = "/opt/radegast/rustinel/rustinel"
+            agent_env["RADEGAST_AGENT_RUSTINEL_CONFIG"] = "/etc/rustinel/config.toml"
             agent_env["RADEGAST_AGENT_RULES_DIR"] = "/etc/rustinel/rules/"
             agent_env["RADEGAST_AGENT_ALERTS_DIR"] = "/var/log/rustinel/"
             agent_env["RADEGAST_AGENT_STATE_DIR"] = "/opt/radegast/state/"

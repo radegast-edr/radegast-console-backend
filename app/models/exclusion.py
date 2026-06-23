@@ -17,5 +17,6 @@ class Exclusion(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     alert_id: Mapped[int | None] = mapped_column(ForeignKey("logs.id", ondelete="SET NULL"), nullable=True)
+    exclusion_type: Mapped[str] = mapped_column(String(20), default="hard", server_default="hard", nullable=False)
 
     device_group = relationship("DeviceGroup", back_populates="exclusions")

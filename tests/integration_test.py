@@ -446,6 +446,7 @@ exec "$@"
 
         print("Writing mock alert log to guarantee test passes even if eBPF/ETW sensor fails or is restricted...")
         from datetime import datetime
+
         current_time = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         alert_data = {

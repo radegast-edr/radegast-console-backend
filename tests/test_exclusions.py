@@ -200,7 +200,11 @@ class TestExclusionTypes:
         # 2. Creating a hard exclusion when extended_edr_enabled is False should succeed (default behavior)
         resp = await auth_client.post(
             f"/exclusions/groups/{group_id}",
-            json={"name": "Hard Exclusion Success", "jsonata_query": "$contains(alert.rule.name, 'hard_success')", "exclusion_type": "hard"},
+            json={
+                "name": "Hard Exclusion Success",
+                "jsonata_query": "$contains(alert.rule.name, 'hard_success')",
+                "exclusion_type": "hard",
+            },
         )
         assert resp.status_code == 200
         assert resp.json()["exclusion_type"] == "hard"
@@ -212,11 +216,14 @@ class TestExclusionTypes:
         # 4. Creating a soft exclusion should now succeed
         resp = await auth_client.post(
             f"/exclusions/groups/{group_id}",
-            json={"name": "Soft Exclusion Success", "jsonata_query": "$contains(alert.rule.name, 'soft_success')", "exclusion_type": "soft"},
+            json={
+                "name": "Soft Exclusion Success",
+                "jsonata_query": "$contains(alert.rule.name, 'soft_success')",
+                "exclusion_type": "soft",
+            },
         )
         assert resp.status_code == 200
         assert resp.json()["exclusion_type"] == "soft"
 
         # 5. Disable extended EDR mode to clean up
         await auth_client.put("/user/extended-edr", json={"extended_edr_enabled": False})
-

@@ -2,6 +2,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -12,6 +13,7 @@ from app.models.device import Device
 from app.models.device_group import DeviceGroup
 from app.models.exclusion import Exclusion
 from app.models.log import Log, LogSeen, LogSeverity
+from app.models.pack_version import PackVersion
 from app.models.pack_version_rule import PackVersionRule
 from app.models.team import Team
 from app.models.user import User
@@ -40,10 +42,18 @@ router = APIRouter(prefix="/logs", tags=["logs"])
 def _make_triggered_rule(pack_version_rule: PackVersionRule | None) -> TriggeredRuleResponse | None:
     if pack_version_rule is None:
         return None
+    pack_id = None
+    pack_name = None
+    if pack_version_rule.pack_version is not None:
+        pack_id = pack_version_rule.pack_version.pack_id
+        if pack_version_rule.pack_version.pack is not None:
+            pack_name = pack_version_rule.pack_version.pack.name
     return TriggeredRuleResponse(
         rule_id=pack_version_rule.rule_id,
         rule_type=pack_version_rule.rule_type,
         pack_version_id=pack_version_rule.pack_version_id,
+        pack_id=pack_id,
+        pack_name=pack_name,
         rule_content=pack_version_rule.rule_content,
     )
 
@@ -153,7 +163,7 @@ async def submit_log(
     stmt = (
         select(Log)
         .options(
-            selectinload(Log.pack_version_rule),
+            selectinload(Log.pack_version_rule).selectinload(PackVersionRule.pack_version).selectinload(PackVersion.pack),
             selectinload(Log.exclusion).selectinload(Exclusion.device_group),
         )
         .where(Log.id == log.id)
@@ -200,10 +210,15 @@ async def mark_all_logs_seen(
         existing_seen_ids = set(existing_res.scalars().all())
 
         to_add_ids = set(visible_log_ids) - existing_seen_ids
-        for log_id in to_add_ids:
-            db.add(LogSeen(user_id=user.id, log_id=log_id))
-
-        await db.commit()
+        if to_add_ids:
+            try:
+                async with db.begin_nested():
+                    for log_id in to_add_ids:
+                        db.add(LogSeen(user_id=user.id, log_id=log_id))
+                    await db.flush()
+                await db.commit()
+            except IntegrityError:
+                pass
 
     return {"message": "All logs marked as seen"}
 
@@ -222,9 +237,14 @@ async def mark_log_seen(
 
     seen_result = await db.execute(select(LogSeen).where(LogSeen.user_id == user.id, LogSeen.log_id == log_id))
     if not seen_result.scalar_one_or_none():
-        log_seen = LogSeen(user_id=user.id, log_id=log_id)
-        db.add(log_seen)
-        await db.commit()
+        try:
+            async with db.begin_nested():
+                log_seen = LogSeen(user_id=user.id, log_id=log_id)
+                db.add(log_seen)
+                await db.flush()
+            await db.commit()
+        except IntegrityError:
+            pass
 
     return {"message": "Log marked as seen"}
 
@@ -297,7 +317,7 @@ async def list_logs(
     query = filter_logs(query, from_time, to_time, min_level, user)
     query = (
         query.options(
-            selectinload(Log.pack_version_rule),
+            selectinload(Log.pack_version_rule).selectinload(PackVersionRule.pack_version).selectinload(PackVersion.pack),
             selectinload(Log.exclusion).selectinload(Exclusion.device_group),
         )
         .order_by(Log.time.desc())
@@ -327,7 +347,7 @@ async def resolve_log(
     result = await db.execute(
         select(Log)
         .options(
-            selectinload(Log.pack_version_rule),
+            selectinload(Log.pack_version_rule).selectinload(PackVersionRule.pack_version).selectinload(PackVersion.pack),
             selectinload(Log.exclusion).selectinload(Exclusion.device_group),
         )
         .where(Log.id == log_id)
@@ -344,10 +364,15 @@ async def resolve_log(
     # should NOT mark the log as seen so it remains visually "active" until triaged.
     has_real_resolution = data.alert_resolution and data.alert_resolution != "none"
     if not user.extended_edr_enabled or has_real_resolution:
-        seen_result = await db.execute(select(LogSeen).where(LogSeen.user_id == user.id, LogSeen.log_id == log_id))
-        if not seen_result.scalar_one_or_none():
-            log_seen = LogSeen(user_id=user.id, log_id=log_id)
-            db.add(log_seen)
+        try:
+            async with db.begin_nested():
+                seen_result = await db.execute(select(LogSeen).where(LogSeen.user_id == user.id, LogSeen.log_id == log_id))
+                if not seen_result.scalar_one_or_none():
+                    log_seen = LogSeen(user_id=user.id, log_id=log_id)
+                    db.add(log_seen)
+                    await db.flush()
+        except IntegrityError:
+            pass
 
     await db.commit()
 
@@ -355,7 +380,7 @@ async def resolve_log(
     stmt = (
         select(Log)
         .options(
-            selectinload(Log.pack_version_rule),
+            selectinload(Log.pack_version_rule).selectinload(PackVersionRule.pack_version).selectinload(PackVersion.pack),
             selectinload(Log.exclusion).selectinload(Exclusion.device_group),
         )
         .where(Log.id == log_id)
@@ -454,7 +479,7 @@ async def get_log(
     result = await db.execute(
         select(Log)
         .options(
-            selectinload(Log.pack_version_rule),
+            selectinload(Log.pack_version_rule).selectinload(PackVersionRule.pack_version).selectinload(PackVersion.pack),
             selectinload(Log.exclusion).selectinload(Exclusion.device_group),
         )
         .where(Log.id == log_id)

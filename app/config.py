@@ -15,7 +15,7 @@ class Settings(BaseSettings):
         "https://localhost:8000,https://127.0.0.1:8000,"
         "https://localhost:5173,https://127.0.0.1:5173"
     )
-    smtp_host: str = "localhost"
+    smtp_host: str | None = None
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""

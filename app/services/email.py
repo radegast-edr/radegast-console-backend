@@ -225,7 +225,7 @@ async def send_email_direct(to: str, subject: str, html_body: str, email_type: s
         msg["List-Unsubscribe"] = f"<{api_unsubscribe_url}>"
         msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
 
-    if not settings.smtp_host or settings.smtp_host == "localhost":
+    if not settings.smtp_host:
         # In development, just log the email
         print(f"[EMAIL] To: {to}, Subject: {subject}")
         print(f"[EMAIL] Body: {html_body}")

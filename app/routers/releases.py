@@ -13,7 +13,7 @@ router = APIRouter(prefix="/releases", tags=["releases"])
 
 VALID_OS = {"linux", "windows", "mac"}
 VALID_ARCH = {"amd64", "arm64", "m5"}
-SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
+SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:r\d+)?$")
 
 
 def _releases_dir() -> Path:

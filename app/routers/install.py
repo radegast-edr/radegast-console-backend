@@ -25,9 +25,11 @@ def get_latest_agent_version() -> str | None:
     for item in os.listdir(releases_dir):
         path = releases_dir / item
         if path.is_dir():
-            match = re.match(r"^(\d+)\.(\d+)\.(\d+)$", item)
+            match = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:r(\d+))?$", item)
             if match:
-                versions.append((tuple(map(int, match.groups())), item))
+                major, minor, patch, r = match.groups()
+                r_val = int(r) if r is not None else 0
+                versions.append(((int(major), int(minor), int(patch), r_val), item))
     if not versions:
         return None
     versions.sort()
@@ -59,7 +61,7 @@ async def download_agent(
         raise HTTPException(status_code=404, detail="Agent release not found")
 
     if version:
-        if not re.match(r"^\d+\.\d+\.\d+$", version):
+        if not re.match(r"^\d+\.\d+\.\d+(?:r\d+)?$", version):
             raise HTTPException(status_code=404, detail="Agent release not found")
     else:
         version = get_latest_agent_version()

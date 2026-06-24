@@ -29,6 +29,19 @@ class TestReleasesUpload:
         assert data["os"] == "linux"
         assert data["arch"] == "amd64"
 
+    async def test_upload_release_with_patch_suffix_succeeds(self, admin_client: AsyncClient):
+        zip_content = b"PK\x03\x04" + b"\x00" * 20
+        resp = await admin_client.post(
+            "/releases/",
+            data={"version": "1.1.4r1", "os": "linux", "arch": "amd64"},
+            files={"file": ("rustinel.zip", zip_content, "application/zip")},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["version"] == "1.1.4r1"
+        assert data["os"] == "linux"
+        assert data["arch"] == "amd64"
+
     async def test_upload_release_as_maintainer_fails(self, maintainer_client: AsyncClient):
         zip_content = b"PK\x03\x04" + b"\x00" * 20
         resp = await maintainer_client.post(

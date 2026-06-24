@@ -12,6 +12,7 @@ class TriggeredRuleResponse(BaseModel):
     pack_version_id: int
     pack_id: int | None = None
     pack_name: str | None = None
+    pack_version: str | None = None
     rule_content: str
 
 

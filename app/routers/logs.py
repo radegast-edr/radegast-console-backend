@@ -44,8 +44,10 @@ def _make_triggered_rule(pack_version_rule: PackVersionRule | None) -> Triggered
         return None
     pack_id = None
     pack_name = None
+    pack_version = None
     if pack_version_rule.pack_version is not None:
         pack_id = pack_version_rule.pack_version.pack_id
+        pack_version = pack_version_rule.pack_version.version
         if pack_version_rule.pack_version.pack is not None:
             pack_name = pack_version_rule.pack_version.pack.name
     return TriggeredRuleResponse(
@@ -54,6 +56,7 @@ def _make_triggered_rule(pack_version_rule: PackVersionRule | None) -> Triggered
         pack_version_id=pack_version_rule.pack_version_id,
         pack_id=pack_id,
         pack_name=pack_name,
+        pack_version=pack_version,
         rule_content=pack_version_rule.rule_content,
     )
 

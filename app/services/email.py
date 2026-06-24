@@ -237,7 +237,7 @@ async def send_email_direct(to: str, subject: str, html_body: str, email_type: s
         port=settings.smtp_port,
         username=settings.smtp_user or None,
         password=settings.smtp_password or None,
-        start_tls=True,
+        start_tls=settings.smtp_starttls,
     )
 
 

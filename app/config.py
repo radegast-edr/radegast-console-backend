@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_from: str = "noreply@radegast.local"
+    smtp_starttls: bool = True
     base_url: str = "http://localhost:8000"
     upload_dir: str = "uploads/packs"
     releases_dir: str = "agent/releases"

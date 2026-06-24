@@ -20,6 +20,18 @@ services:
       - RADEGAST_DATABASE_URL=sqlite+aiosqlite:////app/data/db/radegast.db
       - RADEGAST_UPLOAD_DIR=/app/data/uploads
       - RADEGAST_RELEASES_DIR=/app/data/releases
+      - RADEGAST_SMTP_HOST=smtp4dev
+      - RADEGAST_SMTP_PORT=25
+      - RADEGAST_SMTP_STARTTLS=false
+    restart: always
+
+  # For easier development, bundle SMTP server
+  smtp4dev:
+    image: docker.io/rnwood/smtp4dev:v3
+    container_name: radegast-smtp4dev
+    ports:
+      - "127.0.0.1:2525:25"
+      - "127.0.0.1:5000:80"
     restart: always
 
 volumes:

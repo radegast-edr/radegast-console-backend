@@ -117,3 +117,21 @@ You can temporarily disable all notifications or adjust them as needed:
 - **Encrypted content**: The alert content may be encrypted and require decryption in the console
 - **Truncation**: Some email clients may truncate long notifications
 - **Solution**: Click the link in the notification to view the full details in the console
+
+## FAQ
+
+### Why am I not receiving any email notifications?
+Here is a checklist of the most common causes:
+1. **Email Address Unverified**: Check your User Settings to ensure your email address is fully verified. Unverified accounts do not receive system emails.
+2. **Notification Subscriptions**: Make sure the specific notification category (e.g., login alerts, platform downtime) is enabled in your personal settings.
+3. **Alert Severity Threshold**: If you're missing device alerts, check your severity filter setting. Events below your configured severity threshold are automatically marked as seen in the console and won't trigger emails.
+4. **Development Fallback (Stdout)**: If the system administrator has not configured `RADEGAST_SMTP_HOST` in the server environment, the backend falls back to printing emails to the server console (stdout) rather than sending them.
+
+### I see emails in the server logs but not in my inbox. What is happening?
+This indicates that the Radegast console backend is running in development fallback mode because the `RADEGAST_SMTP_HOST` environment variable is not set. Contact your system administrator to configure the SMTP server settings.
+
+### How can I connect the console to an SMTP server that does not support STARTTLS?
+By default, the backend attempts to establish a secure connection using the STARTTLS extension. If your SMTP server (for example, a local `smtp4dev` instance used for development) does not support STARTTLS, you can disable it by setting the following environment variable on the backend container:
+```env
+RADEGAST_SMTP_STARTTLS=false
+```

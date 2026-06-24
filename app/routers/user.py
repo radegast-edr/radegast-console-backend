@@ -569,7 +569,7 @@ async def mfa_otp_setup(
 async def mfa_otp_verify(
     data: MfaOtpVerifyRequest,
     response: Response,
-    request: Request,
+    _request: Request,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     _rate_limit=Depends(rate_limit_mfa_otp),
@@ -680,7 +680,7 @@ async def mfa_hardware_token_verify(
 
 @router.get("/mfa/settings", response_model=MfaSettingsResponse)
 async def get_mfa_settings(
-    request: Request,
+    _request: Request,
     user: User = Depends(get_current_user),
     session=Depends(get_session),
     db: AsyncSession = Depends(get_db),

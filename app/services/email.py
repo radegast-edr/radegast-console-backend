@@ -28,6 +28,19 @@ VERIFY_EMAIL_TEMPLATE = Template("""
 </html>
 """)
 
+PASSWORD_RESET_REQUEST_TEMPLATE = Template("""
+<html>
+<body>
+<h2>Reset your Radegast EDR password</h2>
+<p>You requested a password reset for your Radegast EDR account. Click the link below to reset your password:</p>
+<p><a href="{{ url }}">Reset Password</a></p>
+<p>This link is valid for 1 hour.</p>
+<p><strong>Please note:</strong> Only your password can be reset via this link. If you have configured Multi-Factor Authentication (MFA), it will NOT be disabled or reset. If you need your MFA reset, you must contact your administrator.</p>
+<p>If you did not request this, please ignore this email.</p>
+</body>
+</html>
+""")
+
 INVITE_EMAIL_TEMPLATE = Template("""
 <html>
 <body>
@@ -273,6 +286,25 @@ async def send_verification_email(email: str):
     url = f"{ui_base}/verify?token={token}"
     html = VERIFY_EMAIL_TEMPLATE.render(url=url)
     await send_email(email, "Verify your Radegast EDR account", html, email_type="verify")
+
+
+async def send_password_reset_link_email(email: str):
+    token = create_signed_token({"email": email}, salt="password-reset")
+    ui_base = get_web_ui_base()
+    url = f"{ui_base}/reset-password?token={token}"
+    html = PASSWORD_RESET_REQUEST_TEMPLATE.render(url=url)
+    await send_email_direct(email, "Reset your Radegast EDR password", html, email_type="verify")
+
+
+async def send_user_password_reset_email(email: str, new_password: str):
+    html = f"""
+    <h2>Password Reset</h2>
+    <p>Your Radegast EDR password has been reset successfully.</p>
+    <p>Your new password is: <pre>{new_password}</pre></p>
+    <p><strong>Change your password as soon as possible after logging in.</strong></p>
+    <p><strong>Please note:</strong> Only your password has been reset. If you have configured Multi-Factor Authentication (MFA), it remains active and was NOT reset. If you need your MFA reset, you must contact your administrator.</p>
+    """
+    await send_email_direct(email, "Your Radegast EDR password has been reset", html, email_type="verify")
 
 
 async def send_invite_email(email: str, team_id: int, team_name: str):

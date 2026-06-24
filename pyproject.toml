@@ -56,6 +56,9 @@ line-length = 140
 target-version = "py311"
 include = ["app/**/*.py", "tests/**/*.py"]
 exclude = [".venv", "migrations", "node_modules", "web/"]
+fix = true
+unsafe-fixes = true
+
 
 [tool.ruff.lint]
 select = [
@@ -74,6 +77,7 @@ select = [
     "PLE", # Pylint errors
     "PLW", # Pylint warnings
     "RUF", # Ruff-specific rules
+    "ARG", # flake8-unused-arguments
 ]
 ignore = [
     "E501",  # Line too long (handled by formatter)
@@ -89,7 +93,7 @@ unfixable = []
 known-first-party = ["app"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101"]  # Allow assert in tests
+"tests/*" = ["S101", "ARG"]  # Allow assert and unused arguments in tests
 "app/config.py" = ["S105", "S108"]  # Allow hardcoded password and temp file in config
 "app/main.py" = ["ASYNC240"]  # Allow Path.mkdir in lifespan (startup code)
 "app/routers/install.py" = ["ASYNC240"]  # Allow Path.resolve/is_relative_to (synchronous path checks)

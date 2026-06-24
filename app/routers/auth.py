@@ -1,5 +1,7 @@
 import base64
 import json
+import secrets
+import string
 from datetime import timedelta
 from urllib.parse import urlparse
 
@@ -16,6 +18,7 @@ from webauthn.helpers.structs import PublicKeyCredentialDescriptor
 from app.config import settings
 from app.database import get_db
 from app.dependencies import (
+    check_rate_limit,
     mfa_level_value,
     rate_limit_login,
     rate_limit_mfa,
@@ -34,6 +37,8 @@ from app.schemas.user import (
     MfaHardwareTokenAssertionOptionsRequest,
     MfaHardwareTokenAssertionOptionsResponse,
     MfaVerifyRequest,
+    PasswordResetConfirm,
+    PasswordResetRequest,
     UserLogin,
     UserRegister,
     UserResponse,
@@ -47,6 +52,8 @@ from app.services.auth import (
 )
 from app.services.email import (
     send_login_notification,
+    send_password_reset_link_email,
+    send_user_password_reset_email,
     send_verification_email,
 )
 from app.utils import ensure_utc, utc_now
@@ -522,3 +529,58 @@ async def get_auth_config():
     return {
         "turnstile_site_key": settings.turnstile_site_key,
     }
+
+
+@router.post("/password-reset/request")
+async def request_password_reset(
+    data: PasswordResetRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    ip = _client_ip(request)
+    await _verify_turnstile(data.turnstile_token, ip)
+
+    # Rate limit: IP and Email
+    check_rate_limit(request, f"password_reset_request:ip:{ip}", limit=1, window=180)
+    check_rate_limit(request, f"password_reset_request:email:{data.email}", limit=1, window=180)
+
+    # Prevent account enumeration by always returning the same response.
+    # Find user by email
+    result = await db.execute(select(User).where(User.email == data.email))
+    user = result.scalar_one_or_none()
+    if user and user.verified:
+        await send_password_reset_link_email(user.email)
+
+    return {"message": "If the account exists, a password reset link has been sent to your email."}
+
+
+@router.post("/password-reset/confirm")
+async def confirm_password_reset(
+    data: PasswordResetConfirm,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    ip = _client_ip(request)
+    check_rate_limit(request, f"password_reset_confirm:ip:{ip}", limit=1, window=180)
+
+    token_data = verify_signed_token(data.token, salt="password-reset", max_age=3600)
+    if not token_data or "email" not in token_data:
+        raise HTTPException(status_code=400, detail="Invalid or expired password reset token")
+
+    email = token_data["email"]
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    alphabet = string.ascii_letters + string.digits
+    new_password = "".join(secrets.choice(alphabet) for _ in range(12))
+
+    user.password = hash_password(new_password)
+    user.password_change = utc_now()
+
+    await db.commit()
+
+    await send_user_password_reset_email(user.email, new_password)
+
+    return {"message": "Your password has been reset successfully and the new password has been sent to your email."}

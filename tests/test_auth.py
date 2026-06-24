@@ -217,7 +217,7 @@ class TestKeySetup:
 
         from app.services.crypto import generate_age_keypair
 
-        main_pub, main_priv = generate_age_keypair()
+        main_pub, _main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
         encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
@@ -238,7 +238,7 @@ class TestKeySetup:
 
         from app.services.crypto import generate_age_keypair
 
-        main_pub, main_priv = generate_age_keypair()
+        main_pub, _main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
         encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
@@ -262,7 +262,7 @@ class TestKeySetup:
 
         from app.services.crypto import generate_age_keypair
 
-        main_pub, main_priv = generate_age_keypair()
+        main_pub, _main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
         encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
@@ -286,7 +286,7 @@ class TestKeySetup:
 
         from app.services.crypto import generate_age_keypair
 
-        main_pub, main_priv = generate_age_keypair()
+        main_pub, _main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
         encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
@@ -313,7 +313,7 @@ class TestKeyRecover:
 
         from app.services.crypto import generate_age_keypair
 
-        main_pub, main_priv = generate_age_keypair()
+        main_pub, _main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
         encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
@@ -415,7 +415,7 @@ class TestKeyTransfer:
         transfer_id = init_resp.json()["transfer_id"]
 
         # Sender AGE-encrypts main private key for receiver's ephemeral key
-        main_pub, main_priv = generate_age_keypair()
+        _main_pub, main_priv = generate_age_keypair()
         encrypted_payload = age_encrypt(main_priv, eph_pub)
 
         resp = await auth_client.post(
@@ -460,7 +460,7 @@ class TestKeySecondary:
 
         from app.services.crypto import generate_age_keypair
 
-        main_pub, main_priv = generate_age_keypair()
+        main_pub, _main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
         encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
@@ -479,8 +479,8 @@ class TestKeySecondary:
 
         await self._setup_main_key(auth_client)
 
-        sec_pub, sec_priv = generate_age_keypair()
-        rec_pub, rec_priv = generate_age_keypair()
+        sec_pub, _sec_priv = generate_age_keypair()
+        _rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
         encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
         resp = await auth_client.post(
@@ -493,8 +493,8 @@ class TestKeySecondary:
     async def test_setup_secondary_without_main_fails(self, auth_client: AsyncClient):
         from app.services.crypto import generate_age_keypair
 
-        sec_pub, sec_priv = generate_age_keypair()
-        rec_pub, rec_priv = generate_age_keypair()
+        sec_pub, _sec_priv = generate_age_keypair()
+        _rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
         encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
         resp = await auth_client.post(
@@ -508,8 +508,8 @@ class TestKeySecondary:
 
         await self._setup_main_key(auth_client)
 
-        sec_pub, sec_priv = generate_age_keypair()
-        rec_pub, rec_priv = generate_age_keypair()
+        sec_pub, _sec_priv = generate_age_keypair()
+        _rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
         encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
         payload = {"public_key": sec_pub, "encrypted_private_key": encrypted_priv}
@@ -520,8 +520,8 @@ class TestKeySecondary:
     async def test_secondary_key_unauthenticated(self, client: AsyncClient):
         from app.services.crypto import generate_age_keypair
 
-        sec_pub, sec_priv = generate_age_keypair()
-        rec_pub, rec_priv = generate_age_keypair()
+        sec_pub, _sec_priv = generate_age_keypair()
+        _rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
         encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
         resp = await client.post(
@@ -538,7 +538,7 @@ class TestDeleteKeys:
 
         from app.services.crypto import generate_age_keypair
 
-        main_pub, main_priv = generate_age_keypair()
+        main_pub, _main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
         recovery_key_hex = secrets.token_bytes(32).hex()
         encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
@@ -868,3 +868,78 @@ class TestTokenAuth:
         resp = await client.post("/auth/token", data={"username": registered_user["email"], "password": registered_user["password"]})
         assert resp.status_code == 403
         assert "MFA is required" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+class TestPasswordReset:
+    async def test_password_reset_request_success(self, client: AsyncClient, registered_user, db_session):
+        from app.main import app
+        app.state.rate_limits.clear()
+
+        # Ensure user is verified
+        from sqlalchemy import select
+
+        from app.models.user import User
+
+        res = await db_session.execute(select(User).where(User.email == registered_user["email"]))
+        user = res.scalar_one()
+        user.verified = True
+        await db_session.commit()
+
+        resp = await client.post(
+            "/auth/password-reset/request",
+            json={"email": registered_user["email"]},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["message"] == "If the account exists, a password reset link has been sent to your email."
+
+    async def test_password_reset_request_non_existent(self, client: AsyncClient):
+        from app.main import app
+        app.state.rate_limits.clear()
+
+        resp = await client.post(
+            "/auth/password-reset/request",
+            json={"email": "nonexistent@example.com"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["message"] == "If the account exists, a password reset link has been sent to your email."
+
+    async def test_password_reset_confirm_success(self, client: AsyncClient, registered_user, db_session):
+        from app.main import app
+        app.state.rate_limits.clear()
+
+        from sqlalchemy import select
+
+        from app.models.user import User
+        from app.services.auth import create_signed_token
+
+        res = await db_session.execute(select(User).where(User.email == registered_user["email"]))
+        user = res.scalar_one()
+        user.verified = True
+        old_password_hash = user.password
+        await db_session.commit()
+
+        token = create_signed_token({"email": registered_user["email"]}, salt="password-reset")
+
+        resp = await client.post(
+            "/auth/password-reset/confirm",
+            json={"token": token},
+        )
+        assert resp.status_code == 200
+        assert "password has been reset successfully" in resp.json()["message"]
+
+        # Verify password changed in DB
+        await db_session.refresh(user)
+        assert user.password != old_password_hash
+
+    async def test_password_reset_confirm_invalid_token(self, client: AsyncClient):
+        from app.main import app
+        app.state.rate_limits.clear()
+
+        resp = await client.post(
+            "/auth/password-reset/confirm",
+            json={"token": "invalid-token"},
+        )
+        assert resp.status_code == 400
+        assert "Invalid or expired password reset token" in resp.json()["detail"]
+

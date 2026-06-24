@@ -587,7 +587,7 @@ class TestPackPermissionsNew:
             json={"name": "Constraint Pack", "description": "Private pack", "team_ids": [m_team_id]},
         )
         assert resp.status_code == 200
-        pack_id = resp.json()["id"]
+        resp.json()["id"]
 
         # Try to change maintainer team's permission_pack from 'write' to 'read'
         # Since this pack only belongs to this team (which has write), changing it to 'read' should be blocked
@@ -683,7 +683,7 @@ class TestPackValidation:
         import zipfile
 
         zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED):
             pass  # Empty zip
         zip_content = zip_buffer.getvalue()
 

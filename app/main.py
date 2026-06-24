@@ -30,9 +30,10 @@ from app.services.email import process_email_queue_loop
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     # Create upload directory
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
+
     Path(settings.releases_dir).mkdir(parents=True, exist_ok=True)
 
     email_task = None

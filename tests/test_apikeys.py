@@ -40,7 +40,7 @@ class TestAPIKeys:
         assert data["name"] == "My New Key"
         assert "key" in data
         assert data["key"].startswith("rg_")
-        key_value = data["key"]
+        data["key"]
         key_id = data["id"]
 
         # 2. List API keys

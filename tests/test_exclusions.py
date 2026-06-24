@@ -130,7 +130,7 @@ class TestDeviceExclusionDownload:
         resp = await auth_client.post("/devices/", json={"name": "Test-Device", "group_id": group_id})
         assert resp.status_code == 200
         device_token = resp.json()["token"]
-        device_id = resp.json()["id"]
+        resp.json()["id"]
 
         # 2. Create an exclusion for the group
         resp = await auth_client.post(

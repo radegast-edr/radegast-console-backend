@@ -159,7 +159,7 @@ async def download_release(
     version: str,
     os_name: str,
     arch: str,
-    user: User = Depends(get_current_user),
+    _user: User = Depends(get_current_user),
 ):
     """Download a specific release zip. Any authenticated user."""
     version, os_name, arch = _validate_release_params(version, os_name, arch)

@@ -195,3 +195,12 @@ class MfaSettingsResponse(BaseModel):
 
 class UnsubscribeRequest(BaseModel):
     token: str
+
+
+class PasswordResetRequest(BaseModel):
+    email: str
+    turnstile_token: str | None = None
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str

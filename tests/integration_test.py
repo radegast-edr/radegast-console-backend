@@ -6,6 +6,7 @@ import sys
 import tempfile
 import time
 import zipfile
+from datetime import UTC
 from pathlib import Path
 
 import httpx
@@ -18,7 +19,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 os.environ["RADEGAST_SECRET_KEY"] = "integration-test-secret-key"  # noqa: S105
 os.environ["RADEGAST_ENVIRONMENT"] = "dev"
 
-from datetime import UTC
 
 from app.services.auth import create_signed_token  # noqa: E402
 from app.services.crypto import generate_age_keypair  # noqa: E402
@@ -352,12 +352,10 @@ exec "$@"
             time.sleep(2)
 
             # Check if rustinel is still running
-            ebpf_supported = True
             if rustinel_process.poll() is not None:
                 print("WARNING: rustinel exited immediately. eBPF may not be supported (e.g., container).")
                 stdout, stderr = rustinel_process.communicate()
                 print(f"rustinel stdout:\n{stdout}\nrustinel stderr:\n{stderr}")
-                ebpf_supported = False
                 rustinel_process = None
             else:
                 print("rustinel started successfully in background.")
@@ -389,7 +387,6 @@ exec "$@"
             # and print 'The batch file cannot be found.' We ignore check here.
             run_command([str(install_bat_file)], env=install_env, check=False)
             installed = True
-            ebpf_supported = True  # Windows doesn't use eBPF
 
         # 7. Wait for the agent to check in and pull rules
         print("Waiting for the agent to check in and synchronize rules...")

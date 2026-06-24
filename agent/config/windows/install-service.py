@@ -189,7 +189,7 @@ def main():
     env["UV_PYTHON"] = str(python_exe_path)
 
     subprocess.run(
-        [str(uv_exe), "tool", "install", "--upgrade", "radegast-edr-agent"],
+        [str(uv_exe), "tool", "install", "--upgrade", "--force", "radegast-edr-agent"],
         check=True,
         env=env,
         cwd=agent_home_dir

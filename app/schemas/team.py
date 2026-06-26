@@ -33,6 +33,7 @@ class TeamResponse(BaseModel):
 
 class TeamInvite(BaseModel):
     email: str
+    group_keys: dict[int, str] | None = None
 
 
 class DeviceGroupCreate(BaseModel):
@@ -42,6 +43,8 @@ class DeviceGroupCreate(BaseModel):
 class DeviceGroupResponse(BaseModel):
     id: int
     name: str
+    private_key: str | None = None
+    public_key: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -50,6 +53,8 @@ class DeviceGroupDetailResponse(BaseModel):
     id: int
     name: str
     teams: list[TeamResponse]
+    private_key: str | None = None
+    public_key: str | None = None
     # devices imported lazily to avoid circular import — built manually in router
 
     model_config = {"from_attributes": True}
@@ -61,3 +66,32 @@ class TeamMemberResponse(BaseModel):
     role: str
 
     model_config = {"from_attributes": True}
+
+
+class CancelInvitationRequest(BaseModel):
+    group_keys: dict[int, str]
+
+
+class DeviceAddPayload(BaseModel):
+    encrypted_private_key: str
+
+
+class DeviceRemovePayload(BaseModel):
+    encrypted_private_key: str
+
+
+class GroupLinkPayload(BaseModel):
+    encrypted_private_key: str
+
+
+class GroupUnlinkPayload(BaseModel):
+    encrypted_private_key: str
+
+
+class MemberRemovePayload(BaseModel):
+    group_keys: dict[int, str]
+
+
+class GroupKeysSetup(BaseModel):
+    public_key: str
+    private_key: str

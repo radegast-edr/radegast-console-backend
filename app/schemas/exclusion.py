@@ -10,6 +10,7 @@ class ExclusionCreate(BaseModel):
     description: str | None = None
     alert_id: int | None = None
     exclusion_type: Literal["hard", "soft"] = "hard"
+    encrypted: bool = False
 
 
 class ExclusionResponse(BaseModel):
@@ -21,6 +22,7 @@ class ExclusionResponse(BaseModel):
     created_at: datetime
     alert_id: int | None = None
     exclusion_type: Literal["hard", "soft"] = "hard"
+    encrypted: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -34,5 +36,6 @@ class ExclusionDetailResponse(BaseModel):
     created_at: datetime
     alert_id: int | None = None
     exclusion_type: Literal["hard", "soft"] = "hard"
+    encrypted: bool = False
 
     model_config = {"from_attributes": True}

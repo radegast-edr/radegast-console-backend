@@ -171,3 +171,46 @@ async def get_device_encryption_keys_list(device_id: int, db: AsyncSession) -> l
     result = await db.execute(select(PublicKey).where(PublicKey.user_id.in_(list(user_ids))))
     keys = result.scalars().all()
     return [{"user_id": k.user_id, "public_key": k.public_key, "key_type": k.key_type} for k in keys]
+
+
+async def get_group_recipient_public_keys(group_id: int, db: AsyncSession, exclude_user_id: int | None = None) -> list[str]:
+    """
+    Returns a list of all recipient public keys (both users' regular/secondary keys and devices' encryption public keys)
+    for a given device group.
+    """
+    from app.models.device_group import DeviceGroup
+    from app.models.public_key import PublicKey
+    from app.models.team import Team
+
+    result = await db.execute(
+        select(DeviceGroup)
+        .options(
+            selectinload(DeviceGroup.teams).selectinload(Team.users),
+            selectinload(DeviceGroup.devices),
+        )
+        .where(DeviceGroup.id == group_id)
+    )
+    group = result.scalar_one_or_none()
+    if not group:
+        return []
+
+    pub_keys: set[str] = set()
+
+    # Add devices' encryption public keys
+    for device in group.devices:
+        if device.encryption_public_key:
+            pub_keys.add(device.encryption_public_key)
+
+    # Add users' public keys (non-recovery)
+    user_ids = set()
+    for team in group.teams:
+        for user in team.users:
+            if exclude_user_id is None or user.id != exclude_user_id:
+                user_ids.add(user.id)
+
+    if user_ids:
+        res = await db.execute(select(PublicKey).where(PublicKey.user_id.in_(list(user_ids)), PublicKey.key_type != "recovery"))
+        for pk in res.scalars().all():
+            pub_keys.add(pk.public_key)
+
+    return list(pub_keys)

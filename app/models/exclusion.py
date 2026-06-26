@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -18,5 +18,6 @@ class Exclusion(Base):
 
     alert_id: Mapped[int | None] = mapped_column(ForeignKey("logs.id", ondelete="SET NULL"), nullable=True)
     exclusion_type: Mapped[str] = mapped_column(String(20), default="hard", server_default="hard", nullable=False)
+    encrypted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
 
     device_group = relationship("DeviceGroup", back_populates="exclusions")

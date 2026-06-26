@@ -232,6 +232,21 @@ async def delete_all_keys(
     return {"message": "All keys deleted"}
 
 
+@router.get("/public-keys-by-email", response_model=list[str])
+async def get_public_keys_by_email(
+    email: str,
+    _user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Retrieve public keys of another registered user by email."""
+    result = await db.execute(select(User).where(User.email == email))
+    target_user = result.scalar_one_or_none()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    result_pk = await db.execute(select(PublicKey).where(PublicKey.user_id == target_user.id, PublicKey.key_type != "recovery"))
+    return [pk.public_key for pk in result_pk.scalars().all()]
+
+
 @router.get("/keys", response_model=list[PublicKeyResponse])
 async def list_user_keys(
     user: User = Depends(get_current_user),

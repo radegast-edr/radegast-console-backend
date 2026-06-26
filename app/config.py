@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     pack_max_size_mb_user: int | None = None
     pack_max_size_mb_admin: int | None = None
     pack_max_size_mb_maintainer: int | None = None
+    agent_package: str = "radegast-edr-agent"
 
     model_config = {"env_prefix": "radegast_"}
 

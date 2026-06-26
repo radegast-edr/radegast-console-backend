@@ -45,7 +45,11 @@ INVITE_EMAIL_TEMPLATE = Template("""
 <html>
 <body>
 <h2>Team Invitation</h2>
+{% if invited_by %}
+<p>You have been invited by <strong>{{ invited_by }}</strong> to join the team <strong>{{ team_name }}</strong> on Radegast EDR.</p>
+{% else %}
 <p>You have been invited to join the team <strong>{{ team_name }}</strong> on Radegast EDR.</p>
+{% endif %}
 <p><a href="{{ url }}">Accept Invitation</a></p>
 </body>
 </html>
@@ -307,11 +311,11 @@ async def send_user_password_reset_email(email: str, new_password: str):
     await send_email_direct(email, "Your Radegast EDR password has been reset", html, email_type="verify")
 
 
-async def send_invite_email(email: str, team_id: int, team_name: str):
+async def send_invite_email(email: str, team_id: int, team_name: str, invited_by: str | None = None):
     token = create_signed_token({"email": email, "team_id": team_id}, salt="team-invite")
     ui_base = get_web_ui_base()
     url = f"{ui_base}/invite/accept?token={token}"
-    html = INVITE_EMAIL_TEMPLATE.render(url=url, team_name=team_name)
+    html = INVITE_EMAIL_TEMPLATE.render(url=url, team_name=team_name, invited_by=invited_by)
     await send_email(email, f"Invitation to join {team_name}", html, email_type="invite")
 
 

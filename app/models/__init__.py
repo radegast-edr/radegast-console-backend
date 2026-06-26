@@ -14,6 +14,7 @@ from app.models.pack_version_rule import PackVersionRule, RuleType
 from app.models.public_key import PublicKey
 from app.models.queued_email import QueuedEmail
 from app.models.team import Team
+from app.models.team_invitation import TeamInvitation
 from app.models.user import User
 
 __all__ = [
@@ -34,6 +35,7 @@ __all__ = [
     "QueuedEmail",
     "RuleType",
     "Team",
+    "TeamInvitation",
     "User",
     "device_group_devices",
     "team_device_groups",

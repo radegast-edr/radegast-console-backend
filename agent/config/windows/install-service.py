@@ -181,7 +181,7 @@ def main():
     tool_bin_dir = agent_home_dir / ".local" / "bin"
     tool_bin_dir.mkdir(parents=True, exist_ok=True)
 
-    print("Installing/upgrading radegast-edr-agent as a tool...")
+    print("Installing/upgrading {{ agent_package }} as a tool...")
     env = os.environ.copy()
     env["UV_TOOL_DIR"] = str(agent_tools_dir)
     env["UV_TOOL_BIN_DIR"] = str(tool_bin_dir)
@@ -189,7 +189,7 @@ def main():
     env["UV_PYTHON"] = str(python_exe_path)
 
     subprocess.run(
-        [str(uv_exe), "tool", "install", "--upgrade", "--force", "radegast-edr-agent"],
+        [str(uv_exe), "tool", "install", "--upgrade", "--force", "{{ agent_package }}"],
         check=True,
         env=env,
         cwd=agent_home_dir

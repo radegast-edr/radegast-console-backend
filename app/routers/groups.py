@@ -10,11 +10,20 @@ from app.models.associations import team_device_groups
 from app.models.device import Device
 from app.models.device_group import DeviceGroup
 from app.models.team import Team
+from app.models.team_invitation import TeamInvitation
 from app.models.user import User
 from app.schemas.device import DeviceResponse
 from app.schemas.exclusion import ExclusionResponse
-from app.schemas.team import DeviceGroupResponse, TeamResponse
+from app.schemas.team import (
+    DeviceAddPayload,
+    DeviceGroupResponse,
+    DeviceRemovePayload,
+    GroupKeysSetup,
+    GroupUnlinkPayload,
+    TeamResponse,
+)
 from app.services.permissions import (
+    get_group_recipient_public_keys,
     get_user_team_ids_transitive,
     has_team_admin_permission,
     is_user_member_of_team_transitive,
@@ -37,6 +46,9 @@ class DeviceGroupDetail(BaseModel):
     teams: list[TeamResponse]
     devices: list[DeviceResponse]
     exclusions: list[ExclusionResponse]
+    public_key: str | None = None
+    private_key: str | None = None
+    invitations: list[dict] = []
 
 
 async def _user_has_admin(group: DeviceGroup, user: User, db: AsyncSession) -> bool:
@@ -48,10 +60,13 @@ async def _user_has_admin(group: DeviceGroup, user: User, db: AsyncSession) -> b
     return False
 
 
-def _group_detail(group: DeviceGroup) -> dict:
+def _group_detail(group: DeviceGroup, invitations: list[TeamInvitation] | None = None) -> dict:
+    invs = invitations or []
     return {
         "id": group.id,
         "name": group.name,
+        "public_key": group.public_key,
+        "private_key": group.private_key,
         "teams": [
             {
                 "id": t.id,
@@ -70,6 +85,7 @@ def _group_detail(group: DeviceGroup) -> dict:
                 "signature_public_key": d.signature_public_key,
                 "encryption_public_key": d.encryption_public_key,
                 "last_seen": d.last_seen,
+                "agent_version": d.agent_version,
             }
             for d in group.devices
         ],
@@ -83,8 +99,19 @@ def _group_detail(group: DeviceGroup) -> dict:
                 "created_at": e.created_at,
                 "alert_id": e.alert_id,
                 "exclusion_type": e.exclusion_type,
+                "encrypted": e.encrypted,
             }
             for e in group.exclusions
+        ],
+        "invitations": [
+            {
+                "id": inv.id,
+                "team_id": inv.team_id,
+                "user_id": inv.user_id,
+                "email": inv.email,
+                "created_at": inv.created_at,
+            }
+            for inv in invs
         ],
     }
 
@@ -132,7 +159,13 @@ async def get_group(
     if not visible:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    return _group_detail(group)
+    team_ids = [t.id for t in group.teams]
+    invitations = []
+    if team_ids:
+        inv_result = await db.execute(select(TeamInvitation).where(TeamInvitation.team_id.in_(team_ids)))
+        invitations = inv_result.scalars().all()
+
+    return _group_detail(group, invitations)
 
 
 @router.patch("/{group_id}", response_model=DeviceGroupResponse)
@@ -157,10 +190,11 @@ async def rename_group(
     return {"id": group.id, "name": group.name}
 
 
-@router.delete("/{group_id}/teams/{team_id}", response_model=MessageResponse)
+@router.post("/{group_id}/teams/{team_id}/unlink", response_model=MessageResponse)
 async def unlink_group_from_team(
     group_id: int,
     team_id: int,
+    data: GroupUnlinkPayload,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -183,6 +217,7 @@ async def unlink_group_from_team(
             team_device_groups.c.device_group_id == group_id,
         )
     )
+    group.private_key = data.encrypted_private_key
     await db.commit()
     return {"message": "Group unlinked from team"}
 
@@ -191,6 +226,7 @@ async def unlink_group_from_team(
 async def add_device_to_group(
     group_id: int,
     device_id: int,
+    data: DeviceAddPayload,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -232,15 +268,17 @@ async def add_device_to_group(
 
     if device not in group.devices:
         group.devices.append(device)
+        group.private_key = data.encrypted_private_key
         await db.commit()
 
     return {"message": "Device added to group"}
 
 
-@router.delete("/{group_id}/devices/{device_id}", response_model=MessageResponse)
+@router.post("/{group_id}/devices/{device_id}/remove", response_model=MessageResponse)
 async def remove_device_from_group(
     group_id: int,
     device_id: int,
+    data: DeviceRemovePayload,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -266,6 +304,76 @@ async def remove_device_from_group(
 
     if device in group.devices:
         group.devices.remove(device)
+        group.private_key = data.encrypted_private_key
         await db.commit()
 
     return {"message": "Device removed from group"}
+
+
+@router.get("/{group_id}/recipient-public-keys", response_model=list[str])
+async def get_recipient_public_keys(
+    group_id: int,
+    exclude_user_id: int | None = None,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(DeviceGroup).options(selectinload(DeviceGroup.teams).selectinload(Team.users)).where(DeviceGroup.id == group_id)
+    )
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    visible = False
+    for team in group.teams:
+        if await is_user_member_of_team_transitive(team.id, user.id, db):
+            visible = True
+            break
+    if not visible:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    return await get_group_recipient_public_keys(group_id, db, exclude_user_id=exclude_user_id)
+
+
+@router.post("/{group_id}/keys", response_model=MessageResponse)
+async def setup_group_keys(
+    group_id: int,
+    data: GroupKeysSetup,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(DeviceGroup).options(selectinload(DeviceGroup.teams).selectinload(Team.users)).where(DeviceGroup.id == group_id)
+    )
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    if not await _user_has_admin(group, user, db):
+        raise HTTPException(status_code=403, detail="No admin permission")
+
+    group.public_key = data.public_key
+    group.private_key = data.private_key
+    await db.commit()
+    return {"message": "Group keys set up successfully"}
+
+
+@router.delete("/{group_id}", response_model=MessageResponse)
+async def delete_group(
+    group_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(DeviceGroup).options(selectinload(DeviceGroup.teams).selectinload(Team.users)).where(DeviceGroup.id == group_id)
+    )
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    if not await _user_has_admin(group, user, db):
+        raise HTTPException(status_code=403, detail="No admin permission")
+
+    await db.delete(group)
+    await db.commit()
+    return {"message": "Group deleted successfully"}

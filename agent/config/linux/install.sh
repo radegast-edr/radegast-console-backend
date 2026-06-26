@@ -150,7 +150,7 @@ echo "uv found at: $UV_BIN"
 
 # 5. Install radegast-agent via uv
 echo "Installing/upgrading radegast-agent tool..."
-sudo -u radegast-agent -i "$UV_BIN" tool install --upgrade radegast-edr-agent
+sudo -u radegast-agent -i "$UV_BIN" tool install --upgrade {{ agent_package }}
 
 # Verify agent executable exists
 if [ ! -f "/opt/radegast/home/.local/bin/radegast-edr-agent" ]; then

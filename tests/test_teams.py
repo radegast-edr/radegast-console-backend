@@ -62,6 +62,7 @@ class TestTeamCRUD:
 class TestTeamInvitation:
     async def test_invite_user(self, client: AsyncClient, auth_client: AsyncClient):
         from app.services.auth import create_signed_token
+        from unittest.mock import patch, AsyncMock
 
         # Register the invited user first
         await client.post(
@@ -74,22 +75,50 @@ class TestTeamInvitation:
         resp = await auth_client.get("/teams/")
         teams = resp.json()
         team_id = teams[0]["id"]
-        resp = await auth_client.post(
-            f"/teams/{team_id}/invite",
-            json={"email": "invited@example.com"},
-        )
-        assert resp.status_code == 200
+        
+        with patch("app.routers.teams.send_invite_email", new_callable=AsyncMock) as mock_send:
+            resp = await auth_client.post(
+                f"/teams/{team_id}/invite",
+                json={"email": "invited@example.com"},
+            )
+            assert resp.status_code == 200
+            mock_send.assert_called_once_with("invited@example.com", team_id, teams[0]["name"], "test@example.com")
 
     async def test_invite_unregistered_user_fails_silently(self, auth_client: AsyncClient):
+        from app.routers.teams import FAILED_INVITE_ATTEMPTS
+        FAILED_INVITE_ATTEMPTS.clear()
+
         resp = await auth_client.get("/teams/")
         teams = resp.json()
         team_id = teams[0]["id"]
+
+        # 1st try: 400
         resp = await auth_client.post(
             f"/teams/{team_id}/invite",
-            json={"email": "unregistered@example.com"},
+            json={"email": "unregistered1@example.com"},
         )
-        assert resp.status_code == 200
-        assert resp.json() == {"message": "Invitation sent to unregistered@example.com"}
+        assert resp.status_code == 400
+
+        # 2nd try: 400
+        resp = await auth_client.post(
+            f"/teams/{team_id}/invite",
+            json={"email": "unregistered2@example.com"},
+        )
+        assert resp.status_code == 400
+
+        # 3rd try: 400
+        resp = await auth_client.post(
+            f"/teams/{team_id}/invite",
+            json={"email": "unregistered3@example.com"},
+        )
+        assert resp.status_code == 400
+
+        # 4th try: 429
+        resp = await auth_client.post(
+            f"/teams/{team_id}/invite",
+            json={"email": "unregistered4@example.com"},
+        )
+        assert resp.status_code == 429
 
     async def test_accept_invitation(self, client: AsyncClient, auth_client: AsyncClient):
         from app.services.auth import create_signed_token
@@ -126,7 +155,7 @@ class TestTeamMembers:
         team_id = resp.json()[0]["id"]
         members = (await auth_client.get(f"/teams/{team_id}/members")).json()
         user_id = members[0]["id"]
-        resp = await auth_client.delete(f"/teams/{team_id}/members/{user_id}")
+        resp = await auth_client.post(f"/teams/{team_id}/members/{user_id}/delete", json={"group_keys": {}})
         assert resp.status_code == 400
 
     async def test_cannot_remove_last_admin(self, auth_client: AsyncClient):
@@ -136,7 +165,7 @@ class TestTeamMembers:
         team_id = admin_team["id"]
         members = (await auth_client.get(f"/teams/{team_id}/members")).json()
         user_id = members[0]["id"]
-        resp = await auth_client.delete(f"/teams/{team_id}/members/{user_id}")
+        resp = await auth_client.post(f"/teams/{team_id}/members/{user_id}/delete", json={"group_keys": {}})
         assert resp.status_code == 400
         assert "admin" in resp.json()["detail"].lower()
 
@@ -162,7 +191,7 @@ class TestTeamMembers:
         second = next(m for m in members if m["email"] == "second@example.com")
 
         # Remove the second user
-        resp = await auth_client.delete(f"/teams/{team_id}/members/{second['id']}")
+        resp = await auth_client.post(f"/teams/{team_id}/members/{second['id']}/delete", json={"group_keys": {}})
         assert resp.status_code == 200
 
     async def test_remove_nonexistent_member(self, auth_client: AsyncClient, client: AsyncClient):
@@ -182,7 +211,7 @@ class TestTeamMembers:
         await client.get(f"/auth/invite/accept?token={invite_token}")
 
         # Now try to remove a user that doesn't exist in the team
-        resp = await auth_client.delete(f"/teams/{team_id}/members/99999")
+        resp = await auth_client.post(f"/teams/{team_id}/members/99999/delete", json={"group_keys": {}})
         assert resp.status_code == 404
 
 
@@ -222,7 +251,7 @@ class TestDeviceGroups:
         group_id = resp.json()[0]["id"]
 
         # Link existing group to second team
-        resp = await auth_client.post(f"/teams/{second_team_id}/groups/{group_id}/link")
+        resp = await auth_client.post(f"/teams/{second_team_id}/groups/{group_id}/link", json={"encrypted_private_key": "fake_key"})
         assert resp.status_code == 200
         assert "linked" in resp.json()["message"]
 
@@ -268,7 +297,7 @@ class TestDeviceGroups:
         user2_team_id = resp.json()[0]["id"]
 
         # User 2 tries to link User 1's group to User 2's team. This should fail.
-        resp = await client.post(f"/teams/{user2_team_id}/groups/{user1_group_id}/link")
+        resp = await client.post(f"/teams/{user2_team_id}/groups/{user1_group_id}/link", json={"encrypted_private_key": "fake_key"})
         assert resp.status_code == 403
 
     async def test_add_device_to_group_no_admin_on_device_fails(self, client: AsyncClient):

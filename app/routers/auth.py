@@ -31,6 +31,7 @@ from app.models.device_group import DeviceGroup
 from app.models.hardware_token import HardwareToken
 from app.models.public_key import PublicKey
 from app.models.team import Team
+from app.models.team_invitation import TeamInvitation
 from app.models.user import User
 from app.schemas.device import DeviceLogin
 from app.schemas.user import (
@@ -373,9 +374,21 @@ async def accept_invite(token: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Team not found")
 
     if user in team.users:
+        # Check and delete pending invitation if present
+        result_inv = await db.execute(select(TeamInvitation).where(TeamInvitation.team_id == team.id, TeamInvitation.user_id == user.id))
+        invitation = result_inv.scalar_one_or_none()
+        if invitation:
+            await db.delete(invitation)
+            await db.commit()
         return {"message": "Already a member of this team"}
 
     team.users.append(user)
+    # Delete pending invitation
+    result_inv = await db.execute(select(TeamInvitation).where(TeamInvitation.team_id == team.id, TeamInvitation.user_id == user.id))
+    invitation = result_inv.scalar_one_or_none()
+    if invitation:
+        await db.delete(invitation)
+
     await db.commit()
 
     return {"message": f"Successfully joined team '{team.name}'"}

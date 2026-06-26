@@ -91,6 +91,7 @@ async def list_all_exclusions(
             "created_at": e.created_at,
             "alert_id": e.alert_id,
             "exclusion_type": e.exclusion_type,
+            "encrypted": e.encrypted,
         }
         for e in exclusions
     ]
@@ -124,6 +125,7 @@ async def list_group_exclusions(
             created_at=e.created_at,
             alert_id=e.alert_id,
             exclusion_type=e.exclusion_type,
+            encrypted=e.encrypted,
         )
         for e in exclusions
     ]
@@ -155,6 +157,7 @@ async def create_exclusion(
         jsonata_query=data.jsonata_query,
         alert_id=data.alert_id,
         exclusion_type=data.exclusion_type,
+        encrypted=data.encrypted,
     )
     db.add(exclusion)
     await db.flush()
@@ -177,6 +180,7 @@ async def create_exclusion(
         created_at=exclusion.created_at,
         alert_id=exclusion.alert_id,
         exclusion_type=exclusion.exclusion_type,
+        encrypted=exclusion.encrypted,
     )
 
 
@@ -205,6 +209,14 @@ async def get_device_exclusions(
     result = await db.execute(select(Exclusion).where(Exclusion.device_group_id.in_(group_ids)))
     exclusions = result.scalars().all()
 
+    group_keys = {
+        g.id: {
+            "public_key": g.public_key,
+            "private_key": g.private_key,
+        }
+        for g in groups
+    }
+
     # Return as a simple array of {name, jsonata_query} for the device to use
     return JSONResponse(
         content={
@@ -215,9 +227,11 @@ async def get_device_exclusions(
                     "jsonata_query": e.jsonata_query,
                     "device_group_id": e.device_group_id,
                     "exclusion_type": e.exclusion_type,
+                    "encrypted": e.encrypted,
                 }
                 for e in exclusions
-            ]
+            ],
+            "group_keys": group_keys,
         }
     )
 
@@ -283,4 +297,5 @@ async def get_exclusion(
         created_at=exclusion.created_at,
         alert_id=exclusion.alert_id,
         exclusion_type=exclusion.exclusion_type,
+        encrypted=exclusion.encrypted,
     )

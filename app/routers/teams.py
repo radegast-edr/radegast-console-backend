@@ -1,3 +1,5 @@
+import time
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import insert, select
@@ -10,11 +12,15 @@ from app.models.associations import team_device_groups, team_users
 from app.models.device_group import DeviceGroup
 from app.models.pack import Pack
 from app.models.team import Team
+from app.models.team_invitation import TeamInvitation
 from app.models.user import User
 from app.schemas.device import DeviceResponse
 from app.schemas.team import (
+    CancelInvitationRequest,
     DeviceGroupCreate,
     DeviceGroupResponse,
+    GroupLinkPayload,
+    MemberRemovePayload,
     TeamCreate,
     TeamInvite,
     TeamMemberResponse,
@@ -196,6 +202,21 @@ async def update_team(
     return team
 
 
+# Rate-limiting for non-existent user invitations
+FAILED_INVITE_ATTEMPTS: list[float] = []
+
+
+def check_failed_invite_ratelimit() -> bool:
+    now = time.time()
+    # Keep only attempts within the last 600 seconds
+    FAILED_INVITE_ATTEMPTS[:] = [t for t in FAILED_INVITE_ATTEMPTS if now - t < 600]
+    return len(FAILED_INVITE_ATTEMPTS) < 3
+
+
+def record_failed_invite() -> None:
+    FAILED_INVITE_ATTEMPTS.append(time.time())
+
+
 @router.post("/{team_id}/invite", response_model=MessageResponse)
 async def invite_to_team(
     team_id: int,
@@ -211,10 +232,87 @@ async def invite_to_team(
     # Check if the user is registered
     result = await db.execute(select(User).where(User.email == data.email))
     invited_user = result.scalar_one_or_none()
-    if invited_user:
-        await send_invite_email(data.email, team.id, team.name)
+    if not invited_user:
+        if not check_failed_invite_ratelimit():
+            raise HTTPException(status_code=429, detail="Too many attempts to invite non-existent users")
+        record_failed_invite()
+        raise HTTPException(status_code=400, detail="User does not exist")
+
+    # Check if user is already a member
+    if invited_user in team.users:
+        raise HTTPException(status_code=400, detail="User is already a member of this team")
+
+    # Check if there is already a pending invitation
+    result_inv = await db.execute(
+        select(TeamInvitation).where(TeamInvitation.team_id == team_id, TeamInvitation.user_id == invited_user.id)
+    )
+    existing_inv = result_inv.scalar_one_or_none()
+    if existing_inv:
+        raise HTTPException(status_code=400, detail="Invitation already pending for this user")
+
+    # Add user to the team immediately
+    team.users.append(invited_user)
+
+    # Create TeamInvitation record to mark it as pending
+    invitation = TeamInvitation(team_id=team_id, user_id=invited_user.id, email=data.email)
+    db.add(invitation)
+
+    # Update group private keys if provided
+    if data.group_keys:
+        for group_id, enc_priv in data.group_keys.items():
+            res_g = await db.execute(select(DeviceGroup).options(selectinload(DeviceGroup.teams)).where(DeviceGroup.id == group_id))
+            g = res_g.scalar_one_or_none()
+            if g and any(t.id == team_id for t in g.teams):
+                g.private_key = enc_priv
+
+    await db.commit()
+
+    # Send invite email
+    await send_invite_email(data.email, team.id, team.name, user.email)
 
     return {"message": f"Invitation sent to {data.email}"}
+
+
+@router.post("/{team_id}/invitations/{user_id}/cancel", response_model=MessageResponse)
+async def cancel_invitation(
+    team_id: int,
+    user_id: int,
+    data: CancelInvitationRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    team = await _get_user_team(team_id, user, db)
+    is_admin = await has_team_admin_permission(team_id, user.id, db)
+    if not is_admin:
+        raise HTTPException(status_code=403, detail="No admin permission on this team")
+
+    # Find the pending invitation
+    result_inv = await db.execute(select(TeamInvitation).where(TeamInvitation.team_id == team_id, TeamInvitation.user_id == user_id))
+    invitation = result_inv.scalar_one_or_none()
+    if not invitation:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+
+    # Find the user
+    result_user = await db.execute(select(User).where(User.id == user_id))
+    target_user = result_user.scalar_one_or_none()
+
+    # Delete invitation
+    await db.delete(invitation)
+
+    # Remove user from team
+    if target_user and target_user in team.users:
+        team.users.remove(target_user)
+
+    # Update group keys
+    if data.group_keys:
+        for group_id, enc_priv in data.group_keys.items():
+            res_g = await db.execute(select(DeviceGroup).options(selectinload(DeviceGroup.teams)).where(DeviceGroup.id == group_id))
+            g = res_g.scalar_one_or_none()
+            if g and any(t.id == team_id for t in g.teams):
+                g.private_key = enc_priv
+
+    await db.commit()
+    return {"message": "Invitation cancelled"}
 
 
 @router.get("/{team_id}/members", response_model=list[TeamMemberResponse])
@@ -227,10 +325,27 @@ async def list_members(
     return [{"id": u.id, "email": u.email, "role": u.role.value} for u in team.users]
 
 
-@router.delete("/{team_id}/members/{user_id}", response_model=MessageResponse)
+@router.get("/{team_id}/recipient-public-keys", response_model=list[str])
+async def get_team_recipient_public_keys(
+    team_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    team = await _get_user_team(team_id, user, db)
+    from app.models.public_key import PublicKey
+
+    user_ids = [u.id for u in team.users]
+    if not user_ids:
+        return []
+    res = await db.execute(select(PublicKey).where(PublicKey.user_id.in_(user_ids), PublicKey.key_type != "recovery"))
+    return [pk.public_key for pk in res.scalars().all()]
+
+
+@router.post("/{team_id}/members/{user_id}/delete", response_model=MessageResponse)
 async def remove_member(
     team_id: int,
     user_id: int,
+    data: MemberRemovePayload,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -246,7 +361,22 @@ async def remove_member(
     if not target:
         raise HTTPException(status_code=404, detail="User not in team")
 
+    # Delete any pending invitation for this user
+    result_inv = await db.execute(select(TeamInvitation).where(TeamInvitation.team_id == team_id, TeamInvitation.user_id == user_id))
+    invitation = result_inv.scalar_one_or_none()
+    if invitation:
+        await db.delete(invitation)
+
     team.users.remove(target)
+
+    # Update group keys
+    if data.group_keys:
+        for group_id, enc_priv in data.group_keys.items():
+            res_g = await db.execute(select(DeviceGroup).options(selectinload(DeviceGroup.teams)).where(DeviceGroup.id == group_id))
+            g = res_g.scalar_one_or_none()
+            if g and any(t.id == team_id for t in g.teams):
+                g.private_key = enc_priv
+
     await db.commit()
     return {"message": "Member removed"}
 
@@ -288,6 +418,7 @@ async def create_team_group(
 async def link_group_to_team(
     team_id: int,
     group_id: int,
+    data: GroupLinkPayload,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -313,6 +444,7 @@ async def link_group_to_team(
 
     if group not in team.groups:
         await db.execute(insert(team_device_groups).values(team_id=team.id, device_group_id=group.id))
+        group.private_key = data.encrypted_private_key
         await db.commit()
 
     return {"message": "Group linked to team"}

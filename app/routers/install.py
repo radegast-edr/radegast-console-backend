@@ -152,6 +152,7 @@ async def get_install_script(
             config_content=config_content,
             rustinel_service_content=rustinel_service_content,
             radegast_service_content=radegast_service_content,
+            agent_package=settings.agent_package,
         )
 
         return PlainTextResponse(rendered_script, media_type="text/plain")
@@ -181,6 +182,7 @@ async def get_install_script(
         rendered_service = service_template.render(
             backend_url=backend_url,
             config_b64=config_b64,
+            agent_package=settings.agent_package,
         )
 
         # Base64 encode the entire install-service.py

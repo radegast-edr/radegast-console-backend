@@ -1,5 +1,10 @@
+import base64
+import re
+
 import pytest
 from httpx import AsyncClient
+
+from app.config import settings
 
 
 async def _get_default_group_id(client: AsyncClient) -> int:
@@ -206,7 +211,7 @@ class TestGroupEndpoints:
         resp = await auth_client.post("/devices/", json={"name": "ViaGroups-01", "group_id": group_id})
         device_id = resp.json()["id"]
 
-        resp = await auth_client.post(f"/groups/{second_group_id}/devices/{device_id}")
+        resp = await auth_client.post(f"/groups/{second_group_id}/devices/{device_id}", json={"encrypted_private_key": "fake_key"})
         assert resp.status_code == 200
 
         resp = await auth_client.get(f"/groups/{second_group_id}")
@@ -222,9 +227,9 @@ class TestGroupEndpoints:
 
         resp = await auth_client.post("/devices/", json={"name": "ViaGroups-02", "group_id": group_id})
         device_id = resp.json()["id"]
-        await auth_client.post(f"/groups/{second_group_id}/devices/{device_id}")
+        await auth_client.post(f"/groups/{second_group_id}/devices/{device_id}", json={"encrypted_private_key": "fake_key"})
 
-        resp = await auth_client.delete(f"/groups/{second_group_id}/devices/{device_id}")
+        resp = await auth_client.post(f"/groups/{second_group_id}/devices/{device_id}/remove", json={"encrypted_private_key": "fake_key"})
         assert resp.status_code == 200
 
     async def test_unlink_last_team_from_group_fails(self, auth_client: AsyncClient):
@@ -233,11 +238,11 @@ class TestGroupEndpoints:
         resp = await auth_client.get(f"/groups/{group_id}")
         team_id = resp.json()["teams"][0]["id"]
 
-        resp = await auth_client.delete(f"/groups/{group_id}/teams/{team_id}")
+        resp = await auth_client.post(f"/groups/{group_id}/teams/{team_id}/unlink", json={"encrypted_private_key": "fake_key"})
         assert resp.status_code == 400  # Cannot remove last team
 
     async def test_unlink_group_not_found(self, auth_client: AsyncClient):
-        resp = await auth_client.delete("/groups/99999/teams/1")
+        resp = await auth_client.post("/groups/99999/teams/1/unlink", json={"encrypted_private_key": "fake_key"})
         assert resp.status_code in (403, 404)
 
 
@@ -276,6 +281,32 @@ class TestDeviceInstall:
     async def test_download_agent_not_found(self, client: AsyncClient):
         resp = await client.get("/device/agent/download?os=linux&arch=nonexistent")
         assert resp.status_code == 404
+
+    async def test_get_install_script_custom_agent_package_linux(self, client: AsyncClient):
+        old_package = settings.agent_package
+        settings.agent_package = "custom-agent-package-linux-test"
+        try:
+            resp = await client.get("/device/install?os=linux")
+            assert resp.status_code == 200
+            script = resp.text
+            assert "tool install --upgrade custom-agent-package-linux-test" in script
+            assert "tool install --upgrade radegast-edr-agent" not in script
+        finally:
+            settings.agent_package = old_package
+
+    async def test_get_install_script_custom_agent_package_windows(self, client: AsyncClient):
+        old_package = settings.agent_package
+        settings.agent_package = "custom-agent-package-windows-test"
+        try:
+            resp = await client.get("/device/install?os=windows")
+            assert resp.status_code == 200
+            script = resp.text
+            chunks = re.findall(r"\(echo\s+([A-Za-z0-9+/=]+)\)", script)
+            decoded_service = base64.b64decode("".join(chunks)).decode("utf-8")
+            assert '"tool", "install", "--upgrade", "--force", "custom-agent-package-windows-test"' in decoded_service
+            assert '"tool", "install", "--upgrade", "--force", "radegast-edr-agent"' not in decoded_service
+        finally:
+            settings.agent_package = old_package
 
 
 @pytest.mark.asyncio

@@ -81,6 +81,33 @@ class TestDeviceSigningKey:
         )
         assert resp.status_code == 403
 
+    async def test_set_encryption_key_triggers_group_needs_refresh(self, auth_client: AsyncClient):
+        group_id = await _get_default_group_id(auth_client)
+        
+        # Verify initial state of needs_refresh is False
+        resp = await auth_client.get(f"/groups/{group_id}")
+        assert resp.json()["private_key_needs_refresh"] is False
+
+        # Create device
+        resp = await auth_client.post("/devices/", json={"name": "Agent-EncryptionCheck", "group_id": group_id})
+        token = resp.json()["token"]
+
+        # Use separate client for device session
+        device_client = AsyncClient(transport=auth_client._transport, base_url="http://test")
+        await device_client.post("/auth/device/login", json={"token": token})
+
+        # Set encryption key
+        resp = await device_client.post(
+            "/devices/encryption-key",
+            json={"encryption_public_key": "test-encryption-key-data"},
+        )
+        assert resp.status_code == 200
+
+        # Verify group needs refresh is now True
+        resp = await auth_client.get(f"/groups/{group_id}")
+        assert resp.json()["private_key_needs_refresh"] is True
+
+
 
 @pytest.mark.asyncio
 class TestDeviceGroupAssignment:

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import insert, select
+from sqlalchemy import insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -286,6 +286,11 @@ async def set_encryption_key(
     if device.encryption_public_key is not None:
         raise HTTPException(status_code=400, detail="Encryption key already set")
     device.encryption_public_key = data.encryption_public_key
+
+    # Mark all groups this device belongs to as needing key refresh
+    group_ids_subquery = select(device_group_devices.c.device_group_id).where(device_group_devices.c.device_id == device.id)
+    await db.execute(update(DeviceGroup).where(DeviceGroup.id.in_(group_ids_subquery)).values(private_key_needs_refresh=True))
+
     await db.commit()
     return {"message": "Encryption key set"}
 

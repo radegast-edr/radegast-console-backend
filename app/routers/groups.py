@@ -25,6 +25,7 @@ from app.schemas.team import (
 from app.services.permissions import (
     get_group_recipient_public_keys,
     get_user_team_ids_transitive,
+    has_group_pack_write_permission,
     has_team_admin_permission,
     is_user_member_of_team_transitive,
 )
@@ -49,6 +50,8 @@ class DeviceGroupDetail(BaseModel):
     public_key: str | None = None
     private_key: str | None = None
     invitations: list[dict] = []
+    private_key_needs_refresh: bool = False
+    user_has_pack_write: bool = False
 
 
 async def _user_has_admin(group: DeviceGroup, user: User, db: AsyncSession) -> bool:
@@ -67,6 +70,7 @@ def _group_detail(group: DeviceGroup, invitations: list[TeamInvitation] | None =
         "name": group.name,
         "public_key": group.public_key,
         "private_key": group.private_key,
+        "private_key_needs_refresh": group.private_key_needs_refresh,
         "teams": [
             {
                 "id": t.id,
@@ -128,7 +132,30 @@ async def list_groups(user: User = Depends(get_current_user), db: AsyncSession =
     for team in teams:
         for group in team.groups:
             if group.id not in seen:
-                seen[group.id] = {"id": group.id, "name": group.name}
+                has_write = await has_group_pack_write_permission(group.id, user.id, db)
+                resp = DeviceGroupResponse.model_validate(group)
+                resp.user_has_pack_write = has_write
+                seen[group.id] = resp
+    return list(seen.values())
+
+
+@router.get("/needs-refresh", response_model=list[DeviceGroupResponse])
+async def list_groups_needing_refresh(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """List all device groups that need a private key refresh and are visible to the current user."""
+    team_ids = await get_user_team_ids_transitive(user.id, db)
+    if not team_ids:
+        return []
+    result = await db.execute(
+        select(DeviceGroup).join(DeviceGroup.teams).where(Team.id.in_(list(team_ids)), DeviceGroup.private_key_needs_refresh)
+    )
+    groups = result.scalars().all()
+    seen = {}
+    for group in groups:
+        if group.id not in seen:
+            has_write = await has_group_pack_write_permission(group.id, user.id, db)
+            resp = DeviceGroupResponse.model_validate(group)
+            resp.user_has_pack_write = has_write
+            seen[group.id] = resp
     return list(seen.values())
 
 
@@ -165,7 +192,10 @@ async def get_group(
         inv_result = await db.execute(select(TeamInvitation).where(TeamInvitation.team_id.in_(team_ids)))
         invitations = inv_result.scalars().all()
 
-    return _group_detail(group, invitations)
+    has_pack_write = await has_group_pack_write_permission(group.id, user.id, db)
+    detail_dict = _group_detail(group, invitations)
+    detail_dict["user_has_pack_write"] = has_pack_write
+    return detail_dict
 
 
 @router.patch("/{group_id}", response_model=DeviceGroupResponse)
@@ -187,7 +217,10 @@ async def rename_group(
 
     group.name = data.name
     await db.commit()
-    return {"id": group.id, "name": group.name}
+    has_write = await has_group_pack_write_permission(group.id, user.id, db)
+    resp = DeviceGroupResponse.model_validate(group)
+    resp.user_has_pack_write = has_write
+    return resp
 
 
 @router.post("/{group_id}/teams/{team_id}/unlink", response_model=MessageResponse)
@@ -218,6 +251,7 @@ async def unlink_group_from_team(
         )
     )
     group.private_key = data.encrypted_private_key
+    group.private_key_needs_refresh = True
     await db.commit()
     return {"message": "Group unlinked from team"}
 
@@ -269,6 +303,7 @@ async def add_device_to_group(
     if device not in group.devices:
         group.devices.append(device)
         group.private_key = data.encrypted_private_key
+        group.private_key_needs_refresh = True
         await db.commit()
 
     return {"message": "Device added to group"}
@@ -305,6 +340,7 @@ async def remove_device_from_group(
     if device in group.devices:
         group.devices.remove(device)
         group.private_key = data.encrypted_private_key
+        group.private_key_needs_refresh = True
         await db.commit()
 
     return {"message": "Device removed from group"}
@@ -354,6 +390,7 @@ async def setup_group_keys(
 
     group.public_key = data.public_key
     group.private_key = data.private_key
+    group.private_key_needs_refresh = False
     await db.commit()
     return {"message": "Group keys set up successfully"}
 

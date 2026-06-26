@@ -29,9 +29,11 @@ from app.schemas.team import (
 )
 from app.services.email import send_invite_email
 from app.services.permissions import (
+    get_team_members_transitive,
     get_user_team_ids_transitive,
     has_team_admin_permission,
     is_user_member_of_team_transitive,
+    mark_team_groups_refresh,
 )
 
 
@@ -196,6 +198,7 @@ async def update_team(
         team.permission_logs = data.permission_logs
     if "managing_team_id" in data.model_fields_set:
         team.managing_team_id = data.managing_team_id
+        await mark_team_groups_refresh(team.id, db)
 
     await db.commit()
     await db.refresh(team)
@@ -252,6 +255,9 @@ async def invite_to_team(
 
     # Add user to the team immediately
     team.users.append(invited_user)
+
+    # Mark linked groups for key refresh
+    await mark_team_groups_refresh(team_id, db)
 
     # Create TeamInvitation record to mark it as pending
     invitation = TeamInvitation(team_id=team_id, user_id=invited_user.id, email=data.email)
@@ -331,10 +337,10 @@ async def get_team_recipient_public_keys(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    team = await _get_user_team(team_id, user, db)
+    await _get_user_team(team_id, user, db)
     from app.models.public_key import PublicKey
 
-    user_ids = [u.id for u in team.users]
+    user_ids = list(await get_team_members_transitive(team_id, db))
     if not user_ids:
         return []
     res = await db.execute(select(PublicKey).where(PublicKey.user_id.in_(user_ids), PublicKey.key_type != "recovery"))
@@ -368,6 +374,7 @@ async def remove_member(
         await db.delete(invitation)
 
     team.users.remove(target)
+    await mark_team_groups_refresh(team_id, db)
 
     # Update group keys
     if data.group_keys:

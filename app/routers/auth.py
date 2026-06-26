@@ -368,7 +368,7 @@ async def accept_invite(token: str, db: AsyncSession = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found. Please register first.")
 
-    result = await db.execute(select(Team).options(selectinload(Team.users)).where(Team.id == data["team_id"]))
+    result = await db.execute(select(Team).options(selectinload(Team.users), selectinload(Team.groups)).where(Team.id == data["team_id"]))
     team = result.scalar_one_or_none()
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
@@ -383,6 +383,9 @@ async def accept_invite(token: str, db: AsyncSession = Depends(get_db)):
         return {"message": "Already a member of this team"}
 
     team.users.append(user)
+    from app.services.permissions import mark_team_groups_refresh
+
+    await mark_team_groups_refresh(team.id, db)
     # Delete pending invitation
     result_inv = await db.execute(select(TeamInvitation).where(TeamInvitation.team_id == team.id, TeamInvitation.user_id == user.id))
     invitation = result_inv.scalar_one_or_none()

@@ -204,9 +204,10 @@ async def get_group_recipient_public_keys(group_id: int, db: AsyncSession, exclu
     # Add users' public keys (non-recovery)
     user_ids = set()
     for team in group.teams:
-        for user in team.users:
-            if exclude_user_id is None or user.id != exclude_user_id:
-                user_ids.add(user.id)
+        team_user_ids = await get_team_members_transitive(team.id, db)
+        for uid in team_user_ids:
+            if exclude_user_id is None or uid != exclude_user_id:
+                user_ids.add(uid)
 
     if user_ids:
         res = await db.execute(select(PublicKey).where(PublicKey.user_id.in_(list(user_ids)), PublicKey.key_type != "recovery"))
@@ -214,3 +215,47 @@ async def get_group_recipient_public_keys(group_id: int, db: AsyncSession, exclu
             pub_keys.add(pk.public_key)
 
     return list(pub_keys)
+
+
+async def has_group_pack_write_permission(group_id: int, user_id: int, db: AsyncSession) -> bool:
+    """
+    Check if the user has pack write permission on the given device group
+    (via any team linked to the group).
+    """
+    from app.models.device_group import DeviceGroup
+
+    result = await db.execute(select(DeviceGroup).options(selectinload(DeviceGroup.teams)).where(DeviceGroup.id == group_id))
+    group = result.scalar_one_or_none()
+    if not group:
+        return False
+    for team in group.teams:
+        if await has_team_pack_permission(team.id, user_id, db):
+            return True
+    return False
+
+
+async def mark_team_groups_refresh(team_id: int, db: AsyncSession) -> None:
+    """
+    Recursively find all teams managed by the given team (direct and transitively),
+    and mark all their linked groups for private key refresh.
+    """
+    managed_team_ids = set()
+    queue = [team_id]
+    while queue:
+        curr_id = queue.pop(0)
+        if curr_id in managed_team_ids:
+            continue
+        managed_team_ids.add(curr_id)
+        res = await db.execute(select(Team.id).where(Team.managing_team_id == curr_id))
+        sub_ids = res.scalars().all()
+        for sid in sub_ids:
+            if sid not in managed_team_ids:
+                queue.append(sid)
+
+    if managed_team_ids:
+        from app.models.device_group import DeviceGroup
+
+        result = await db.execute(select(DeviceGroup).join(DeviceGroup.teams).where(Team.id.in_(list(managed_team_ids))))
+        groups = result.scalars().all()
+        for g in groups:
+            g.private_key_needs_refresh = True

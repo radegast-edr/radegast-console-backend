@@ -418,3 +418,152 @@ class TestDeviceGroups:
         resp = await client.put(f"/teams/{team3_id}", json={"name": "Team 3 Updated"})
         assert resp.status_code == 200
         assert resp.json()["name"] == "Team 3 Updated"
+
+    async def test_private_key_needs_refresh_flow(self, client: AsyncClient, auth_client: AsyncClient):
+        from app.services.auth import create_signed_token
+        # Create a new user to invite
+        user_email = "invitee-refresh@example.com"
+        await client.post(
+            "/auth/register",
+            json={"email": user_email, "password": "Password123!"},
+        )
+        token = create_signed_token({"email": user_email}, salt="email-verify")
+        await client.get(f"/auth/verify?token={token}")
+
+        # Get default team and its linked group
+        resp = await auth_client.get("/teams/")
+        teams = resp.json()
+        team_id = teams[0]["id"]
+
+        resp = await auth_client.get(f"/teams/{team_id}/groups")
+        groups = resp.json()
+        group_id = groups[0]["id"]
+
+        # Initially, private_key_needs_refresh should be False
+        assert groups[0]["private_key_needs_refresh"] is False
+
+        # Invite user to team
+        resp = await auth_client.post(
+            f"/teams/{team_id}/invite",
+            json={"email": user_email},
+        )
+        assert resp.status_code == 200
+
+        # Now, private_key_needs_refresh should be True
+        resp = await auth_client.get(f"/groups/{group_id}")
+        assert resp.status_code == 200
+        assert resp.json()["private_key_needs_refresh"] is True
+
+        # Perform keys setup to reset it
+        resp = await auth_client.post(
+            f"/groups/{group_id}/keys",
+            json={"public_key": "new-pub", "private_key": "new-priv"},
+        )
+        assert resp.status_code == 200
+
+        # Now, private_key_needs_refresh should be False again
+        resp = await auth_client.get(f"/groups/{group_id}")
+        assert resp.status_code == 200
+        assert resp.json()["private_key_needs_refresh"] is False
+
+    async def test_transitive_private_key_needs_refresh_flow(self, client: AsyncClient, auth_client: AsyncClient):
+        from app.services.auth import create_signed_token
+
+        # Get Team 1 (default) ID
+        resp = await auth_client.get("/teams/")
+        teams = resp.json()
+        team1_id = teams[0]["id"]
+
+        # Create Team 2 managed by Team 1
+        resp = await auth_client.post(
+            "/teams/",
+            json={"name": "Team 2 Managed", "permission_admin": None, "managing_team_id": team1_id},
+        )
+        assert resp.status_code == 200
+        team2_id = resp.json()["id"]
+
+        # Create a group for Team 2 Managed
+        resp = await auth_client.post(
+            f"/teams/{team2_id}/groups",
+            json={"name": "Team 2 Group"},
+        )
+        assert resp.status_code == 200
+        group_id = resp.json()["id"]
+
+        # Initially, private_key_needs_refresh should be False
+        resp = await auth_client.get(f"/groups/{group_id}")
+        assert resp.json()["private_key_needs_refresh"] is False
+
+        # Create a new user and invite them to Team 1
+        user_email = "transit-invitee@example.com"
+        await client.post(
+            "/auth/register",
+            json={"email": user_email, "password": "Password123!"},
+        )
+        token = create_signed_token({"email": user_email}, salt="email-verify")
+        await client.get(f"/auth/verify?token={token}")
+
+        resp = await auth_client.post(
+            f"/teams/{team1_id}/invite",
+            json={"email": user_email},
+        )
+        assert resp.status_code == 200
+
+        # Verify that Team 2 Group's private_key_needs_refresh is now True!
+        resp = await auth_client.get(f"/groups/{group_id}")
+        assert resp.status_code == 200
+        assert resp.json()["private_key_needs_refresh"] is True
+
+    async def test_groups_needs_refresh_endpoint(self, client: AsyncClient, auth_client: AsyncClient):
+        from app.services.auth import create_signed_token
+
+        # Get default team and its linked group
+        resp = await auth_client.get("/teams/")
+        teams = resp.json()
+        team_id = teams[0]["id"]
+
+        resp = await auth_client.get(f"/teams/{team_id}/groups")
+        groups = resp.json()
+        group_id = groups[0]["id"]
+
+        # Initially, the needs-refresh list should be empty
+        resp = await auth_client.get("/groups/needs-refresh")
+        assert resp.status_code == 200
+        assert len(resp.json()) == 0
+
+        # Create a new user to invite
+        user_email = "invitee-refresh-endpoint@example.com"
+        await client.post(
+            "/auth/register",
+            json={"email": user_email, "password": "Password123!"},
+        )
+        token = create_signed_token({"email": user_email}, salt="email-verify")
+        await client.get(f"/auth/verify?token={token}")
+
+        # Invite user to team, triggering refresh flag
+        resp = await auth_client.post(
+            f"/teams/{team_id}/invite",
+            json={"email": user_email},
+        )
+        assert resp.status_code == 200
+
+        # Now, the group should be returned in needs-refresh list
+        resp = await auth_client.get("/groups/needs-refresh")
+        assert resp.status_code == 200
+        needs_refresh_list = resp.json()
+        assert len(needs_refresh_list) == 1
+        assert needs_refresh_list[0]["id"] == group_id
+
+        # Perform keys setup to reset it
+        resp = await auth_client.post(
+            f"/groups/{group_id}/keys",
+            json={"public_key": "new-pub", "private_key": "new-priv"},
+        )
+        assert resp.status_code == 200
+
+        # The needs-refresh list should be empty again
+        resp = await auth_client.get("/groups/needs-refresh")
+        assert resp.status_code == 200
+        assert len(resp.json()) == 0
+
+

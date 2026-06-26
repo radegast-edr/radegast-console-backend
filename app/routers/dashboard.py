@@ -14,7 +14,10 @@ from app.schemas.device import DeviceResponse
 from app.schemas.log import LogResponse
 from app.schemas.team import DeviceGroupResponse, TeamResponse
 from app.services.logs import filter_logs
-from app.services.permissions import get_user_team_ids_transitive
+from app.services.permissions import (
+    get_user_team_ids_transitive,
+    has_group_pack_write_permission,
+)
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -65,7 +68,12 @@ async def get_dashboard_data(
             if g.id not in groups_dict:
                 groups_dict[g.id] = g
 
-    groups_mapped = [DeviceGroupResponse(id=g.id, name=g.name) for g in groups_dict.values()]
+    groups_mapped = []
+    for g in groups_dict.values():
+        has_write = await has_group_pack_write_permission(g.id, user.id, db)
+        resp = DeviceGroupResponse.model_validate(g)
+        resp.user_has_pack_write = has_write
+        groups_mapped.append(resp)
 
     devices_dict = {}
     for g in groups_dict.values():

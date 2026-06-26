@@ -278,6 +278,7 @@ def main():
         print("Running installer...")
         install_env = env.copy()
         install_env["RADEGAST_TOKEN"] = device_token
+        install_env["RADEGAST_AGENT_INIT_WAIT_SECONDS"] = "0"
 
         # Create a fake systemctl in temp directory to bypass systemd requirement
         import shutil
@@ -370,6 +371,7 @@ exec "$@"
             agent_env["RADEGAST_AGENT_RULES_DIR"] = "/etc/rustinel/rules/"
             agent_env["RADEGAST_AGENT_ALERTS_DIR"] = "/var/log/rustinel/"
             agent_env["RADEGAST_AGENT_STATE_DIR"] = "/opt/radegast/state/"
+            agent_env["RADEGAST_AGENT_INIT_WAIT_SECONDS"] = "0"
             agent_env["PATH"] = "/opt/radegast/home/.local/bin:" + agent_env.get("PATH", "")
 
             # Run agent directly as the current user

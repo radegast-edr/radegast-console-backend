@@ -231,6 +231,13 @@ def main():
     # Construct PATH containing uv.exe for the agent service
     service_path = f"{python_dir}\\Scripts;{os.environ.get('PATH', '')}"
 
+    init_wait = os.environ.get("RADEGAST_AGENT_INIT_WAIT_SECONDS")
+    init_wait_xml = (
+        f'\n      <env name="RADEGAST_AGENT_INIT_WAIT_SECONDS" value="{init_wait}" />'
+        if init_wait is not None
+        else ""
+    )
+
     agent_xml = f"""<service>
       <id>RadegastAgent</id>
       <name>Radegast EDR Agent</name>
@@ -251,7 +258,7 @@ def main():
       <env name="RADEGAST_AGENT_RUSTINEL_CONFIG" value="{agent_dir}\\config.toml" />
       <env name="RADEGAST_AGENT_RULES_DIR" value="{rules_dir}\\" />
       <env name="RADEGAST_AGENT_ALERTS_DIR" value="{logs_dir}\\" />
-      <env name="RADEGAST_AGENT_STATE_DIR" value="{state_dir}\\" />
+      <env name="RADEGAST_AGENT_STATE_DIR" value="{state_dir}\\" />{init_wait_xml}
       <onfailure action="restart" delay="5000" />
       <stopparentfirst>true</stopparentfirst>
       <log mode="roll" logpath="{logs_dir}" />

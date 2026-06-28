@@ -16,6 +16,7 @@ from app.schemas.team import DeviceGroupResponse, TeamResponse
 from app.services.logs import filter_logs
 from app.services.permissions import (
     get_user_team_ids_transitive,
+    has_group_admin_permission,
     has_group_pack_write_permission,
 )
 
@@ -71,8 +72,10 @@ async def get_dashboard_data(
     groups_mapped = []
     for g in groups_dict.values():
         has_write = await has_group_pack_write_permission(g.id, user.id, db)
+        has_admin = await has_group_admin_permission(g.id, user.id, db)
         resp = DeviceGroupResponse.model_validate(g)
         resp.user_has_pack_write = has_write
+        resp.user_has_admin = has_admin
         groups_mapped.append(resp)
 
     devices_dict = {}

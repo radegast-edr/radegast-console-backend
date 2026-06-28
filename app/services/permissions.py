@@ -259,3 +259,20 @@ async def mark_team_groups_refresh(team_id: int, db: AsyncSession) -> None:
         groups = result.scalars().all()
         for g in groups:
             g.private_key_needs_refresh = True
+
+
+async def has_group_admin_permission(group_id: int, user_id: int, db: AsyncSession) -> bool:
+    """
+    Check if the user has admin permission on the given device group
+    (via any team linked to the group).
+    """
+    from app.models.device_group import DeviceGroup
+
+    result = await db.execute(select(DeviceGroup).options(selectinload(DeviceGroup.teams)).where(DeviceGroup.id == group_id))
+    group = result.scalar_one_or_none()
+    if not group:
+        return False
+    for team in group.teams:
+        if await has_team_admin_permission(team.id, user_id, db):
+            return True
+    return False

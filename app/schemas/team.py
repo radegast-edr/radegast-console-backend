@@ -47,6 +47,7 @@ class DeviceGroupResponse(BaseModel):
     public_key: str | None = None
     private_key_needs_refresh: bool = False
     user_has_pack_write: bool = False
+    user_has_admin: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -59,6 +60,7 @@ class DeviceGroupDetailResponse(BaseModel):
     public_key: str | None = None
     private_key_needs_refresh: bool = False
     user_has_pack_write: bool = False
+    user_has_admin: bool = False
     # devices imported lazily to avoid circular import — built manually in router
 
     model_config = {"from_attributes": True}

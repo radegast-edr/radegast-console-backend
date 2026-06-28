@@ -31,6 +31,8 @@ from app.services.email import send_invite_email
 from app.services.permissions import (
     get_team_members_transitive,
     get_user_team_ids_transitive,
+    has_group_admin_permission,
+    has_group_pack_write_permission,
     has_team_admin_permission,
     is_user_member_of_team_transitive,
     mark_team_groups_refresh,
@@ -398,7 +400,15 @@ async def list_team_groups(
     await _get_user_team(team_id, user, db)
     result = await db.execute(select(DeviceGroup).options(selectinload(DeviceGroup.teams)).where(DeviceGroup.teams.any(Team.id == team_id)))
     groups = result.scalars().all()
-    return groups
+    groups_mapped = []
+    for g in groups:
+        has_write = await has_group_pack_write_permission(g.id, user.id, db)
+        has_admin = await has_group_admin_permission(g.id, user.id, db)
+        resp = DeviceGroupResponse.model_validate(g)
+        resp.user_has_pack_write = has_write
+        resp.user_has_admin = has_admin
+        groups_mapped.append(resp)
+    return groups_mapped
 
 
 @router.post("/{team_id}/groups", response_model=DeviceGroupResponse)
@@ -418,7 +428,13 @@ async def create_team_group(
     team.groups.append(group)
     await db.commit()
     await db.refresh(group)
-    return group
+
+    has_write = await has_group_pack_write_permission(group.id, user.id, db)
+    has_admin = await has_group_admin_permission(group.id, user.id, db)
+    resp = DeviceGroupResponse.model_validate(group)
+    resp.user_has_pack_write = has_write
+    resp.user_has_admin = has_admin
+    return resp
 
 
 @router.post("/{team_id}/groups/{group_id}/link", response_model=MessageResponse)

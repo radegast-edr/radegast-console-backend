@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -25,6 +25,7 @@ from app.schemas.team import (
 from app.services.permissions import (
     get_group_recipient_public_keys,
     get_user_team_ids_transitive,
+    has_group_admin_permission,
     has_group_pack_write_permission,
     has_team_admin_permission,
     is_user_member_of_team_transitive,
@@ -52,6 +53,7 @@ class DeviceGroupDetail(BaseModel):
     invitations: list[dict] = []
     private_key_needs_refresh: bool = False
     user_has_pack_write: bool = False
+    user_has_admin: bool = False
 
 
 async def _user_has_admin(group: DeviceGroup, user: User, db: AsyncSession) -> bool:
@@ -133,8 +135,10 @@ async def list_groups(user: User = Depends(get_current_user), db: AsyncSession =
         for group in team.groups:
             if group.id not in seen:
                 has_write = await has_group_pack_write_permission(group.id, user.id, db)
+                has_admin = await has_group_admin_permission(group.id, user.id, db)
                 resp = DeviceGroupResponse.model_validate(group)
                 resp.user_has_pack_write = has_write
+                resp.user_has_admin = has_admin
                 seen[group.id] = resp
     return list(seen.values())
 
@@ -153,8 +157,10 @@ async def list_groups_needing_refresh(user: User = Depends(get_current_user), db
     for group in groups:
         if group.id not in seen:
             has_write = await has_group_pack_write_permission(group.id, user.id, db)
+            has_admin = await has_group_admin_permission(group.id, user.id, db)
             resp = DeviceGroupResponse.model_validate(group)
             resp.user_has_pack_write = has_write
+            resp.user_has_admin = has_admin
             seen[group.id] = resp
     return list(seen.values())
 
@@ -195,6 +201,7 @@ async def get_group(
     has_pack_write = await has_group_pack_write_permission(group.id, user.id, db)
     detail_dict = _group_detail(group, invitations)
     detail_dict["user_has_pack_write"] = has_pack_write
+    detail_dict["user_has_admin"] = await has_group_admin_permission(group.id, user.id, db)
     return detail_dict
 
 
@@ -218,8 +225,10 @@ async def rename_group(
     group.name = data.name
     await db.commit()
     has_write = await has_group_pack_write_permission(group.id, user.id, db)
+    has_admin = await has_group_admin_permission(group.id, user.id, db)
     resp = DeviceGroupResponse.model_validate(group)
     resp.user_has_pack_write = has_write
+    resp.user_has_admin = has_admin
     return resp
 
 

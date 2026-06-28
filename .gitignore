@@ -24,3 +24,4 @@ web/.env*
 *.pyo
 *.pyd
 docs/_build
+infra/

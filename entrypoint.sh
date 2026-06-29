@@ -1,5 +1,6 @@
 #!/bin/sh
 set -e
+cd /app
 
 apply_migrations=0
 

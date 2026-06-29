@@ -40,8 +40,8 @@ COPY --from=builder /src/migrations ./migrations
 COPY --from=builder /src/alembic.ini /src/apply-migrations.py /src/entrypoint.sh ./
 RUN chmod +x entrypoint.sh apply-migrations.py
 
-# Install the wheel package inside the virtual environment
-RUN uv pip install --python /app/.venv *.whl
+# Install the wheel package with MySQL support inside the virtual environment
+RUN uv pip install --python /app/.venv "radegast-edr-console[mysql]" --find-links .
 
 # Expose backend port
 EXPOSE 8000

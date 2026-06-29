@@ -66,7 +66,26 @@ Three named volumes are created automatically:
 
 The API is available at [http://localhost:8000](http://localhost:8000) and the interactive docs at [http://localhost:8000/docs](http://localhost:8000/docs).
 
+### Using MySQL as Database
+
+By default, the application runs on SQLite. If you want to use MySQL or MariaDB:
+1. Ensure your MySQL database is created.
+2. Run the Docker container with `RADEGAST_DATABASE_URL` pointed to your database using the `mysql+aiomysql://` driver (the Docker image comes pre-installed with `mysql` extra/support):
+   ```bash
+   docker run -d \
+     --name radegast-edr \
+     -p 8000:8000 \
+     -e RADEGAST_SECRET_KEY=<your-secret> \
+     -e RADEGAST_DATABASE_URL="mysql+aiomysql://user:password@mysql-host:3306/db_name" \
+     -e RADEGAST_BASE_URL=https://your.domain \
+     -e RADEGAST_CORS_ORIGINS=https://your.domain \
+     -v radegast_uploads:/app/data/uploads \
+     -v radegast_releases:/app/data/releases \
+     docker.io/radegastedr/console:latest
+   ```
+
 ---
+
 
 ## Local Development
 
@@ -80,8 +99,13 @@ The API is available at [http://localhost:8000](http://localhost:8000) and the i
 1. Install project dependencies:
    ```bash
    uv sync
+   # Or to install with MySQL support:
+   # uv sync --group mysql
+   
    # Or using standard pip with a virtual environment:
    # python -m venv .venv && source .venv/bin/activate && pip install .
+   # Or with MySQL support:
+   # pip install .[mysql]
    ```
 
 2. Install dev tools (test runner etc.):

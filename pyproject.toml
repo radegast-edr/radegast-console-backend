@@ -43,6 +43,9 @@ docs = [
     "myst-parser>=2.0.0",
     "linkify>=1.0.0",
 ]
+mysql = [
+    "aiomysql>=0.2.0",
+]
 
 [dependency-groups]
 dev = [
@@ -50,6 +53,10 @@ dev = [
     "ruff>=0.15.16",
 ]
 docs = ["radegast-edr-console[docs]"]
+mysql = [
+    "radegast-edr-console[mysql]",
+]
+
 
 [tool.ruff]
 line-length = 140

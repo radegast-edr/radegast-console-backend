@@ -3,6 +3,12 @@ Radegast EDR Documentation
 
 Radegast EDR is a comprehensive Endpoint Detection and Response (EDR) platform that helps you monitor, detect, and respond to security threats across your organization's endpoints.
 
+Quickstarts
+-----------
+
+* **User Quickstart (Step-by-step guide with screenshots)**: `First Steps with Radegast <https://radegast.app/blog/2026/06/16/first-steps-with-radegast/>`_
+* **Backend Quickstart**: :doc:`README` (specifically the Quick Start section)
+
 .. toctree::
    :maxdepth: 2
    :caption: Getting Started

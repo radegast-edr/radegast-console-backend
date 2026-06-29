@@ -132,6 +132,6 @@ This indicates that the Radegast console backend is running in development fallb
 
 ### How can I connect the console to an SMTP server that does not support STARTTLS?
 By default, the backend attempts to establish a secure connection using the STARTTLS extension. If your SMTP server (for example, a local `smtp4dev` instance used for development) does not support STARTTLS, you can disable it by setting the following environment variable on the backend container:
-```env
+```ini
 RADEGAST_SMTP_STARTTLS=false
 ```

@@ -2,6 +2,11 @@
 
 Radegast EDR is a lightweight, privacy-focused Endpoint Detection and Response platform **perfect for smaller teams, home labbers, and families**. With complete end-to-end encryption (E2EE) using age encryption, your log data remains private and secure — even from the server itself. **No custom infrastructure is required**: the built-in SQLite database and self-contained deployment make it easy to get started without complex setup. You don't need to host any custom infrastructure if you don't want to.
 
+### Quickstarts
+
+- **User Quickstart (Step-by-step guide with screenshots)**: [First Steps with Radegast](https://radegast.app/blog/2026/06/16/first-steps-with-radegast/)
+- **Backend Quickstart**: [Deployment & Quick Start](#quick-start)
+
 Built with FastAPI and SQLAlchemy, the backend handles device authorization, user configuration packs, encrypted log storage, alert status tracking, and key/session management.
 
 ## Features

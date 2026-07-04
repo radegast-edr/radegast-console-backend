@@ -30,6 +30,7 @@ class UserResponse(BaseModel):
     api_keys_enabled: bool = False
     notification_level: str = "medium"
     ai_analysis_tool: str = "lumo-guest"
+    onboarding_completed: bool = False
 
     model_config = {"from_attributes": True}
 

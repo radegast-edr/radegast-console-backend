@@ -83,7 +83,7 @@ class TestDeviceSigningKey:
 
     async def test_set_encryption_key_triggers_group_needs_refresh(self, auth_client: AsyncClient):
         group_id = await _get_default_group_id(auth_client)
-        
+
         # Verify initial state of needs_refresh is False
         resp = await auth_client.get(f"/groups/{group_id}")
         assert resp.json()["private_key_needs_refresh"] is False
@@ -106,7 +106,6 @@ class TestDeviceSigningKey:
         # Verify group needs refresh is now True
         resp = await auth_client.get(f"/groups/{group_id}")
         assert resp.json()["private_key_needs_refresh"] is True
-
 
 
 @pytest.mark.asyncio

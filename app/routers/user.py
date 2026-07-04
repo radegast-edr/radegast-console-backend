@@ -382,7 +382,15 @@ async def me(user: User = Depends(get_current_user), db: AsyncSession = Depends(
         extended_edr_enabled=user.extended_edr_enabled,
         api_keys_enabled=user.api_keys_enabled,
         ai_analysis_tool=user.ai_analysis_tool,
+        onboarding_completed=user.onboarding_completed,
     )
+
+
+@router.post("/onboarding-complete")
+async def complete_onboarding(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    user.onboarding_completed = True
+    await db.commit()
+    return {"message": "Onboarding completed"}
 
 
 @router.post("/change-password")

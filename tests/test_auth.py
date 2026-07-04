@@ -184,6 +184,25 @@ class TestMe:
         assert resp.status_code == 401
 
 
+@pytest.mark.asyncio
+class TestOnboarding:
+    async def test_onboarding_flow(self, auth_client: AsyncClient):
+        # 1. Get current status, should be false
+        resp = await auth_client.get("/user/me")
+        assert resp.status_code == 200
+        assert resp.json()["onboarding_completed"] is False
+
+        # 2. Complete onboarding
+        resp = await auth_client.post("/user/onboarding-complete")
+        assert resp.status_code == 200
+        assert resp.json() == {"message": "Onboarding completed"}
+
+        # 3. Check status again, should be true
+        resp = await auth_client.get("/user/me")
+        assert resp.status_code == 200
+        assert resp.json()["onboarding_completed"] is True
+
+
 def helper_aes_encrypt(plaintext: str, key_hex: str) -> str:
     import json
     import os
@@ -874,6 +893,7 @@ class TestTokenAuth:
 class TestPasswordReset:
     async def test_password_reset_request_success(self, client: AsyncClient, registered_user, db_session):
         from app.main import app
+
         app.state.rate_limits.clear()
 
         # Ensure user is verified
@@ -895,6 +915,7 @@ class TestPasswordReset:
 
     async def test_password_reset_request_non_existent(self, client: AsyncClient):
         from app.main import app
+
         app.state.rate_limits.clear()
 
         resp = await client.post(
@@ -906,6 +927,7 @@ class TestPasswordReset:
 
     async def test_password_reset_confirm_success(self, client: AsyncClient, registered_user, db_session):
         from app.main import app
+
         app.state.rate_limits.clear()
 
         from sqlalchemy import select
@@ -934,6 +956,7 @@ class TestPasswordReset:
 
     async def test_password_reset_confirm_invalid_token(self, client: AsyncClient):
         from app.main import app
+
         app.state.rate_limits.clear()
 
         resp = await client.post(
@@ -942,4 +965,3 @@ class TestPasswordReset:
         )
         assert resp.status_code == 400
         assert "Invalid or expired password reset token" in resp.json()["detail"]
-

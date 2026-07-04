@@ -61,8 +61,9 @@ class TestTeamCRUD:
 @pytest.mark.asyncio
 class TestTeamInvitation:
     async def test_invite_user(self, client: AsyncClient, auth_client: AsyncClient):
+        from unittest.mock import AsyncMock, patch
+
         from app.services.auth import create_signed_token
-        from unittest.mock import patch, AsyncMock
 
         # Register the invited user first
         await client.post(
@@ -75,7 +76,7 @@ class TestTeamInvitation:
         resp = await auth_client.get("/teams/")
         teams = resp.json()
         team_id = teams[0]["id"]
-        
+
         with patch("app.routers.teams.send_invite_email", new_callable=AsyncMock) as mock_send:
             resp = await auth_client.post(
                 f"/teams/{team_id}/invite",
@@ -86,6 +87,7 @@ class TestTeamInvitation:
 
     async def test_invite_unregistered_user_fails_silently(self, auth_client: AsyncClient):
         from app.routers.teams import FAILED_INVITE_ATTEMPTS
+
         FAILED_INVITE_ATTEMPTS.clear()
 
         resp = await auth_client.get("/teams/")
@@ -421,6 +423,7 @@ class TestDeviceGroups:
 
     async def test_private_key_needs_refresh_flow(self, client: AsyncClient, auth_client: AsyncClient):
         from app.services.auth import create_signed_token
+
         # Create a new user to invite
         user_email = "invitee-refresh@example.com"
         await client.post(
@@ -565,5 +568,3 @@ class TestDeviceGroups:
         resp = await auth_client.get("/groups/needs-refresh")
         assert resp.status_code == 200
         assert len(resp.json()) == 0
-
-

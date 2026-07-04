@@ -6,7 +6,7 @@
 .venv/
 venv/
 *.db
-*.db-journal
+*.db-*
 *.sqlite
 .pytest_cache/
 tests/

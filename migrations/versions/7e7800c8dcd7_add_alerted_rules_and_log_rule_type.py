@@ -91,13 +91,22 @@ def downgrade() -> None:
         return any(idx['name'] == index_name for idx in inspector.get_indexes(table_name))
 
     # Remove alerted_rule_id and rule_type from logs
-    with op.batch_alter_table('logs', schema=None) as batch_op:
+    if 'logs' in existing_tables:
         if index_exists('logs', 'ix_logs_alerted_rule_id'):
-            batch_op.drop_index('ix_logs_alerted_rule_id')
-        if column_exists('logs', 'alerted_rule_id'):
-            batch_op.drop_column('alerted_rule_id')
-        if column_exists('logs', 'rule_type'):
-            batch_op.drop_column('rule_type')
+            try:
+                op.drop_index('ix_logs_alerted_rule_id', table_name='logs')
+            except Exception:
+                pass
+
+        with op.batch_alter_table('logs', schema=None) as batch_op:
+            try:
+                batch_op.drop_constraint('fk_logs_alerted_rule_id', type_='foreignkey')
+            except Exception:
+                pass
+            if column_exists('logs', 'alerted_rule_id'):
+                batch_op.drop_column('alerted_rule_id')
+            if column_exists('logs', 'rule_type'):
+                batch_op.drop_column('rule_type')
 
     # Drop alerted_rules table
     if 'alerted_rules' in inspector.get_table_names():

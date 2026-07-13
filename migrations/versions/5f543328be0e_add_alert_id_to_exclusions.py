@@ -41,6 +41,8 @@ def downgrade() -> None:
         columns = [col['name'] for col in inspector.get_columns('exclusions')]
         if 'alert_id' in columns:
             with op.batch_alter_table('exclusions', schema=None) as batch_op:
-                # For SQLite/batch, we may need to drop constraint by name, or drop_column handles it.
-                # In batch mode, batch_op.drop_column handles FK cleanup.
+                try:
+                    batch_op.drop_constraint('fk_exclusions_alert_id_logs', type_='foreignkey')
+                except Exception:
+                    pass
                 batch_op.drop_column('alert_id')

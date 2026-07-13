@@ -49,10 +49,20 @@ def downgrade() -> None:
     if 'logs' in inspector.get_table_names():
         columns = [col['name'] for col in inspector.get_columns('logs')]
         indexes = [idx['name'] for idx in inspector.get_indexes('logs')]
+        
+        # Drop index first to prevent recreate errors during batch alter
         if 'ix_logs_excluded_by' in indexes:
-            op.drop_index('ix_logs_excluded_by', table_name='logs')
+            try:
+                op.drop_index('ix_logs_excluded_by', table_name='logs')
+            except Exception:
+                pass
+        
         if 'excluded_by' in columns:
             with op.batch_alter_table('logs', schema=None) as batch_op:
+                try:
+                    batch_op.drop_constraint('fk_logs_excluded_by_exclusions', type_='foreignkey')
+                except Exception:
+                    pass
                 batch_op.drop_column('excluded_by')
                 
     if 'exclusions' in inspector.get_table_names():

@@ -87,13 +87,45 @@ jobs:
       - name: Run integration tests
         run: uv run python tests/integration_test.py
 
+  test-migrations:
+    name: Run DB migrations test (SQLite & MySQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_DATABASE: radegast_test
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies (dev & mysql)
+        run: uv sync --frozen --dev --all-extras
+
+      - name: Run migrations test
+        env:
+          RADEGAST_TEST_MYSQL_URL: "mysql+aiomysql://root@127.0.0.1:3306/radegast_test"
+        run: uv run pytest tests/test_migrations.py -v
+
   push-to-dockerhub:
     name: Build & push image to Docker Hub
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: dockerhub
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [test, integration-linux, integration-windows]
+    needs: [test, integration-linux, integration-windows, test-migrations]
 
     steps:
       - name: Checkout repository
@@ -131,7 +163,7 @@ jobs:
     timeout-minutes: 15
     environment: pypi
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [test, integration-linux, integration-windows]
+    needs: [test, integration-linux, integration-windows, test-migrations]
     permissions:
       id-token: write
 

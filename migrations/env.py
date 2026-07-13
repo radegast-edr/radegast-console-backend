@@ -21,6 +21,17 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+# Inject database URL dynamically from Settings
+from sqlalchemy import event, Table
+
+@event.listens_for(Table, "column_reflect")
+def on_column_reflect(inspector, table, column_info):
+    default = column_info.get("default")
+    if default is not None and isinstance(default, str):
+        # Clean double quotes / parenthesized defaults to single quotes for SQLite compatibility
+        cleaned = default.strip("\"'()")
+        column_info["default"] = f"'{cleaned}'"
+
 # Set target metadata
 target_metadata = Base.metadata
 

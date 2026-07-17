@@ -218,6 +218,7 @@ def main():
       <executable>{rustinel_core_dir}\\rustinel.exe</executable>
       <arguments>run</arguments>
       <workingdirectory>{agent_dir}</workingdirectory>
+      <env name="RUSTINEL_CONFIG" value="{agent_dir}\\config.toml" />
       <log mode="roll" logpath="{logs_dir}" />
       <onfailure action="restart" delay="5000" />
       <stopparentfirst>true</stopparentfirst>
@@ -256,6 +257,7 @@ def main():
       <env name="RADEGAST_AGENT_DEVICE_TOKEN" value="{token}" />
       <env name="RADEGAST_AGENT_RUSTINEL_BINARY" value="{rustinel_core_dir}\\rustinel.exe" />
       <env name="RADEGAST_AGENT_RUSTINEL_CONFIG" value="{agent_dir}\\config.toml" />
+      <env name="RUSTINEL_CONFIG" value="{agent_dir}\\config.toml" />
       <env name="RADEGAST_AGENT_RULES_DIR" value="{rules_dir}\\" />
       <env name="RADEGAST_AGENT_ALERTS_DIR" value="{logs_dir}\\" />
       <env name="RADEGAST_AGENT_STATE_DIR" value="{state_dir}\\" />{init_wait_xml}

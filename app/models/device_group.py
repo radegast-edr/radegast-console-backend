@@ -13,6 +13,8 @@ class DeviceGroup(Base):
     private_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     public_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     private_key_needs_refresh: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    response_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    response_min_severity: Mapped[str] = mapped_column(String(50), default="critical", server_default="critical")
 
     devices = relationship("Device", secondary=device_group_devices, back_populates="groups")
     teams = relationship("Team", secondary=team_device_groups, back_populates="groups")

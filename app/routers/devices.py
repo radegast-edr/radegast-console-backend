@@ -104,6 +104,48 @@ async def list_devices(
     ]
 
 
+@router.get("/config")
+async def get_device_config(
+    device: Device = Depends(get_current_device),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get active response settings for the device based on its groups."""
+    result = await db.execute(select(DeviceGroup).where(DeviceGroup.devices.any(Device.id == device.id)))
+    groups = result.scalars().all()
+
+    enabled_groups = [g for g in groups if g.response_enabled]
+
+    if not enabled_groups:
+        return {
+            "response_enabled": False,
+            "response_min_severity": "critical",
+        }
+
+    SEVERITY_RANKS = {
+        "low": 1,
+        "medium": 2,
+        "high": 3,
+        "critical": 4,
+    }
+
+    min_rank = 4
+    for g in enabled_groups:
+        rank = SEVERITY_RANKS.get(g.response_min_severity.lower(), 4)
+        if rank < min_rank:
+            min_rank = rank
+
+    selected_severity = "critical"
+    for sev, r in SEVERITY_RANKS.items():
+        if r == min_rank:
+            selected_severity = sev
+            break
+
+    return {
+        "response_enabled": True,
+        "response_min_severity": selected_severity,
+    }
+
+
 @router.get("/{device_id}", response_model=DeviceDetailResponse)
 async def get_device(
     device_id: int,

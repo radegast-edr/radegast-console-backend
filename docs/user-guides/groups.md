@@ -123,6 +123,28 @@ A group can be owned by multiple teams. This allows:
 
 **Note**: You cannot delete a group that still has devices assigned to it. Move all devices to other groups first.
 
+### Active Response Settings
+
+Active Response allows the agent to automatically terminate offending processes that trigger detection rules.
+
+> [!NOTE]
+> Active Response controls are visible only if **Extended EDR Features** is enabled in your user [Settings](file:///home/adam/Projekty/radegast/radegast-console-backend/docs/user-guides/settings.md).
+
+> [!CAUTION]
+> **Agent Version Requirement**: Active Response requires Radegast EDR Agent version **python 0.6.0** or higher. If a device in the group is running an older agent version (e.g. lower than 0.6.0 or unknown), a red warning alert will be displayed in the Group Detail page, and Active Response **will not apply or be enabled** for that device.
+
+#### Steps to Configure
+
+1. Go to the **Settings** page and check **"Enable Extended EDR Features"**
+2. Go to **Groups**, and select your target group
+3. Scroll to **"Active Response Settings"**
+4. Check **"Enable Active Response"** to turn on process termination
+5. Select the **"Minimum severity level for termination"** (`Low`, `Medium`, `High`, `Critical`)
+6. A confirmation modal will appear highlighting potential disruption risks. Check that you do not have active false positives at the selected severity level before confirming.
+
+#### Multi-Group Severity Resolution
+If a device belongs to multiple groups with Active Response enabled, the agent dynamically selects the **lowest severity level** of all the matching groups (mapping `Low` -> `Medium` -> `High` -> `Critical`) to ensure the maximum level of coverage and safety.
+
 ## Tips & Validations
 
 - **Group Name**: Must be unique. Use clear, descriptive names.

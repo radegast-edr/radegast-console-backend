@@ -48,6 +48,8 @@ class DeviceGroupResponse(BaseModel):
     private_key_needs_refresh: bool = False
     user_has_pack_write: bool = False
     user_has_admin: bool = False
+    response_enabled: bool = False
+    response_min_severity: str = "critical"
 
     model_config = {"from_attributes": True}
 
@@ -61,6 +63,8 @@ class DeviceGroupDetailResponse(BaseModel):
     private_key_needs_refresh: bool = False
     user_has_pack_write: bool = False
     user_has_admin: bool = False
+    response_enabled: bool = False
+    response_min_severity: str = "critical"
     # devices imported lazily to avoid circular import — built manually in router
 
     model_config = {"from_attributes": True}

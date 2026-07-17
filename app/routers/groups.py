@@ -22,8 +22,10 @@ from app.schemas.team import (
     GroupUnlinkPayload,
     TeamResponse,
 )
+from app.services.email import send_group_response_changed_notification
 from app.services.permissions import (
     get_group_recipient_public_keys,
+    get_team_members_transitive,
     get_user_team_ids_transitive,
     has_group_admin_permission,
     has_group_pack_write_permission,
@@ -54,15 +56,20 @@ class DeviceGroupDetail(BaseModel):
     private_key_needs_refresh: bool = False
     user_has_pack_write: bool = False
     user_has_admin: bool = False
+    response_enabled: bool = False
+    response_min_severity: str = "critical"
 
 
 async def _user_has_admin(group: DeviceGroup, user: User, db: AsyncSession) -> bool:
-    from app.services.permissions import has_team_admin_permission
-
     for team in group.teams:
         if await has_team_admin_permission(team.id, user.id, db):
             return True
     return False
+
+
+class GroupResponseUpdate(BaseModel):
+    response_enabled: bool
+    response_min_severity: str
 
 
 def _group_detail(group: DeviceGroup, invitations: list[TeamInvitation] | None = None) -> dict:
@@ -73,6 +80,8 @@ def _group_detail(group: DeviceGroup, invitations: list[TeamInvitation] | None =
         "public_key": group.public_key,
         "private_key": group.private_key,
         "private_key_needs_refresh": group.private_key_needs_refresh,
+        "response_enabled": group.response_enabled,
+        "response_min_severity": group.response_min_severity,
         "teams": [
             {
                 "id": t.id,
@@ -423,3 +432,57 @@ async def delete_group(
     await db.delete(group)
     await db.commit()
     return {"message": "Group deleted successfully"}
+
+
+@router.patch("/{group_id}/response", response_model=DeviceGroupResponse)
+async def update_group_response(
+    group_id: int,
+    data: GroupResponseUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # 1. Authorize current user has packs=write permission on this group
+    if not await has_group_pack_write_permission(group_id, user.id, db):
+        raise HTTPException(status_code=403, detail="No pack write permission")
+
+    # 2. Get group
+    result = await db.execute(
+        select(DeviceGroup).options(selectinload(DeviceGroup.teams).selectinload(Team.users)).where(DeviceGroup.id == group_id)
+    )
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    # 3. Update response config
+    group.response_enabled = data.response_enabled
+    group.response_min_severity = data.response_min_severity
+    await db.commit()
+
+    # 4. Find all users in teams linked to this group
+    recipient_emails = set()
+    for team in group.teams:
+        member_ids = await get_team_members_transitive(team.id, db)
+        for uid in member_ids:
+            # check if they have packs=write permission on the group
+            if await has_group_pack_write_permission(group_id, uid, db):
+                u_res = await db.execute(select(User.email).where(User.id == uid))
+                u_email = u_res.scalar()
+                if u_email:
+                    recipient_emails.add(u_email)
+
+    # 5. Send notifications
+    for email in recipient_emails:
+        await send_group_response_changed_notification(
+            email=email,
+            group_name=group.name,
+            enabled=data.response_enabled,
+            severity=data.response_min_severity,
+            changer_email=user.email,
+        )
+
+    # 6. Return group representation
+    has_admin = await has_group_admin_permission(group.id, user.id, db)
+    resp = DeviceGroupResponse.model_validate(group)
+    resp.user_has_pack_write = True
+    resp.user_has_admin = has_admin
+    return resp

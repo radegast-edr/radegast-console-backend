@@ -170,6 +170,22 @@ API_KEYS_TOGGLED_TEMPLATE = Template("""
 </html>
 """)
 
+GROUP_RESPONSE_CHANGED_TEMPLATE = Template("""
+<html>
+<body style="font-family: sans-serif; padding: 20px; line-height: 1.6; color: #333;">
+<h2>Active Response Configuration Changed — Radegast EDR</h2>
+<p>The Active Response configuration for group <strong>{{ group_name }}</strong> has been updated.</p>
+<ul>
+    <li><strong>Status:</strong> {{ status }}</li>
+    <li><strong>Minimum Severity:</strong> {{ severity }}</li>
+    <li><strong>Changed By:</strong> {{ changer_email }}</li>
+    <li><strong>Time:</strong> {{ time }} UTC</li>
+</ul>
+<p><em>Warning: When Active Response is enabled, the agent will automatically terminate processes on matching alerts, which could result in interrupted work.</em></p>
+</body>
+</html>
+""")
+
 
 def get_web_ui_base() -> str:
     if settings.web_ui_url:
@@ -448,6 +464,23 @@ async def send_api_keys_toggled_notification(email: str, enabled: bool):
         f"API Keys Support {status_str.capitalize()} — Radegast EDR",
         html,
         email_type="api_key_modification",
+    )
+
+
+async def send_group_response_changed_notification(email: str, group_name: str, enabled: bool, severity: str, changer_email: str):
+    status_str = "Enabled" if enabled else "Disabled"
+    html = GROUP_RESPONSE_CHANGED_TEMPLATE.render(
+        group_name=group_name,
+        status=status_str,
+        severity=severity.upper(),
+        changer_email=changer_email,
+        time=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
+    )
+    await send_email(
+        email,
+        f"Active Response Configuration Changed for Group {group_name} — Radegast EDR",
+        html,
+        email_type="verify",
     )
 
 

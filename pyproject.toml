@@ -84,6 +84,7 @@ select = [
     "TID", # flake8-tidy-imports
     "PLE", # Pylint errors
     "PLW", # Pylint warnings
+    "PLC0415", # import outside top level
     "RUF", # Ruff-specific rules
     "ARG", # flake8-unused-arguments
 ]
@@ -104,10 +105,16 @@ known-first-party = ["app"]
 "tests/*" = ["S101", "ARG"]  # Allow assert and unused arguments in tests
 "app/config.py" = ["S105", "S108"]  # Allow hardcoded password and temp file in config
 "app/main.py" = ["ASYNC240"]  # Allow Path.mkdir in lifespan (startup code)
-"app/routers/install.py" = ["ASYNC240"]  # Allow Path.resolve/is_relative_to (synchronous path checks)
-"app/services/email.py" = ["S311"]  # Allow random.randint for non-crypto sleep delays
+"app/routers/install.py" = ["ASYNC240", "PLC0415"]  # Allow Path.resolve/is_relative_to (synchronous path checks)
+"app/services/email.py" = ["S311", "PLC0415"]  # Allow random.randint for non-crypto sleep delays
 "app/routers/packs.py" = ["S311"]  # Allow random.randint for non-crypto pack_id generation
-"app/cli.py" = ["S603", "S607"]  # Allow subprocess calls with shutil.which (trusted commands)
+"app/cli.py" = ["S603", "S607", "PLC0415"]  # Allow subprocess calls with shutil.which (trusted commands)
+"app/routers/auth.py" = ["PLC0415"]
+"app/routers/teams.py" = ["PLC0415"]
+"app/services/auth.py" = ["PLC0415"]
+"app/services/crypto.py" = ["PLC0415"]
+"app/services/permissions.py" = ["PLC0415"]
+"app/routers/admin.py" = ["PLC0415"]
 
 [tool.ruff.format]
 quote-style = "double"

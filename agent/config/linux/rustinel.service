@@ -6,6 +6,7 @@ After=network.target
 [Service]
 ExecStart=/opt/radegast/rustinel/rustinel run
 WorkingDirectory=/etc/rustinel
+Environment=RUSTINEL_CONFIG=/etc/rustinel/config.toml
 Restart=on-failure
 RestartSec=5
 

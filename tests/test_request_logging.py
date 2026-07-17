@@ -1,8 +1,7 @@
-import logging
-
 import pytest
 
 from app.config import settings
+from app.main import app
 from app.middleware.request_logging import get_request_session_label
 from app.middleware.session import create_session_cookie
 
@@ -35,12 +34,19 @@ def test_get_request_session_label_for_user_and_device():
         ("device", 202, "[D202]"),
     ],
 )
-async def test_request_logging_includes_session_label(client, caplog, scope, session_id, label):
-    caplog.set_level(logging.INFO, logger="radegast.access")
+async def test_request_logging_includes_session_label(client, scope, session_id, label):
+    # Initialize request_log_messages on app state
+    app.state.request_log_messages = []
+
     cookie = create_session_cookie(scope, session_id)
     client.cookies.set(settings.session_cookie_name, cookie)
 
-    resp = await client.get("/api/v1/health")
-    assert resp.status_code == 200
+    try:
+        resp = await client.get("/api/v1/health")
+        assert resp.status_code == 200
 
-    assert any(label in record.message for record in caplog.records)
+        messages = app.state.request_log_messages
+        assert any(label in msg for msg in messages), f"Label {label} not found in request log messages: {messages}"
+    finally:
+        if hasattr(app.state, "request_log_messages"):
+            delattr(app.state, "request_log_messages")

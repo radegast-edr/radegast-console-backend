@@ -37,14 +37,10 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
 
-        logger.info(
-            "%s:%s - %s %s HTTP/%s %s - %s",
-            client_host,
-            client_port,
-            request.method,
-            request.url.path,
-            http_version,
-            response.status_code,
-            session_label,
-        )
+        msg = f"{client_host}:{client_port} - {request.method} {request.url.path} HTTP/{http_version} {response.status_code} - {session_label}"
+        logger.info(msg)
+
+        if hasattr(request.app.state, "request_log_messages"):
+            request.app.state.request_log_messages.append(msg)
+
         return response

@@ -382,15 +382,19 @@ async def send_device_log_notification(
     from_time = None
     to_time = None
     if alert_time:
+        alert_time = ensure_utc(alert_time)
         # Create a time range around the alert (+/- 5 minutes)
-        time_format = "%Y-%m-%dT%H:%M"
+        time_format = "%Y-%m-%dT%H:%MZ"
         from_time = (alert_time - timedelta(minutes=5)).strftime(time_format)
         to_time = (alert_time + timedelta(minutes=5)).strftime(time_format)
+
+    display_time = ensure_utc(alert_time) if alert_time else utc_now()
+    display_time_str = display_time.strftime("%Y-%m-%d %H:%M:%S")
 
     html = DEVICE_LOG_TEMPLATE.render(
         device_name=device_name,
         device_id=device_id,
-        time=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
+        time=display_time_str,
         base_url=ui_base,
         severity=severity,
         log_id=log_id,

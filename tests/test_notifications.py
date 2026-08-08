@@ -313,6 +313,26 @@ class TestDeviceLogNotification:
         subjects = [call.args[1] for call in mock_send.call_args_list]
         assert not any("New Alert" in s for s in subjects)
 
+    async def test_device_log_notification_includes_utc_time_and_z_suffix(self, client: AsyncClient, db_engine):
+        token = await self._setup(client, db_engine, "devlog_tz@example.com", notify=True)
+        await client.post("/auth/device/login", json={"token": token})
+
+        event_time_str = "2026-08-08T18:50:21"
+        with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
+            await client.post(
+                "/logs/",
+                json={"time": event_time_str, "content": "enc-log"},
+            )
+
+        assert mock_send.call_count == 1
+        call_args = mock_send.call_args_list[0].args
+        html_body = call_args[2]
+
+        assert "2026-08-08 18:50:21 UTC" in html_body
+        assert "from=2026-08-08T18:45Z" in html_body
+        assert "to=2026-08-08T18:55Z" in html_body
+
+
 
 @pytest.mark.asyncio
 class TestNotificationDisabledAlert:

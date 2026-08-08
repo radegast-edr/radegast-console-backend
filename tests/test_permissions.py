@@ -3,6 +3,8 @@
 import pytest
 from httpx import AsyncClient
 
+from app.services.auth import create_signed_token
+
 
 class TestRolePermissions:
     @pytest.mark.asyncio
@@ -52,7 +54,6 @@ class TestTeamPermissions:
                 "password": "password123",
             },
         )
-        from app.services.auth import create_signed_token
 
         token = create_signed_token({"email": "other@example.com"}, salt="email-verify")
         await client.get(f"/auth/verify?token={token}")
@@ -80,7 +81,6 @@ class TestSessionInvalidation:
                 "password": "password123",
             },
         )
-        from app.services.auth import create_signed_token
 
         token = create_signed_token({"email": "session@example.com"}, salt="email-verify")
         await client.get(f"/auth/verify?token={token}")

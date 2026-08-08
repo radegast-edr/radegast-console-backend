@@ -1,6 +1,8 @@
 import pytest
 from httpx import AsyncClient
 
+from app.services.auth import create_signed_token
+
 
 class TestAdminUsers:
     @pytest.mark.asyncio
@@ -24,7 +26,6 @@ class TestAdminUsers:
                 "password": "password123",
             },
         )
-        from app.services.auth import create_signed_token
 
         token = create_signed_token({"email": "deleteme@example.com"}, salt="email-verify")
         await client.get(f"/auth/verify?token={token}")
@@ -131,6 +132,69 @@ class TestAdminStats:
         assert resp.status_code == 403
 
     @pytest.mark.asyncio
+    async def test_get_admin_alert_stats_with_severity_filter(self, admin_client: AsyncClient):
+        resp = await admin_client.get("/admin/stats/alerts?severity=critical&severity=high")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "severity_distribution" in data
+        assert "rule_distribution" in data
+
+    @pytest.mark.asyncio
+    async def test_get_admin_alert_stats_with_rule_type_filter(self, admin_client: AsyncClient):
+        resp = await admin_client.get("/admin/stats/alerts?rule_type=sigma")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "severity_distribution" in data
+        assert "rule_distribution" in data
+
+    @pytest.mark.asyncio
+    async def test_get_admin_alert_stats_with_resolution_filter(self, admin_client: AsyncClient):
+        resp = await admin_client.get("/admin/stats/alerts?alert_resolution=none")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "severity_distribution" in data
+        assert "rule_distribution" in data
+
+    @pytest.mark.asyncio
+    async def test_get_admin_alert_stats_with_rule_id_filter(self, admin_client: AsyncClient):
+        resp = await admin_client.get("/admin/stats/alerts?rule_id=some_rule")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "severity_distribution" in data
+        assert "rule_distribution" in data
+
+    @pytest.mark.asyncio
+    async def test_get_admin_alert_stats_combined_filters(self, admin_client: AsyncClient):
+        resp = await admin_client.get(
+            "/admin/stats/alerts?severity=critical&rule_type=sigma&alert_resolution=none"
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "severity_distribution" in data
+        assert "rule_distribution" in data
+
+    @pytest.mark.asyncio
+    async def test_get_admin_alert_rule_ids(self, admin_client: AsyncClient):
+        resp = await admin_client.get("/admin/stats/alerts/rule-ids")
+        assert resp.status_code == 200
+        assert isinstance(resp.json(), list)
+
+    @pytest.mark.asyncio
+    async def test_get_admin_alert_rule_ids_as_user(self, auth_client: AsyncClient):
+        resp = await auth_client.get("/admin/stats/alerts/rule-ids")
+        assert resp.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_get_admin_alert_rule_content_nonexistent(self, admin_client: AsyncClient):
+        resp = await admin_client.get("/admin/stats/alerts/rule-content?rule_type=sigma&rule_id=nonexistent")
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_get_admin_alert_rule_content_as_user(self, auth_client: AsyncClient):
+        resp = await auth_client.get("/admin/stats/alerts/rule-content?rule_type=sigma&rule_id=some_rule")
+        assert resp.status_code == 403
+
+    @pytest.mark.asyncio
     async def test_get_admin_device_stats(self, admin_client: AsyncClient):
         resp = await admin_client.get("/admin/stats/devices?exclude_offline=true&exclude_no_version=true")
         assert resp.status_code == 200
@@ -142,3 +206,4 @@ class TestAdminStats:
     async def test_get_admin_device_stats_as_user(self, auth_client: AsyncClient):
         resp = await auth_client.get("/admin/stats/devices")
         assert resp.status_code == 403
+

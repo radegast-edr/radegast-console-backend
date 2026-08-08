@@ -1,3 +1,4 @@
+import base64
 import os
 import re
 from pathlib import Path
@@ -173,8 +174,6 @@ async def get_install_script(
         install_bat_content = install_bat_tmpl.read_text(encoding="utf-8")
 
         # Encode config to base64 to put it in install-service.py
-        import base64
-
         config_b64 = base64.b64encode(config_content.encode("utf-8")).decode("utf-8")
 
         # Render install-service.py using Jinja2

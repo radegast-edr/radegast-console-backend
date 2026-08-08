@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -120,8 +122,6 @@ class TestAPIKeys:
         user.notify_api_key_modification = True
         await db_session.commit()
 
-        from unittest.mock import AsyncMock, patch
-
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
             resp = await auth_client.post(
                 "/apikeys/",
@@ -150,8 +150,6 @@ class TestAPIKeys:
         user.notify_api_key_modification = False
         await db_session.commit()
 
-        from unittest.mock import AsyncMock, patch
-
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
             resp = await auth_client.post(
                 "/apikeys/",
@@ -172,8 +170,6 @@ class TestAPIKeys:
         user.api_keys_enabled = False
         user.notify_api_key_modification = True
         await db_session.commit()
-
-        from unittest.mock import AsyncMock, patch
 
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
             # 1. Enable
@@ -208,8 +204,6 @@ class TestAPIKeys:
         user.api_keys_enabled = False
         user.notify_api_key_modification = False
         await db_session.commit()
-
-        from unittest.mock import AsyncMock, patch
 
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
             resp = await auth_client.put("/user/api-keys-enabled", json={"api_keys_enabled": True})

@@ -1,3 +1,5 @@
+import io
+import zipfile
 from datetime import UTC, datetime
 
 import pytest
@@ -264,7 +266,7 @@ class TestLogSeenAndResolution:
         resp = await auth_client.get("/logs/")
         assert resp.status_code == 200
         logs = resp.json()
-        log = next(l for l in logs if l["id"] == log_id)
+        log = next(log_item for log_item in logs if log_item["id"] == log_id)
         assert log["seen"] is False
 
         # Unread count should be >= 1 for this test log
@@ -279,7 +281,7 @@ class TestLogSeenAndResolution:
 
         # Now seen should be True
         resp = await auth_client.get("/logs/")
-        log = next(l for l in resp.json() if l["id"] == log_id)
+        log = next(log_item for log_item in resp.json() if log_item["id"] == log_id)
         assert log["seen"] is True
 
         # In basic mode, marking seen immediately removes the log from the active count
@@ -298,7 +300,7 @@ class TestLogSeenAndResolution:
 
         # Seen status should remain True after resolution
         resp = await auth_client.get("/logs/")
-        log = next(l for l in resp.json() if l["id"] == log_id)
+        log = next(log_item for log_item in resp.json() if log_item["id"] == log_id)
         assert log["seen"] is True
 
         # Unread count should remain the same (log was already removed when seen)
@@ -328,7 +330,7 @@ class TestLogSeenAndResolution:
         assert resp.json()["total_count"] == edr_after_resolved + 1
 
         resp = await auth_client.get("/logs/")
-        log = next(l for l in resp.json() if l["id"] == log_id)
+        log = next(log_item for log_item in resp.json() if log_item["id"] == log_id)
         assert log["seen"] is True
 
         # Resolve again
@@ -340,7 +342,7 @@ class TestLogSeenAndResolution:
         assert resp.json()["seen"] is True
 
         resp = await auth_client.get("/logs/")
-        log = next(l for l in resp.json() if l["id"] == log_id)
+        log = next(log_item for log_item in resp.json() if log_item["id"] == log_id)
         assert log["seen"] is True
 
         # After resolving in extended EDR, unread count should go back down
@@ -541,9 +543,6 @@ class TestTriggeredRule:
 
     def _make_pack_zip(self, pack_files: dict[str, str]) -> bytes:
         """Create a valid pack zip containing the specified files."""
-        import io
-        import zipfile
-
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             for path, content in pack_files.items():

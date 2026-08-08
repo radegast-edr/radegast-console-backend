@@ -9,8 +9,10 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.associations import team_device_groups, team_users
+from app.models.device import Device
 from app.models.device_group import DeviceGroup
 from app.models.pack import Pack
+from app.models.public_key import PublicKey
 from app.models.team import Team
 from app.models.team_invitation import TeamInvitation
 from app.models.user import User
@@ -340,7 +342,6 @@ async def get_team_recipient_public_keys(
     db: AsyncSession = Depends(get_db),
 ):
     await _get_user_team(team_id, user, db)
-    from app.models.public_key import PublicKey
 
     user_ids = list(await get_team_members_transitive(team_id, db))
     if not user_ids:
@@ -479,9 +480,6 @@ async def list_team_devices(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.models.device import Device
-    from app.schemas.device import DeviceResponse
-
     team = await _get_user_team(team_id, user, db)
     result = await db.execute(
         select(DeviceGroup).options(selectinload(DeviceGroup.devices)).where(DeviceGroup.id.in_([g.id for g in team.groups]))

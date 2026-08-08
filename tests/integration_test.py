@@ -1,12 +1,15 @@
-#!/usr/bin/env python
+import ctypes
 import io
+import json
 import os
+import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
 import time
 import zipfile
-from datetime import UTC
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -16,7 +19,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 sys.path.insert(0, str(PROJECT_ROOT))
 
 # Set environment variables before any app imports
-os.environ["RADEGAST_SECRET_KEY"] = "integration-test-secret-key"  # noqa: S105
+os.environ["RADEGAST_SECRET_KEY"] = "integration-test-secret-key"
 os.environ["RADEGAST_ENVIRONMENT"] = "dev"
 
 
@@ -68,8 +71,6 @@ def check_privileges():
         if os.getuid() != 0:
             print("INFO: Not running as root. Sudo commands will be used for installation.")
     elif sys.platform.startswith("win32"):
-        import ctypes
-
         if ctypes.windll.shell32.IsUserAnAdmin() == 0:
             print("ERROR: Integration tests must be run as Administrator on Windows.")
             sys.exit(1)
@@ -127,14 +128,14 @@ def main():
     # Set environment variables for the test process and sub-processes
     env = os.environ.copy()
     env["RADEGAST_DATABASE_URL"] = db_url
-    env["RADEGAST_SECRET_KEY"] = "integration-test-secret-key"  # noqa: S105
+    env["RADEGAST_SECRET_KEY"] = "integration-test-secret-key"
     env["RADEGAST_UPLOAD_DIR"] = str(uploads_dir)
     env["RADEGAST_RELEASES_DIR"] = str(PROJECT_ROOT / "agent" / "releases")
     env["RADEGAST_ENVIRONMENT"] = "dev"
     env["RADEGAST_ENABLE_EMAIL_WORKER"] = "False"
 
     # Make sure we import auth service under correct settings
-    os.environ["RADEGAST_SECRET_KEY"] = "integration-test-secret-key"  # noqa: S105
+    os.environ["RADEGAST_SECRET_KEY"] = "integration-test-secret-key"
 
     server_process = None
     rustinel_process = None
@@ -177,7 +178,7 @@ def main():
         # 5. Use API to register, login, upload pack, and create device
         with httpx.Client(base_url="http://127.0.0.1:8000/api/v1", follow_redirects=True) as client:
             email = "integration@example.com"
-            password = "TestPass123!"  # noqa: S105
+            password = "TestPass123!"
 
             # Register
             print("Registering user...")
@@ -194,8 +195,6 @@ def main():
 
             # Promote user to admin using sqlite3
             print("Promoting user to admin role...")
-            import sqlite3
-
             conn = sqlite3.connect(db_file)
             cursor = conn.cursor()
             cursor.execute("UPDATE users SET role = 'admin' WHERE email = ?;", (email,))
@@ -281,8 +280,6 @@ def main():
         install_env["RADEGAST_AGENT_INIT_WAIT_SECONDS"] = "0"
 
         # Create a fake systemctl in temp directory to bypass systemd requirement
-        import shutil
-
         real_sudo_path = shutil.which("sudo")
         has_sudo = real_sudo_path is not None
 
@@ -444,8 +441,6 @@ exec "$@"
             print(f"WARNING: failed to run whoami command: {e}")
 
         print("Writing mock alert log to guarantee test passes even if eBPF/ETW sensor fails or is restricted...")
-        from datetime import datetime
-
         current_time = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         alert_data = {
@@ -454,7 +449,6 @@ exec "$@"
             "severity": "low",
             "message": "Simulated whoami execution alert",
         }
-        import json
 
         if os_name == "linux":
             alerts_file = Path("/var/log/rustinel/alerts.json")

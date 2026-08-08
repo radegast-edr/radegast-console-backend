@@ -3,6 +3,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.associations import team_users
+from app.models.device import Device
+from app.models.device_group import DeviceGroup
+from app.models.public_key import PublicKey
 from app.models.team import Team
 
 
@@ -87,11 +90,6 @@ async def get_team_members_transitive(team_id: int, db: AsyncSession) -> set[int
 
 async def has_device_admin_permission(device_id: int, user_id: int, db: AsyncSession) -> bool:
     """Check transitively if the user has admin permission on the device (by checking its groups/teams)."""
-    from sqlalchemy.orm import selectinload
-
-    from app.models.device import Device
-    from app.models.device_group import DeviceGroup
-
     result = await db.execute(
         select(Device).options(selectinload(Device.groups).selectinload(DeviceGroup.teams)).where(Device.id == device_id)
     )
@@ -145,10 +143,6 @@ async def get_device_encryption_keys_list(device_id: int, db: AsyncSession) -> l
     for the given device (via any group/team chain).
     This is used both by the device-facing and user-facing encryption-key endpoints.
     """
-    from app.models.device import Device
-    from app.models.device_group import DeviceGroup
-    from app.models.public_key import PublicKey
-
     result = await db.execute(
         select(Device)
         .options(selectinload(Device.groups).selectinload(DeviceGroup.teams).selectinload(Team.users))
@@ -178,10 +172,6 @@ async def get_group_recipient_public_keys(group_id: int, db: AsyncSession, exclu
     Returns a list of all recipient public keys (both users' regular/secondary keys and devices' encryption public keys)
     for a given device group.
     """
-    from app.models.device_group import DeviceGroup
-    from app.models.public_key import PublicKey
-    from app.models.team import Team
-
     result = await db.execute(
         select(DeviceGroup)
         .options(
@@ -222,8 +212,6 @@ async def has_group_pack_write_permission(group_id: int, user_id: int, db: Async
     Check if the user has pack write permission on the given device group
     (via any team linked to the group).
     """
-    from app.models.device_group import DeviceGroup
-
     result = await db.execute(select(DeviceGroup).options(selectinload(DeviceGroup.teams)).where(DeviceGroup.id == group_id))
     group = result.scalar_one_or_none()
     if not group:
@@ -253,8 +241,6 @@ async def mark_team_groups_refresh(team_id: int, db: AsyncSession) -> None:
                 queue.append(sid)
 
     if managed_team_ids:
-        from app.models.device_group import DeviceGroup
-
         result = await db.execute(select(DeviceGroup).join(DeviceGroup.teams).where(Team.id.in_(list(managed_team_ids))))
         groups = result.scalars().all()
         for g in groups:
@@ -266,8 +252,6 @@ async def has_group_admin_permission(group_id: int, user_id: int, db: AsyncSessi
     Check if the user has admin permission on the given device group
     (via any team linked to the group).
     """
-    from app.models.device_group import DeviceGroup
-
     result = await db.execute(select(DeviceGroup).options(selectinload(DeviceGroup.teams)).where(DeviceGroup.id == group_id))
     group = result.scalar_one_or_none()
     if not group:

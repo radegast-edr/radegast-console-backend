@@ -6,6 +6,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.config import settings
 from app.models.user import User, UserRole
 from app.services.auth import create_signed_token
 
@@ -679,9 +680,6 @@ class TestPackValidation:
         pack_id = resp.json()["id"]
 
         # Create an empty zip file
-        import io
-        import zipfile
-
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED):
             pass  # Empty zip
@@ -701,9 +699,6 @@ class TestPackValidation:
         pack_id = resp.json()["id"]
 
         # Create a zip with a random file
-        import io
-        import zipfile
-
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("random.txt", "content")
@@ -723,9 +718,6 @@ class TestPackValidation:
         pack_id = resp.json()["id"]
 
         # Create a zip with a sigma file and an extra file at top level
-        import io
-        import zipfile
-
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("sigma/rule.yml", "title: Test\nid: test\n")
@@ -746,9 +738,6 @@ class TestPackValidation:
         pack_id = resp.json()["id"]
 
         # Create a zip with a non-yml file in sigma/
-        import io
-        import zipfile
-
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("sigma/rule.txt", "not a yaml file")
@@ -768,9 +757,6 @@ class TestPackValidation:
         pack_id = resp.json()["id"]
 
         # Create a zip with a non-yar file in yara/
-        import io
-        import zipfile
-
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("yara/rule.txt", "not a yara file")
@@ -790,9 +776,6 @@ class TestPackValidation:
         pack_id = resp.json()["id"]
 
         # Create a zip with an invalid file in ioc/
-        import io
-        import zipfile
-
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("ioc/invalid.txt", "not an allowed file")
@@ -812,9 +795,6 @@ class TestPackValidation:
         pack_id = resp.json()["id"]
 
         # Create a zip with a valid sigma file
-        import io
-        import zipfile
-
         sigma_rule = """title: Test Rule
 id: test-rule-id
 status: experimental
@@ -847,9 +827,6 @@ detection:
         pack_id = resp.json()["id"]
 
         # Create a zip with a valid yara file
-        import io
-        import zipfile
-
         yara_rule = """rule TestRule {
     strings:
         $test = "test"
@@ -874,9 +851,6 @@ detection:
         pack_id = resp.json()["id"]
 
         # Create a zip with valid ioc files
-        import io
-        import zipfile
-
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("ioc/paths_regex.txt", "test")
@@ -897,9 +871,6 @@ detection:
         pack_id = resp.json()["id"]
 
         # Create a zip with invalid YAML in sigma/
-        import io
-        import zipfile
-
         invalid_yaml = """title: Test Rule
 id: test-rule-id
   invalid: [indentation
@@ -924,8 +895,6 @@ class TestPackSizeLimits:
 
     async def test_upload_within_limit_succeeds(self, maintainer_client: AsyncClient):
         """Uploading a pack within the size limit should succeed."""
-        from app.config import settings
-
         resp = await maintainer_client.post("/packs/", json={"name": "SizeLimit Pack OK", "description": "Test"})
         pack_id = resp.json()["id"]
 
@@ -943,8 +912,6 @@ class TestPackSizeLimits:
 
     async def test_upload_exceeds_general_limit_fails(self, maintainer_client: AsyncClient):
         """Uploading a pack exceeding the general size limit should return 413."""
-        from app.config import settings
-
         resp = await maintainer_client.post("/packs/", json={"name": "SizeLimit Pack Fail", "description": "Test"})
         pack_id = resp.json()["id"]
 
@@ -963,8 +930,6 @@ class TestPackSizeLimits:
 
     async def test_role_specific_limit_overrides_general(self, maintainer_client: AsyncClient):
         """A role-specific limit (pack_max_size_mb_maintainer) takes priority over the general one."""
-        from app.config import settings
-
         resp = await maintainer_client.post("/packs/", json={"name": "SizeLimit Role Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 
@@ -986,8 +951,6 @@ class TestPackSizeLimits:
 
     async def test_no_limit_when_all_unset(self, maintainer_client: AsyncClient):
         """When all size limits are None, uploads of any size should succeed."""
-        from app.config import settings
-
         resp = await maintainer_client.post("/packs/", json={"name": "SizeLimit NoLimit Pack", "description": "Test"})
         pack_id = resp.json()["id"]
 

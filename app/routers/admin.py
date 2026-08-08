@@ -1,23 +1,29 @@
+import secrets
+import string
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, user_has_required_mfa_setup
 from app.models.device import Device
 from app.models.log import Log
 from app.models.pack import Pack
+from app.models.pack_version_rule import PackVersionRule
 from app.models.user import User, UserRole
 from app.schemas.device import DeviceResponse
 from app.schemas.pack import PackResponse
 from app.schemas.user import UserResponse
+from app.services.auth import hash_password
+from app.services.email import send_email, send_password_reset_email
 from app.services.packs import delete_pack_files
-from app.utils import utc_now
+from app.utils import ensure_utc, utc_now
 
 
 class AdminAlertStatsResponse(BaseModel):
@@ -47,9 +53,6 @@ async def list_all_users(
     _require_admin(user)
     result = await db.execute(select(User).options(selectinload(User.hardware_tokens), selectinload(User.public_keys)))
     users = result.scalars().all()
-
-    from app.config import settings
-    from app.dependencies import user_has_required_mfa_setup
 
     response_users = []
     for u in users:
@@ -175,13 +178,8 @@ async def reset_user_password(
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
 
-    import secrets
-    import string
-
     alphabet = string.ascii_letters + string.digits
     new_password = "".join(secrets.choice(alphabet) for _ in range(12))
-
-    from app.services.auth import hash_password
 
     target.password = hash_password(new_password)
     target.password_change = utc_now()
@@ -192,62 +190,146 @@ async def reset_user_password(
 
     await db.commit()
 
-    from app.services.email import send_password_reset_email
-
     background_tasks.add_task(send_password_reset_email, target.email, new_password)
 
     return {"message": "User password reset successfully and MFA cleared"}
+
+
+def _build_alert_stat_clauses(
+    from_time: datetime | None,
+    to_time: datetime | None,
+    severity: list[str] | None,
+    rule_type: list[str] | None,
+    rule_id: list[str] | None,
+    alert_resolution: list[str] | None,
+) -> list:
+    """Return a list of SQLAlchemy WHERE clauses shared by all alert-stat queries."""
+    clauses: list = []
+    if from_time:
+        clauses.append(Log.time >= ensure_utc(from_time).replace(tzinfo=None))
+    if to_time:
+        clauses.append(Log.time <= ensure_utc(to_time).replace(tzinfo=None))
+    if severity:
+        clauses.append(Log.severity.in_(severity))
+    if rule_type:
+        clauses.append(Log.rule_type.in_(rule_type))
+    if rule_id:
+        clauses.append(Log.rule_id.in_(rule_id))
+    if alert_resolution:
+        res_values = [r for r in alert_resolution if r != "none"]
+        none_included = "none" in alert_resolution
+        if res_values and none_included:
+            clauses.append(
+                or_(
+                    Log.alert_resolution.in_(res_values),
+                    Log.alert_resolution.is_(None),
+                )
+            )
+        elif res_values:
+            clauses.append(Log.alert_resolution.in_(res_values))
+        elif none_included:
+            clauses.append(Log.alert_resolution.is_(None))
+    return clauses
 
 
 @router.get("/stats/alerts", response_model=AdminAlertStatsResponse)
 async def get_admin_alert_stats(
     from_time: datetime | None = None,
     to_time: datetime | None = None,
+    severity: list[str] | None = Query(None),
+    rule_type: list[str] | None = Query(None),
+    rule_id: list[str] | None = Query(None),
+    alert_resolution: list[str] | None = Query(None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     _require_admin(user)
 
-    from app.utils import ensure_utc
+    clauses = _build_alert_stat_clauses(from_time, to_time, severity, rule_type, rule_id, alert_resolution)
 
     # Severity distribution query
     query_sev = select(Log.severity, func.count(Log.id)).group_by(Log.severity)
-    if from_time:
-        query_sev = query_sev.where(Log.time >= ensure_utc(from_time).replace(tzinfo=None))
-    if to_time:
-        query_sev = query_sev.where(Log.time <= ensure_utc(to_time).replace(tzinfo=None))
+    for clause in clauses:
+        query_sev = query_sev.where(clause)
     res_sev = await db.execute(query_sev)
     severity_distribution = {
         row[0].value if hasattr(row[0], "value") else str(row[0]): row[1] for row in res_sev.all() if row[0] is not None
     }
 
-    # Also handle None severity if any
-    where_clauses = [Log.severity.is_(None)]
-    if from_time:
-        where_clauses.append(Log.time >= ensure_utc(from_time).replace(tzinfo=None))
-    if to_time:
-        where_clauses.append(Log.time <= ensure_utc(to_time).replace(tzinfo=None))
+    # Also handle None severity if any — skip when a severity filter is active
+    # and does not include "unknown"
+    include_unknown = not severity
+    if severity and any(s.lower() == "unknown" for s in severity):
+        include_unknown = True
 
-    from sqlalchemy import and_
+    if include_unknown:
+        none_clauses = [Log.severity.is_(None)]
+        # Re-use all clauses except the severity-in filter
+        for clause in clauses:
+            col = getattr(clause, "left", None)
+            if col is not None and hasattr(col, "key") and col.key == "severity":
+                continue
+            none_clauses.append(clause)
 
-    res_sev_none = await db.execute(select(func.count(Log.id)).where(and_(*where_clauses)))
-    none_count = res_sev_none.scalar() or 0
-    if none_count > 0:
-        severity_distribution["unknown"] = none_count
+        res_sev_none = await db.execute(select(func.count(Log.id)).where(and_(*none_clauses)))
+        none_count = res_sev_none.scalar() or 0
+        if none_count > 0:
+            severity_distribution["unknown"] = none_count
 
     # Rule distribution query
-    query_rule = select(Log.rule_id, func.count(Log.id)).group_by(Log.rule_id)
-    if from_time:
-        query_rule = query_rule.where(Log.time >= ensure_utc(from_time).replace(tzinfo=None))
-    if to_time:
-        query_rule = query_rule.where(Log.time <= ensure_utc(to_time).replace(tzinfo=None))
+    query_rule = select(Log.rule_type, Log.rule_id, func.count(Log.id)).group_by(Log.rule_type, Log.rule_id)
+    for clause in clauses:
+        query_rule = query_rule.where(clause)
     res_rule = await db.execute(query_rule)
-    rule_distribution = {row[0] or "unknown": row[1] for row in res_rule.all()}
+    rule_distribution = {}
+    for r_type, r_id, count in res_rule.all():
+        if r_id:
+            key = f"{r_type or 'unknown'}::{r_id}"
+        else:
+            key = "unknown"
+        rule_distribution[key] = rule_distribution.get(key, 0) + count
 
     return AdminAlertStatsResponse(
         severity_distribution=severity_distribution,
         rule_distribution=rule_distribution,
     )
+
+
+@router.get("/stats/alerts/rule-ids", response_model=list[str])
+async def get_admin_alert_rule_ids(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_admin(user)
+    result = await db.execute(select(Log.rule_id).where(Log.rule_id.isnot(None)).distinct().order_by(Log.rule_id))
+    return [row[0] for row in result.all()]
+
+
+class AdminRuleContentResponse(BaseModel):
+    content: str
+
+
+@router.get("/stats/alerts/rule-content", response_model=AdminRuleContentResponse)
+async def get_admin_alert_rule_content(
+    rule_type: str,
+    rule_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_admin(user)
+
+    result = await db.execute(
+        select(PackVersionRule.rule_content)
+        .where(
+            PackVersionRule.rule_type == rule_type,
+            PackVersionRule.rule_id == rule_id,
+        )
+        .limit(1)
+    )
+    content = result.scalar_one_or_none()
+    if not content:
+        raise HTTPException(status_code=404, detail="Rule content not found")
+    return AdminRuleContentResponse(content=content)
 
 
 @router.get("/stats/devices", response_model=AdminDeviceStatsResponse)
@@ -331,8 +413,6 @@ async def send_admin_broadcast(
 
     result = await db.execute(query)
     recipient_users = result.scalars().all()
-
-    from app.services.email import send_email
 
     now = utc_now()
     for i, u in enumerate(recipient_users):

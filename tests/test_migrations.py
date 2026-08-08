@@ -6,11 +6,12 @@ import pytest
 from alembic import command
 from alembic.config import Config
 
+from app.config import settings
+
 
 @pytest.fixture
 def clean_env():
     """Fixture to backup and restore the database URL environment variable and settings singleton."""
-    from app.config import settings
     orig_url = os.environ.get("RADEGAST_DATABASE_URL")
     orig_settings_url = settings.database_url
     orig_secret = os.environ.get("RADEGAST_SECRET_KEY")
@@ -36,7 +37,6 @@ def test_sqlite_migrations(clean_env):
         db_url = f"sqlite+aiosqlite:///{db_file}"
 
         os.environ["RADEGAST_DATABASE_URL"] = db_url
-        from app.config import settings
         settings.database_url = db_url
 
         # Load Alembic configuration
@@ -59,7 +59,6 @@ def test_mysql_migrations(clean_env):
         pytest.skip("RADEGAST_TEST_MYSQL_URL is not set. Skipping MySQL migrations test.")
 
     os.environ["RADEGAST_DATABASE_URL"] = mysql_url
-    from app.config import settings
     settings.database_url = mysql_url
 
     config = Config("alembic.ini")

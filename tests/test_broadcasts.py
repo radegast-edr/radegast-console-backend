@@ -56,8 +56,8 @@ class TestAdminBroadcasts:
     @pytest.mark.asyncio
     async def test_broadcast_unsubscribed_users_excluded(self, admin_client: AsyncClient, db_session):
         # Create users
-        user1 = User(email="sub_news@example.com", password="password123", verified=True, notify_news_updates=True)  # noqa: S106
-        user2 = User(email="unsub_news@example.com", password="password123", verified=True, notify_news_updates=False)  # noqa: S106
+        user1 = User(email="sub_news@example.com", password="password123", verified=True, notify_news_updates=True)
+        user2 = User(email="unsub_news@example.com", password="password123", verified=True, notify_news_updates=False)
         db_session.add(user1)
         db_session.add(user2)
         await db_session.commit()

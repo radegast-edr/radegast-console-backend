@@ -3,6 +3,7 @@ import os
 import shutil
 import subprocess
 import sys
+import types
 from pathlib import Path
 from typing import Literal, Union, get_args, get_origin
 
@@ -30,8 +31,6 @@ def build_parser() -> argparse.ArgumentParser:
         # Determine the type, choices, and defaults
         annotation = field.annotation
         # We need to resolve Optional / Union types to their main type
-        import types
-
         origin = get_origin(annotation)
         if origin in (Union, getattr(types, "UnionType", None)):
             args = [a for a in get_args(annotation) if a is not type(None)]

@@ -1,5 +1,6 @@
 import asyncio
 import random
+import re
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 
@@ -500,8 +501,6 @@ async def send_password_reset_email(email: str, new_password: str):
 
 
 def combine_html_bodies(html_bodies: list[str]) -> str:
-    import re
-
     extracted_bodies = []
     for html in html_bodies:
         match = re.search(r"<body>(.*?)</body>", html, re.DOTALL | re.IGNORECASE)

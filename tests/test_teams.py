@@ -1,5 +1,10 @@
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from httpx import AsyncClient
+
+from app.routers.teams import FAILED_INVITE_ATTEMPTS
+from app.services.auth import create_signed_token
 
 
 @pytest.mark.asyncio
@@ -61,10 +66,6 @@ class TestTeamCRUD:
 @pytest.mark.asyncio
 class TestTeamInvitation:
     async def test_invite_user(self, client: AsyncClient, auth_client: AsyncClient):
-        from unittest.mock import AsyncMock, patch
-
-        from app.services.auth import create_signed_token
-
         # Register the invited user first
         await client.post(
             "/auth/register",
@@ -86,8 +87,6 @@ class TestTeamInvitation:
             mock_send.assert_called_once_with("invited@example.com", team_id, teams[0]["name"], "test@example.com")
 
     async def test_invite_unregistered_user_fails_silently(self, auth_client: AsyncClient):
-        from app.routers.teams import FAILED_INVITE_ATTEMPTS
-
         FAILED_INVITE_ATTEMPTS.clear()
 
         resp = await auth_client.get("/teams/")
@@ -123,8 +122,6 @@ class TestTeamInvitation:
         assert resp.status_code == 429
 
     async def test_accept_invitation(self, client: AsyncClient, auth_client: AsyncClient):
-        from app.services.auth import create_signed_token
-
         # Register the invitee
         await client.post(
             "/auth/register",
@@ -172,8 +169,6 @@ class TestTeamMembers:
         assert "admin" in resp.json()["detail"].lower()
 
     async def test_remove_member_success(self, client: AsyncClient, auth_client: AsyncClient):
-        from app.services.auth import create_signed_token
-
         # Register a second user
         await client.post(
             "/auth/register",
@@ -197,8 +192,6 @@ class TestTeamMembers:
         assert resp.status_code == 200
 
     async def test_remove_nonexistent_member(self, auth_client: AsyncClient, client: AsyncClient):
-        from app.services.auth import create_signed_token
-
         # Add a second user so team has more than 1 member (avoids "last member" 400 check)
         await client.post(
             "/auth/register",
@@ -274,7 +267,6 @@ class TestDeviceGroups:
         # User 1 registers and gets a default team and group.
         user1_email = "user1@example.com"
         await client.post("/auth/register", json={"email": user1_email, "password": "User1Pass123!"})
-        from app.services.auth import create_signed_token
 
         token = create_signed_token({"email": user1_email}, salt="email-verify")
         await client.get(f"/auth/verify?token={token}")
@@ -306,7 +298,6 @@ class TestDeviceGroups:
         # User 1 registers and gets a default team and group.
         user1_email = "user1_dev@example.com"
         await client.post("/auth/register", json={"email": user1_email, "password": "User1Pass123!"})
-        from app.services.auth import create_signed_token
 
         token = create_signed_token({"email": user1_email}, salt="email-verify")
         await client.get(f"/auth/verify?token={token}")
@@ -345,7 +336,6 @@ class TestDeviceGroups:
         # 1. User 1 registers. User 1 has Team 1 (admin=write by default)
         user1_email = "user1_mt@example.com"
         await client.post("/auth/register", json={"email": user1_email, "password": "User1Pass123!"})
-        from app.services.auth import create_signed_token
 
         token = create_signed_token({"email": user1_email}, salt="email-verify")
         await client.get(f"/auth/verify?token={token}")
@@ -422,8 +412,6 @@ class TestDeviceGroups:
         assert resp.json()["name"] == "Team 3 Updated"
 
     async def test_private_key_needs_refresh_flow(self, client: AsyncClient, auth_client: AsyncClient):
-        from app.services.auth import create_signed_token
-
         # Create a new user to invite
         user_email = "invitee-refresh@example.com"
         await client.post(
@@ -470,8 +458,6 @@ class TestDeviceGroups:
         assert resp.json()["private_key_needs_refresh"] is False
 
     async def test_transitive_private_key_needs_refresh_flow(self, client: AsyncClient, auth_client: AsyncClient):
-        from app.services.auth import create_signed_token
-
         # Get Team 1 (default) ID
         resp = await auth_client.get("/teams/")
         teams = resp.json()
@@ -518,8 +504,6 @@ class TestDeviceGroups:
         assert resp.json()["private_key_needs_refresh"] is True
 
     async def test_groups_needs_refresh_endpoint(self, client: AsyncClient, auth_client: AsyncClient):
-        from app.services.auth import create_signed_token
-
         # Get default team and its linked group
         resp = await auth_client.get("/teams/")
         teams = resp.json()

@@ -57,6 +57,7 @@ from app.services.email import (
     send_user_password_reset_email,
     send_verification_email,
 )
+from app.services.permissions import mark_team_groups_refresh
 from app.utils import ensure_utc, utc_now
 
 SECURE_COOKIE = settings.environment != "dev"
@@ -383,7 +384,6 @@ async def accept_invite(token: str, db: AsyncSession = Depends(get_db)):
         return {"message": "Already a member of this team"}
 
     team.users.append(user)
-    from app.services.permissions import mark_team_groups_refresh
 
     await mark_team_groups_refresh(team.id, db)
     # Delete pending invitation

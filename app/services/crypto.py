@@ -13,6 +13,7 @@ from cryptography.hazmat.primitives.serialization import (
     PrivateFormat,
     PublicFormat,
 )
+from ssage import SSAGE
 
 
 def generate_aes_key() -> str:
@@ -45,8 +46,6 @@ def decrypt_aes_gcm(encrypted_b64: str, key_b64: str) -> str | None:
 
 def generate_age_keypair() -> tuple[str, str]:
     """Generate an AGE keypair. Returns (public_key, private_key)."""
-    from ssage import SSAGE
-
     private_key = SSAGE.generate_private_key()
     s = SSAGE(private_key)
     return s.public_key, private_key
@@ -54,8 +53,6 @@ def generate_age_keypair() -> tuple[str, str]:
 
 def age_encrypt(plaintext: str, *public_keys: str) -> str:
     """Encrypt plaintext for multiple AGE public key recipients."""
-    from ssage import SSAGE
-
     if not public_keys:
         raise ValueError("At least one public key required")
     s = SSAGE(public_key=public_keys[0])
@@ -66,8 +63,6 @@ def age_encrypt(plaintext: str, *public_keys: str) -> str:
 def age_decrypt(ciphertext: str, private_key: str) -> str | None:
     """Decrypt AGE ciphertext with private key."""
     try:
-        from ssage import SSAGE
-
         s = SSAGE(private_key)
         return s.decrypt(ciphertext)
     except Exception:

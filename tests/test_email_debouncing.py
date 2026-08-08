@@ -5,6 +5,7 @@ import pytest
 from sqlalchemy import select
 
 from app.config import settings
+from app.models.email_bulk_state import EmailBulkState
 from app.models.queued_email import QueuedEmail
 from app.services.email import (
     process_email_queue,
@@ -146,8 +147,6 @@ async def test_different_users_or_types_not_combined(db_session):
 
 @pytest.mark.asyncio
 async def test_email_bulking_progression_headers_and_limit(db_session):
-    from app.models.email_bulk_state import EmailBulkState
-
     original_intervals = settings.email_bulk_intervals
     original_reset = settings.email_bulk_reset_hours
     # We can use the default settings (3, 3, 6, 16, 37, 62, 122, 193) and 24 hours

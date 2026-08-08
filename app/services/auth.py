@@ -1,3 +1,4 @@
+import hashlib
 import secrets
 
 import bcrypt
@@ -19,8 +20,6 @@ def generate_token() -> str:
 
 
 def hash_token(token: str) -> str:
-    import hashlib
-
     return hashlib.sha256(token.encode()).hexdigest()
 
 

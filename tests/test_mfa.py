@@ -4,7 +4,7 @@ import pyotp
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import settings
 from app.models.hardware_token import HardwareToken
@@ -49,8 +49,6 @@ async def test_mfa_enforcement_by_role(client: AsyncClient, db_engine):
         admin_email = "admin_mfa@example.com"
         admin_pass = "Password123!"
         hashed = hash_password(admin_pass)
-
-        from sqlalchemy.ext.asyncio import async_sessionmaker
 
         session_factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
         async with session_factory() as session:
@@ -103,8 +101,6 @@ async def test_mfa_redirected_login_otp(client: AsyncClient, db_engine):
     secret = pyotp.random_base32()
 
     # Create user with OTP already enabled
-    from sqlalchemy.ext.asyncio import async_sessionmaker
-
     session_factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
         user = User(
@@ -171,8 +167,6 @@ async def test_hardware_token_setup_and_login_flow(client: AsyncClient, db_engin
         assert resp.json()["message"] == "Hardware token registered successfully"
 
     # Verify Hardware token was saved in database
-    from sqlalchemy.ext.asyncio import async_sessionmaker
-
     session_factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
         result = await session.execute(select(HardwareToken))
@@ -315,8 +309,6 @@ async def test_mfa_grace_period_and_admin_reset_password(client: AsyncClient, db
         hashed = hash_password(admin_pass)
 
         # Create admin user
-        from sqlalchemy.ext.asyncio import async_sessionmaker
-
         session_factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
         async with session_factory() as session:
             admin_user = User(
@@ -380,7 +372,7 @@ async def test_mfa_grace_period_and_admin_reset_password(client: AsyncClient, db
         user_id = resp.json()["id"]
 
         # Call admin reset-password
-        with patch("app.services.email.send_password_reset_email") as mock_email:
+        with patch("app.routers.admin.send_password_reset_email") as mock_email:
             resp = await client.post(f"/admin/users/{user_id}/reset-password")
             assert resp.status_code == 200
             data = resp.json()

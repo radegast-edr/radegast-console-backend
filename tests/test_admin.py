@@ -124,7 +124,9 @@ class TestAdminStats:
         assert resp.status_code == 200
         data = resp.json()
         assert "severity_distribution" in data
+        assert "resolution_distribution" in data
         assert "rule_distribution" in data
+        assert "rule_type_distribution" in data
 
     @pytest.mark.asyncio
     async def test_get_admin_alert_stats_as_user(self, auth_client: AsyncClient):
@@ -137,7 +139,9 @@ class TestAdminStats:
         assert resp.status_code == 200
         data = resp.json()
         assert "severity_distribution" in data
+        assert "resolution_distribution" in data
         assert "rule_distribution" in data
+        assert "rule_type_distribution" in data
 
     @pytest.mark.asyncio
     async def test_get_admin_alert_stats_with_rule_type_filter(self, admin_client: AsyncClient):
@@ -145,7 +149,9 @@ class TestAdminStats:
         assert resp.status_code == 200
         data = resp.json()
         assert "severity_distribution" in data
+        assert "resolution_distribution" in data
         assert "rule_distribution" in data
+        assert "rule_type_distribution" in data
 
     @pytest.mark.asyncio
     async def test_get_admin_alert_stats_with_resolution_filter(self, admin_client: AsyncClient):
@@ -153,7 +159,9 @@ class TestAdminStats:
         assert resp.status_code == 200
         data = resp.json()
         assert "severity_distribution" in data
+        assert "resolution_distribution" in data
         assert "rule_distribution" in data
+        assert "rule_type_distribution" in data
 
     @pytest.mark.asyncio
     async def test_get_admin_alert_stats_with_rule_id_filter(self, admin_client: AsyncClient):
@@ -161,7 +169,9 @@ class TestAdminStats:
         assert resp.status_code == 200
         data = resp.json()
         assert "severity_distribution" in data
+        assert "resolution_distribution" in data
         assert "rule_distribution" in data
+        assert "rule_type_distribution" in data
 
     @pytest.mark.asyncio
     async def test_get_admin_alert_stats_combined_filters(self, admin_client: AsyncClient):
@@ -171,7 +181,9 @@ class TestAdminStats:
         assert resp.status_code == 200
         data = resp.json()
         assert "severity_distribution" in data
+        assert "resolution_distribution" in data
         assert "rule_distribution" in data
+        assert "rule_type_distribution" in data
 
     @pytest.mark.asyncio
     async def test_get_admin_alert_rule_ids(self, admin_client: AsyncClient):

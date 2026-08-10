@@ -28,7 +28,9 @@ from app.utils import ensure_utc, utc_now
 
 class AdminAlertStatsResponse(BaseModel):
     severity_distribution: dict[str, int]
+    resolution_distribution: dict[str, int]
     rule_distribution: dict[str, int]
+    rule_type_distribution: dict[str, int]
 
 
 class AdminDeviceStatsResponse(BaseModel):
@@ -289,9 +291,31 @@ async def get_admin_alert_stats(
             key = "unknown"
         rule_distribution[key] = rule_distribution.get(key, 0) + count
 
+    # Resolution distribution query
+    query_res = select(Log.alert_resolution, func.count(Log.id)).group_by(Log.alert_resolution)
+    for clause in clauses:
+        query_res = query_res.where(clause)
+    res_res = await db.execute(query_res)
+    resolution_distribution = {}
+    for r, count in res_res.all():
+        key = r or "none"
+        resolution_distribution[key] = count
+
+    # Rule type distribution query
+    query_rt = select(Log.rule_type, func.count(Log.id)).group_by(Log.rule_type)
+    for clause in clauses:
+        query_rt = query_rt.where(clause)
+    res_rt = await db.execute(query_rt)
+    rule_type_distribution = {}
+    for rt, count in res_rt.all():
+        key = rt or "unknown"
+        rule_type_distribution[key] = count
+
     return AdminAlertStatsResponse(
         severity_distribution=severity_distribution,
+        resolution_distribution=resolution_distribution,
         rule_distribution=rule_distribution,
+        rule_type_distribution=rule_type_distribution,
     )
 
 

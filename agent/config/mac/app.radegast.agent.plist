@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>app.radegast.agent</string>
+    <key>UserName</key>
+    <string>_radegast</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{RADEGAST_AGENT_PATH}}</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Library/Radegast/home/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>RADEGAST_AGENT_BACKEND_URL</key>
+        <string>{{RADEGAST_AGENT_BACKEND_URL}}/api/v1</string>
+        <key>RADEGAST_AGENT_DEVICE_TOKEN</key>
+        <string>%REPLACE_WITH_YOUR_AGENT_TOKEN%</string>
+        <key>RADEGAST_AGENT_RUSTINEL_BINARY</key>
+        <string>/Library/Radegast/rustinel/rustinel</string>
+        <key>RADEGAST_AGENT_RUSTINEL_CONFIG</key>
+        <string>/Library/Radegast/etc/config.toml</string>
+        <key>RUSTINEL_CONFIG</key>
+        <string>/Library/Radegast/etc/config.toml</string>
+        <key>RADEGAST_AGENT_RULES_DIR</key>
+        <string>/Library/Radegast/etc/rules/</string>
+        <key>RADEGAST_AGENT_ALERTS_DIR</key>
+        <string>/Library/Logs/Radegast/</string>
+        <key>RADEGAST_AGENT_STATE_DIR</key>
+        <string>/Library/Radegast/state/</string>
+    </dict>
+    <key>WorkingDirectory</key>
+    <string>/Library/Radegast/home</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Library/Logs/Radegast/radegast-agent-stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Library/Logs/Radegast/radegast-agent-stderr.log</string>
+</dict>
+</plist>

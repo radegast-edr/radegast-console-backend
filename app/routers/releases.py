@@ -80,8 +80,8 @@ def _validate_release_params(version: str, os_name: str, arch: str, is_upload: b
         raise HTTPException(status_code=err_code, detail="Arch must be one of: amd64, arm64")
     elif os_name == "windows" and arch != "amd64":
         raise HTTPException(status_code=err_code, detail="Arch must be one of: amd64")
-    elif os_name == "mac" and arch != "m5":
-        raise HTTPException(status_code=err_code, detail="Arch must be one of: m5")
+    elif os_name == "mac" and arch not in {"amd64", "m5"}:
+        raise HTTPException(status_code=err_code, detail="Arch must be one of: amd64, m5")
     return version, os_name, arch
 
 

@@ -55,6 +55,28 @@ The command will automatically:
    - Ensure it's running and set to **Automatic** startup
 
 
+### macOS Installation (Experimental)
+
+1. In the Radegast Console, select **macOS** as the OS
+2. Copy the **single-line installation command** provided
+3. Run the command on your macOS endpoint as root
+
+- Install isolated `uv` and managed Python runtime (with `pkg-config` support for native extensions)
+- Download and install the latest agent (runs as `_radegast`)
+- Download the signed Rustinel binary from console releases (runs as root)
+- Configure the agent with your token
+- Set up launchd daemons (`app.radegast.agent` and `io.rustinel.daemon`)
+- Start the agent automatically
+
+#### Post-Install: Grant Full Disk Access
+
+After installation, you must grant Full Disk Access to Rustinel for telemetry collection:
+
+1. Open **System Settings** -> **Privacy & Security** -> **Full Disk Access**
+2. Grant access to `/Library/Radegast/rustinel/Rustinel.app` (or `/Library/Radegast/rustinel/rustinel`)
+3. Restart the Rustinel daemon: `sudo launchctl kickstart -k system/io.rustinel.daemon`
+
+
 ### Post-Installation Steps
 
 1. **Verify in Console**:

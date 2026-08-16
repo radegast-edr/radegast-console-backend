@@ -20,12 +20,12 @@ class TestReleasesUpload:
         zip_content = b"PK\x03\x04" + b"\x00" * 20
         resp = await admin_client.post(
             "/releases/",
-            data={"version": "1.0.0", "os": "linux", "arch": "amd64"},
+            data={"version": "1.0.99", "os": "linux", "arch": "amd64"},
             files={"file": ("rustinel.zip", zip_content, "application/zip")},
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert data["version"] == "1.0.0"
+        assert data["version"] == "1.0.99"
         assert data["os"] == "linux"
         assert data["arch"] == "amd64"
 
@@ -118,15 +118,28 @@ class TestReleasesUpload:
         assert resp.status_code == 400
         assert "Arch must be one of: amd64" in resp.json()["detail"]
 
-    async def test_upload_mac_amd64_fails(self, admin_client: AsyncClient):
+    async def test_upload_mac_amd64_succeeds(self, admin_client: AsyncClient):
         zip_content = b"PK\x03\x04" + b"\x00" * 20
         resp = await admin_client.post(
             "/releases/",
-            data={"version": "1.2.0", "os": "mac", "arch": "amd64"},
+            data={"version": "1.2.98", "os": "mac", "arch": "amd64"},
+            files={"file": ("rustinel.zip", zip_content, "application/zip")},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["version"] == "1.2.98"
+        assert data["os"] == "mac"
+        assert data["arch"] == "amd64"
+
+    async def test_upload_mac_invalid_arch_fails(self, admin_client: AsyncClient):
+        zip_content = b"PK\x03\x04" + b"\x00" * 20
+        resp = await admin_client.post(
+            "/releases/",
+            data={"version": "1.2.0", "os": "mac", "arch": "arm64"},
             files={"file": ("rustinel.zip", zip_content, "application/zip")},
         )
         assert resp.status_code == 400
-        assert "Arch must be one of: m5" in resp.json()["detail"]
+        assert "Arch must be one of: amd64, m5" in resp.json()["detail"]
 
     async def test_upload_mac_m5_succeeds(self, admin_client: AsyncClient):
         zip_content = b"PK\x03\x04" + b"\x00" * 20
@@ -153,6 +166,18 @@ class TestReleasesDownload:
     async def test_download_release_nonexistent_fails(self, auth_client: AsyncClient):
         resp = await auth_client.get("/releases/0.0.1/windows/arm64/download")
         assert resp.status_code == 404
+
+    async def test_download_mac_release_succeeds(self, admin_client: AsyncClient):
+        zip_content = b"PK\x03\x04" + b"\x00" * 20
+        # Upload mac m5 release
+        await admin_client.post(
+            "/releases/",
+            data={"version": "1.3.0", "os": "mac", "arch": "m5"},
+            files={"file": ("rustinel.zip", zip_content, "application/zip")},
+        )
+        resp = await admin_client.get("/releases/1.3.0/mac/m5/download")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/zip"
 
 
 @pytest.mark.asyncio

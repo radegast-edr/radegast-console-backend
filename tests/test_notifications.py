@@ -333,7 +333,6 @@ class TestDeviceLogNotification:
         assert "to=2026-08-08T18:55Z" in html_body
 
 
-
 @pytest.mark.asyncio
 class TestNotificationDisabledAlert:
     async def test_notification_disabled_sends_email(self, client: AsyncClient):

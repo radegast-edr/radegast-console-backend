@@ -3,7 +3,7 @@ import os
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 from jinja2 import Template
 
@@ -18,7 +18,7 @@ if not AGENT_CONFIG_DIR.exists():
 RELEASES_DIR = Path(settings.releases_dir)
 
 
-def get_latest_agent_version() -> str | None:
+def get_latest_agent_version(os_name: str | None = None, arch_name: str | None = None) -> str | None:
     releases_dir = RELEASES_DIR
     if not releases_dir.exists():
         return None
@@ -30,6 +30,10 @@ def get_latest_agent_version() -> str | None:
             if match:
                 major, minor, patch, r = match.groups()
                 r_val = int(r) if r is not None else 0
+                if os_name and arch_name:
+                    zip_path = path / os_name / arch_name / "rustinel.zip"
+                    if not zip_path.exists():
+                        continue
                 versions.append(((int(major), int(minor), int(patch), r_val), item))
     if not versions:
         return None
@@ -56,7 +60,7 @@ async def download_agent(
         raise HTTPException(status_code=404, detail="Agent release not found")
     elif os_name == "windows" and arch_name != "amd64":
         raise HTTPException(status_code=404, detail="Agent release not found")
-    elif os_name == "mac" and arch_name != "m5":
+    elif os_name == "mac" and arch_name not in {"amd64", "m5"}:
         raise HTTPException(status_code=404, detail="Agent release not found")
     elif os_name not in {"linux", "windows", "mac"}:
         raise HTTPException(status_code=404, detail="Agent release not found")
@@ -65,7 +69,7 @@ async def download_agent(
         if not re.match(r"^\d+\.\d+\.\d+(?:r\d+)?$", version):
             raise HTTPException(status_code=404, detail="Agent release not found")
     else:
-        version = get_latest_agent_version()
+        version = get_latest_agent_version(os_name=os_name, arch_name=arch_name)
         if not version:
             raise HTTPException(status_code=404, detail="No agent releases found")
 
@@ -113,16 +117,20 @@ def build_base64_write_and_decode_block(
 
 @install_router.get("/install")
 async def get_install_script(
+    request: Request,
     os_param: str = Query(..., alias="os"),
 ):
     os_name = os_param.lower()
-    if os_name not in ("linux", "windows"):
+    if os_name not in ("linux", "windows", "mac"):
         raise HTTPException(
             status_code=400,
-            detail="Only linux and windows OS are supported for automatic installation",
+            detail="Only linux, windows and mac OS are supported for automatic installation",
         )
 
-    backend_url = settings.base_url.rstrip("/")
+    if settings.base_url in ("http://localhost:8000", "http://127.0.0.1:8000"):
+        backend_url = str(request.base_url).rstrip("/")
+    else:
+        backend_url = settings.base_url.rstrip("/")
 
     if os_name == "linux":
         config_tmpl = AGENT_CONFIG_DIR / "linux" / "config.toml"
@@ -158,7 +166,7 @@ async def get_install_script(
 
         return PlainTextResponse(rendered_script, media_type="text/plain")
 
-    else:
+    elif os_name == "windows":
         config_tmpl = AGENT_CONFIG_DIR / "windows" / "config.toml"
         install_service_tmpl = AGENT_CONFIG_DIR / "windows" / "install-service.py"
         install_bat_tmpl = AGENT_CONFIG_DIR / "windows" / "install.bat"
@@ -204,3 +212,39 @@ async def get_install_script(
         rendered_bat = bat_template.render(install_service_block=block.strip())
 
         return PlainTextResponse(rendered_bat, media_type="text/plain")
+
+    else:
+        # macOS installation
+        config_tmpl = AGENT_CONFIG_DIR / "mac" / "config.toml"
+        rustinel_plist_tmpl = AGENT_CONFIG_DIR / "mac" / "io.rustinel.daemon.plist"
+        radegast_plist_tmpl = AGENT_CONFIG_DIR / "mac" / "app.radegast.agent.plist"
+        install_script_tmpl = AGENT_CONFIG_DIR / "mac" / "install.sh"
+
+        if not (config_tmpl.exists() and rustinel_plist_tmpl.exists() and radegast_plist_tmpl.exists() and install_script_tmpl.exists()):
+            raise HTTPException(
+                status_code=500,
+                detail="macOS installation templates missing on server",
+            )
+
+        config_content = config_tmpl.read_text()
+        rustinel_plist_content = rustinel_plist_tmpl.read_text()
+        radegast_plist_content = radegast_plist_tmpl.read_text()
+        install_script_content = install_script_tmpl.read_text()
+
+        # Prefill agent plist
+        radegast_plist_content = radegast_plist_content.replace(
+            "{{RADEGAST_AGENT_PATH}}",
+            "/Library/Radegast/home/.local/bin/radegast-edr-agent",
+        ).replace("{{RADEGAST_AGENT_BACKEND_URL}}", backend_url)
+
+        # Render install script via Jinja2
+        template = Template(install_script_content)
+        rendered_script = template.render(
+            backend_url=backend_url,
+            config_content=config_content,
+            rustinel_plist_content=rustinel_plist_content,
+            radegast_plist_content=radegast_plist_content,
+            agent_package=settings.agent_package,
+        )
+
+        return PlainTextResponse(rendered_script, media_type="text/plain")

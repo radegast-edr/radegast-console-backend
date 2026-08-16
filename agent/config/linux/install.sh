@@ -101,13 +101,9 @@ mkdir -p /opt/radegast/state
 chown radegast-agent:radegast-agent /opt/radegast/state
 chmod 700 /opt/radegast/state
 
-# 4. Check/Install uv
-echo "Checking if uv is installed..."
+# 4. Check/Install uv for radegast-agent user (never use system-wide uv)
+echo "Checking if uv is installed for radegast-agent user..."
 get_uv_path() {
-    if command -v uv >/dev/null 2>&1; then
-        command -v uv
-        return 0
-    fi
     if [ -f "/opt/radegast/home/.local/bin/uv" ]; then
         echo "/opt/radegast/home/.local/bin/uv"
         return 0
@@ -125,32 +121,28 @@ if [ -z "$UV_BIN" ]; then
     # Attempt 1: official astral.sh installer (recommended, works on all distros)
     if command -v curl > /dev/null 2>&1; then
         echo "Installing uv via astral.sh installer..."
-        sudo -u radegast-agent -i sh -c "curl -LsSf https://astral.sh/uv/install.sh | sh"
+        sudo -u radegast-agent -H env HOME=/opt/radegast/home PATH="/opt/radegast/home/.local/bin:$PATH" sh -c "curl -LsSf https://astral.sh/uv/install.sh | sh"
     else
         # Attempt 2: via pip as last resort
         echo "curl not found, attempting uv install via pip..."
-        sudo -u radegast-agent -i python3 -m pip install --user --break-system-packages uv || true
+        sudo -u radegast-agent -H env HOME=/opt/radegast/home PATH="/opt/radegast/home/.local/bin:$PATH" python3 -m pip install --user --break-system-packages uv || true
     fi
     
     UV_BIN=$(get_uv_path || true)
     if [ -z "$UV_BIN" ]; then
-        echo "ERROR: Failed to install uv." >&2
+        echo "ERROR: Failed to install uv for radegast-agent." >&2
         exit 1
     fi
 else
-    echo "uv is already installed at: $UV_BIN"
+    echo "uv is already installed for radegast-agent at: $UV_BIN"
     echo "Attempting to upgrade uv to the newest version..."
-    if [[ "$UV_BIN" == /opt/radegast/home/* ]]; then
-        sudo -u radegast-agent -i "$UV_BIN" self update || echo "Update not available or failed, continuing with current version"
-    else
-        "$UV_BIN" self update || echo "Update not available or failed, continuing with current version"
-    fi
+    sudo -u radegast-agent -H env HOME=/opt/radegast/home "$UV_BIN" self update || echo "Update not available or failed, continuing with current version"
 fi
 echo "uv found at: $UV_BIN"
 
 # 5. Install radegast-agent via uv
 echo "Installing/upgrading radegast-agent tool..."
-sudo -u radegast-agent -i "$UV_BIN" tool install --upgrade {{ agent_package }}
+sudo -u radegast-agent -H env HOME=/opt/radegast/home PATH="/opt/radegast/home/.local/bin:$PATH" "$UV_BIN" tool install --upgrade {{ agent_package }}
 
 # Verify agent executable exists
 if [ ! -f "/opt/radegast/home/.local/bin/radegast-edr-agent" ]; then

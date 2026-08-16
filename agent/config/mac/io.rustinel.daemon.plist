@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>io.rustinel.daemon</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Library/Radegast/rustinel/rustinel</string>
+        <string>run</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>RUSTINEL_CONFIG</key>
+        <string>/Library/Radegast/etc/config.toml</string>
+    </dict>
+    <key>WorkingDirectory</key>
+    <string>/Library/Radegast/etc</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Library/Logs/Radegast/rustinel-stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Library/Logs/Radegast/rustinel-stderr.log</string>
+</dict>
+</plist>

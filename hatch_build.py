@@ -21,7 +21,9 @@ class CustomBuildHook(BuildHookInterface):
 
             if has_node_modules and has_npm:
                 try:
-                    subprocess.run(["npm", "run", "build"], cwd=web_dir, check=True)
+                    env = os.environ.copy()
+                    env.setdefault("PUBLIC_BACKEND_URL", "/")
+                    subprocess.run(["npm", "run", "build"], cwd=web_dir, env=env, check=True)
                     
                     # 2. Copy the build output to app/web_build
                     src_dir = os.path.join(web_dir, "build")

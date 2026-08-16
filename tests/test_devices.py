@@ -294,8 +294,25 @@ class TestDeviceInstall:
         assert "Radegast EDR Installation" in script
         assert "Decoding script" in script
 
+    async def test_get_install_script_mac(self, client: AsyncClient):
+        resp = await client.get("/device/install?os=mac")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/plain")
+        script = resp.text
+        assert "#!/bin/bash" in script
+        assert "RADEGAST_TOKEN" in script
+        assert "radegast-agent" in script
+        assert "rustinel" in script
+        assert "launchctl" in script
+        assert "Full Disk Access" in script
+        assert "python install 3.13" in script
+        assert "pkg-config" in script
+        assert "openssl" in script
+        assert "rustinel.io" not in script
+        assert "/Library/Radegast/home/.local/bin/uv" in script
+
     async def test_get_install_script_invalid_os(self, client: AsyncClient):
-        resp = await client.get("/device/install?os=macos")
+        resp = await client.get("/device/install?os=freebsd")
         assert resp.status_code == 400
 
     async def test_download_agent_latest(self, client: AsyncClient):
@@ -303,6 +320,43 @@ class TestDeviceInstall:
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "application/zip"
         assert len(resp.content) > 0
+
+    async def test_download_agent_platform_resolution(self, admin_client: AsyncClient, client: AsyncClient):
+        zip_content = b"PK\x03\x04" + b"\x00" * 20
+        # Upload Linux 1.0.0
+        await admin_client.post(
+            "/releases/",
+            data={"version": "1.0.0", "os": "linux", "arch": "amd64"},
+            files={"file": ("rustinel.zip", zip_content, "application/zip")},
+        )
+        # Upload Mac 1.5.0
+        await admin_client.post(
+            "/releases/",
+            data={"version": "1.5.0", "os": "mac", "arch": "m5"},
+            files={"file": ("rustinel.zip", zip_content, "application/zip")},
+        )
+        # Upload Windows 2.0.0
+        await admin_client.post(
+            "/releases/",
+            data={"version": "2.0.0", "os": "windows", "arch": "amd64"},
+            files={"file": ("rustinel.zip", zip_content, "application/zip")},
+        )
+
+        # Linux should resolve to 1.0.0 (even though higher versions exist for mac/win)
+        resp_linux = await client.get("/device/agent/download?os=linux&arch=amd64")
+        assert resp_linux.status_code == 200
+
+        # Mac should resolve to 1.5.0
+        resp_mac = await client.get("/device/agent/download?os=mac&arch=m5")
+        assert resp_mac.status_code == 200
+
+        # Windows should resolve to 2.0.0
+        resp_win = await client.get("/device/agent/download?os=windows&arch=amd64")
+        assert resp_win.status_code == 200
+
+        # Requesting platform with no uploads returns 404
+        resp_linux_arm = await client.get("/device/agent/download?os=linux&arch=arm64")
+        assert resp_linux_arm.status_code == 404
 
     async def test_download_agent_not_found(self, client: AsyncClient):
         resp = await client.get("/device/agent/download?os=linux&arch=nonexistent")
@@ -331,6 +385,18 @@ class TestDeviceInstall:
             decoded_service = base64.b64decode("".join(chunks)).decode("utf-8")
             assert '"tool", "install", "--upgrade", "--force", "custom-agent-package-windows-test"' in decoded_service
             assert '"tool", "install", "--upgrade", "--force", "radegast-edr-agent"' not in decoded_service
+        finally:
+            settings.agent_package = old_package
+
+    async def test_get_install_script_custom_agent_package_mac(self, client: AsyncClient):
+        old_package = settings.agent_package
+        settings.agent_package = "custom-agent-package-mac-test"
+        try:
+            resp = await client.get("/device/install?os=mac")
+            assert resp.status_code == 200
+            script = resp.text
+            assert "tool install --python 3.13 --upgrade custom-agent-package-mac-test" in script
+            assert "tool install --python 3.13 --upgrade radegast-edr-agent" not in script
         finally:
             settings.agent_package = old_package
 

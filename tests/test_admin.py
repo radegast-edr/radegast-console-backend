@@ -175,9 +175,7 @@ class TestAdminStats:
 
     @pytest.mark.asyncio
     async def test_get_admin_alert_stats_combined_filters(self, admin_client: AsyncClient):
-        resp = await admin_client.get(
-            "/admin/stats/alerts?severity=critical&rule_type=sigma&alert_resolution=none"
-        )
+        resp = await admin_client.get("/admin/stats/alerts?severity=critical&rule_type=sigma&alert_resolution=none")
         assert resp.status_code == 200
         data = resp.json()
         assert "severity_distribution" in data
@@ -218,4 +216,3 @@ class TestAdminStats:
     async def test_get_admin_device_stats_as_user(self, auth_client: AsyncClient):
         resp = await auth_client.get("/admin/stats/devices")
         assert resp.status_code == 403
-

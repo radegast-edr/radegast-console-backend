@@ -61,13 +61,29 @@ detection:
 level: low
 """
 
+MAC_WHOAMI_RULE_ID = "c7d8e9f0-1a2b-3c4d-5e6f-7890abcdef12"
+MAC_WHOAMI_RULE = f"""
+title: Example - Whoami Execution (macOS)
+id: {MAC_WHOAMI_RULE_ID}
+status: experimental
+description: Detects execution of whoami.
+author: Rustinel
+logsource:
+  category: process_creation
+  product: macos
+detection:
+  selection:
+    Image|endswith: '/whoami'
+  condition: selection
+level: low
+"""
+
 
 def check_privileges():
     """Ensure tests are run with admin privileges if executing commands that require them."""
-    if sys.platform.startswith("linux"):
-        # On Linux, the integration test script itself can run as normal user,
+    if sys.platform.startswith("linux") or sys.platform.startswith("darwin"):
+        # On Linux and macOS, the integration test script itself can run as normal user,
         # but will invoke `sudo` for install/uninstall/etc.
-        # Check if user has sudo access or runs as root
         if os.getuid() != 0:
             print("INFO: Not running as root. Sudo commands will be used for installation.")
     elif sys.platform.startswith("win32"):
@@ -82,6 +98,8 @@ def create_pack_zip(os_name: str) -> bytes:
     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
         if os_name == "linux":
             zip_file.writestr("sigma/linux_whoami.yml", LINUX_WHOAMI_RULE.strip())
+        elif os_name == "mac":
+            zip_file.writestr("sigma/macos_whoami.yml", MAC_WHOAMI_RULE.strip())
         elif os_name == "windows":
             zip_file.writestr("sigma/windows_whoami.yml", WINDOWS_WHOAMI_RULE.strip())
     return zip_buffer.getvalue()
@@ -111,8 +129,15 @@ def run_command(cmd, shell=False, check=True, input_data=None, env=None):
 def main():
     check_privileges()
 
-    os_name = "linux" if sys.platform.startswith("linux") else "windows"
-    expected_rule_id = LINUX_WHOAMI_RULE_ID if os_name == "linux" else WINDOWS_WHOAMI_RULE_ID
+    if sys.platform.startswith("linux"):
+        os_name = "linux"
+        expected_rule_id = LINUX_WHOAMI_RULE_ID
+    elif sys.platform.startswith("darwin"):
+        os_name = "mac"
+        expected_rule_id = MAC_WHOAMI_RULE_ID
+    else:
+        os_name = "windows"
+        expected_rule_id = WINDOWS_WHOAMI_RULE_ID
 
     # 1. Create clean temp workspace
     temp_dir = tempfile.TemporaryDirectory()
@@ -283,16 +308,28 @@ def main():
         real_sudo_path = shutil.which("sudo")
         has_sudo = real_sudo_path is not None
 
-        if os_name == "linux":
+        if os_name in ("linux", "mac"):
             bin_dir = temp_path / "bin"
             bin_dir.mkdir(parents=True, exist_ok=True)
-            mock_systemctl = bin_dir / "systemctl"
-            mock_systemctl.write_text("#!/bin/sh\nexit 0\n")
-            mock_systemctl.chmod(0o755)
 
-            # Create a mock sudo to bypass sudo command in container environments
+            if os_name == "linux":
+                mock_systemctl = bin_dir / "systemctl"
+                mock_systemctl.write_text("#!/bin/sh\nexit 0\n")
+                mock_systemctl.chmod(0o755)
+            else:
+                mock_launchctl = bin_dir / "launchctl"
+                mock_launchctl.write_text("#!/bin/sh\nexit 0\n")
+                mock_launchctl.chmod(0o755)
+                mock_dscl = bin_dir / "dscl"
+                mock_dscl.write_text("#!/bin/sh\nexit 0\n")
+                mock_dscl.chmod(0o755)
+
+            # Create a mock sudo to bypass sudo command in container/test environments
+            target_user_name = "radegast-agent" if os_name == "linux" else "_radegast"
+            target_home_path = "/opt/radegast/home" if os_name == "linux" else "/Library/Radegast/home"
+
             mock_sudo = bin_dir / "sudo"
-            mock_sudo.write_text("""#!/bin/sh
+            mock_sudo.write_text(f"""#!/bin/sh
 target_user=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -314,16 +351,16 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
-if [ "$target_user" = "radegast-agent" ]; then
-  export HOME=/opt/radegast/home
-  export USER=radegast-agent
-  export LOGNAME=radegast-agent
+if [ "$target_user" = "{target_user_name}" ]; then
+  export HOME={target_home_path}
+  export USER={target_user_name}
+  export LOGNAME={target_user_name}
 fi
 exec "$@"
 """)
             mock_sudo.chmod(0o755)
 
-            # Put our fake systemctl and sudo at the front of PATH
+            # Put our fake binaries and sudo at the front of PATH
             install_env["PATH"] = f"{bin_dir}:{install_env.get('PATH', '')}"
 
             install_script_file = temp_path / "install.sh"
@@ -336,13 +373,15 @@ exec "$@"
                 run_command(["bash", str(install_script_file)], env=install_env)
             installed = True
 
-            # Start processes manually since systemd is mocked
+            # Start processes manually since systemd/launchd is mocked
             print("Starting client processes manually...")
             # 6a. Start rustinel
             print("Starting rustinel...")
-            rustinel_process = subprocess.Popen(
-                ["/opt/radegast/rustinel/rustinel", "run"],
-                cwd="/etc/rustinel",
+            rustinel_bin_path = "/opt/radegast/rustinel/rustinel" if os_name == "linux" else "/Library/Radegast/rustinel/rustinel"
+            rustinel_config_dir = "/etc/rustinel" if os_name == "linux" else "/Library/Radegast/etc"
+            rustinel_process = subprocess.Popen(  # noqa: S603
+                [rustinel_bin_path, "run"],
+                cwd=rustinel_config_dir,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -351,7 +390,7 @@ exec "$@"
 
             # Check if rustinel is still running
             if rustinel_process.poll() is not None:
-                print("WARNING: rustinel exited immediately. eBPF may not be supported (e.g., container).")
+                print("WARNING: rustinel exited immediately. Sensor/eBPF may not be supported in test container/environment.")
                 stdout, stderr = rustinel_process.communicate()
                 print(f"rustinel stdout:\n{stdout}\nrustinel stderr:\n{stderr}")
                 rustinel_process = None
@@ -363,16 +402,26 @@ exec "$@"
             agent_env = os.environ.copy()
             agent_env["RADEGAST_AGENT_BACKEND_URL"] = "http://127.0.0.1:8000/api/v1"
             agent_env["RADEGAST_AGENT_DEVICE_TOKEN"] = device_token
-            agent_env["RADEGAST_AGENT_RUSTINEL_BINARY"] = "/opt/radegast/rustinel/rustinel"
-            agent_env["RADEGAST_AGENT_RUSTINEL_CONFIG"] = "/etc/rustinel/config.toml"
-            agent_env["RADEGAST_AGENT_RULES_DIR"] = "/etc/rustinel/rules/"
-            agent_env["RADEGAST_AGENT_ALERTS_DIR"] = "/var/log/rustinel/"
-            agent_env["RADEGAST_AGENT_STATE_DIR"] = "/opt/radegast/state/"
+            if os_name == "linux":
+                agent_env["RADEGAST_AGENT_RUSTINEL_BINARY"] = "/opt/radegast/rustinel/rustinel"
+                agent_env["RADEGAST_AGENT_RUSTINEL_CONFIG"] = "/etc/rustinel/config.toml"
+                agent_env["RADEGAST_AGENT_RULES_DIR"] = "/etc/rustinel/rules/"
+                agent_env["RADEGAST_AGENT_ALERTS_DIR"] = "/var/log/rustinel/"
+                agent_env["RADEGAST_AGENT_STATE_DIR"] = "/opt/radegast/state/"
+                agent_exe_path = "/opt/radegast/home/.local/bin/radegast-edr-agent"
+            else:
+                agent_env["RADEGAST_AGENT_RUSTINEL_BINARY"] = "/Library/Radegast/rustinel/rustinel"
+                agent_env["RADEGAST_AGENT_RUSTINEL_CONFIG"] = "/Library/Radegast/etc/config.toml"
+                agent_env["RADEGAST_AGENT_RULES_DIR"] = "/Library/Radegast/etc/rules/"
+                agent_env["RADEGAST_AGENT_ALERTS_DIR"] = "/Library/Logs/Radegast/"
+                agent_env["RADEGAST_AGENT_STATE_DIR"] = "/Library/Radegast/state/"
+                agent_exe_path = "/Library/Radegast/home/.local/bin/radegast-edr-agent"
+
             agent_env["RADEGAST_AGENT_INIT_WAIT_SECONDS"] = "0"
-            agent_env["PATH"] = "/opt/radegast/home/.local/bin:" + agent_env.get("PATH", "")
+            agent_env["PATH"] = Path(agent_exe_path).parent.as_posix() + ":" + agent_env.get("PATH", "")
 
             # Run agent directly as the current user
-            agent_cmd = ["/opt/radegast/home/.local/bin/radegast-edr-agent"]
+            agent_cmd = [agent_exe_path]
 
             agent_process = subprocess.Popen(  # noqa: S603
                 agent_cmd, env=agent_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
@@ -391,6 +440,7 @@ exec "$@"
         print("Waiting for the agent to check in and synchronize rules...")
         rule_deployed = False
         rules_path_linux = Path("/etc/rustinel/rules/sigma/whoami-pack/linux_whoami.yml")
+        rules_path_mac = Path("/Library/Radegast/etc/rules/sigma/whoami-pack/macos_whoami.yml")
         rules_path_windows = (
             Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
             / "Radegast"
@@ -400,7 +450,12 @@ exec "$@"
             / "whoami-pack"
             / "windows_whoami.yml"
         )
-        rules_file = rules_path_linux if os_name == "linux" else rules_path_windows
+        if os_name == "linux":
+            rules_file = rules_path_linux
+        elif os_name == "mac":
+            rules_file = rules_path_mac
+        else:
+            rules_file = rules_path_windows
 
         for _ in range(30):
             if rules_file.exists():
@@ -433,7 +488,7 @@ exec "$@"
         # 8. Trigger threat detection and also write a mock alert to guarantee test robustness
         print("Triggering threat detection (running whoami)...")
         try:
-            if os_name == "linux":
+            if os_name in ("linux", "mac"):
                 run_command(["whoami"])
             else:
                 run_command(["whoami.exe"])
@@ -452,6 +507,14 @@ exec "$@"
 
         if os_name == "linux":
             alerts_file = Path("/var/log/rustinel/alerts.json")
+        elif os_name == "mac":
+            alerts_file = Path("/Library/Logs/Radegast/alerts.json")
+        else:
+            # Windows alerts path
+            program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+            alerts_file = Path(program_files) / "Radegast" / "agent" / "logs" / "alerts.json"
+
+        if os_name in ("linux", "mac"):
             if os.getuid() != 0 and has_sudo:
                 run_command(["sudo", "sh", "-c", f"echo '{json.dumps(alert_data)}' >> {alerts_file}"])
             else:
@@ -459,9 +522,6 @@ exec "$@"
                 with open(alerts_file, "a") as f:
                     f.write(json.dumps(alert_data) + "\n")
         else:
-            # Windows alerts path
-            program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
-            alerts_file = Path(program_files) / "Radegast" / "agent" / "logs" / "alerts.json"
             alerts_file.parent.mkdir(parents=True, exist_ok=True)
             with open(alerts_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(alert_data) + "\n")
@@ -514,6 +574,13 @@ exec "$@"
                 if Path("/var/log/rustinel/alerts.json").exists():
                     print("--- alerts.json ---")
                     print(Path("/var/log/rustinel/alerts.json").read_text())
+            elif os_name == "mac":
+                if Path("/Library/Logs/Radegast/rustinel.log").exists():
+                    print("--- rustinel.log ---")
+                    print(Path("/Library/Logs/Radegast/rustinel.log").read_text())
+                if Path("/Library/Logs/Radegast/alerts.json").exists():
+                    print("--- alerts.json ---")
+                    print(Path("/Library/Logs/Radegast/alerts.json").read_text())
             else:
                 radegast_logs_dir = Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Radegast" / "agent" / "logs"
                 print(f"Dumping windows logs from {radegast_logs_dir}")
@@ -556,6 +623,14 @@ exec "$@"
                         run_command([real_sudo_path, "/opt/radegast/uninstall.sh"], input_data="y\n")
                     else:
                         run_command(["/opt/radegast/uninstall.sh"], input_data="y\n")
+            elif os_name == "mac":
+                if Path("/Library/Radegast/uninstall.sh").exists():
+                    real_sudo_path = shutil.which("sudo")
+                    has_sudo = real_sudo_path is not None
+                    if os.getuid() != 0 and has_sudo:
+                        run_command([real_sudo_path, "/Library/Radegast/uninstall.sh"], input_data="y\n")
+                    else:
+                        run_command(["/Library/Radegast/uninstall.sh"], input_data="y\n")
             else:
                 uninstall_bat = Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Radegast" / "uninstall.bat"
                 if uninstall_bat.exists():

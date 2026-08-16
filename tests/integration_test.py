@@ -298,6 +298,12 @@ def main():
                 raise RuntimeError(f"Failed to download install script: {resp.text}")
             install_script = resp.text
 
+        # In integration tests / GHA runners, adapt script to run as root user
+        if os_name == "mac":
+            install_script = install_script.replace("_radegast", "root")
+        elif os_name == "linux":
+            install_script = install_script.replace("radegast-agent", "root")
+
         # 6. Install the client
         print("Running installer...")
         install_env = env.copy()
@@ -320,12 +326,9 @@ def main():
                 mock_launchctl = bin_dir / "launchctl"
                 mock_launchctl.write_text("#!/bin/sh\nexit 0\n")
                 mock_launchctl.chmod(0o755)
-                mock_dscl = bin_dir / "dscl"
-                mock_dscl.write_text("#!/bin/sh\nexit 0\n")
-                mock_dscl.chmod(0o755)
 
-            # Create a mock sudo to bypass sudo command in container/test environments
-            target_user_name = "radegast-agent" if os_name == "linux" else "_radegast"
+            # Target user is root in test runner
+            target_user_name = "root"
             target_home_path = "/opt/radegast/home" if os_name == "linux" else "/Library/Radegast/home"
 
             mock_sudo = bin_dir / "sudo"
@@ -351,7 +354,7 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
-if [ "$target_user" = "{target_user_name}" ]; then
+if [ "$target_user" = "{target_user_name}" ] || [ -z "$target_user" ]; then
   export HOME={target_home_path}
   export USER={target_user_name}
   export LOGNAME={target_user_name}

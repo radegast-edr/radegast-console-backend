@@ -188,7 +188,7 @@ fi
 echo "Creating _radegast system user..."
 if ! dscl . -read /Users/_radegast >/dev/null 2>&1; then
     # Find available UID under 500
-    LAST_UID=$(dscl . -list /Users UniqueID | awk '$2 < 500 {print $2}' | sort -n | tail -1)
+    LAST_UID=$(dscl . -list /Users UniqueID 2>/dev/null | awk '$2 < 500 {print $2}' | sort -n | tail -1)
     if [ -z "$LAST_UID" ]; then
         NEW_UID=450
     else

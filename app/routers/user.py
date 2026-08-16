@@ -437,6 +437,8 @@ async def update_notifications(
         disabled_features.append("API key modification")
     if user.notify_news_updates and not data.notify_news_updates:
         disabled_features.append("Platform news and updates")
+    if user.notify_admin_notifications and not data.notify_admin_notifications:
+        disabled_features.append("Admin notifications")
 
     user.notify_login = data.notify_login
     user.notify_new_keys = data.notify_new_keys
@@ -446,6 +448,7 @@ async def update_notifications(
     user.notify_downtime_maintenance = data.notify_downtime_maintenance
     user.notify_api_key_modification = data.notify_api_key_modification
     user.notify_news_updates = data.notify_news_updates
+    user.notify_admin_notifications = data.notify_admin_notifications
 
     severity_changed = False
     old_level = user.notification_level

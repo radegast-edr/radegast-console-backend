@@ -120,6 +120,7 @@ class NotificationSettings(BaseModel):
     notify_downtime_maintenance: bool
     notify_api_key_modification: bool = True
     notify_news_updates: bool = True
+    notify_admin_notifications: bool = True
     notification_level: LogSeverity = LogSeverity.medium
 
     model_config = {"from_attributes": True}

@@ -428,3 +428,102 @@ class TestNotificationDisabledAlert:
         body = changed_emails[0][2]
         assert "medium" in body
         assert "high" in body
+
+    async def test_admin_notifications_disabled_sends_email(self, client: AsyncClient):
+        email = "notif_disabled_admin@example.com"
+        password = "Password123!"
+        await _register_and_verify(client, email, password)
+        await _login(client, email, password)
+
+        payload = {
+            "notify_login": True,
+            "notify_new_keys": True,
+            "notify_recovery_used": True,
+            "notify_keys_transferred": True,
+            "notify_device_log": True,
+            "notify_downtime_maintenance": True,
+            "notify_admin_notifications": False,
+        }
+        with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
+            resp = await client.put("/user/notifications", json=payload)
+            assert resp.status_code == 200
+
+        calls = mock_send.call_args_list
+        disabled_emails = [call.args for call in calls if "Notification Settings Disabled" in call.args[1]]
+        assert len(disabled_emails) == 1
+        body = disabled_emails[0][2]
+        assert "Admin notifications" in body
+
+
+# ---------------------------------------------------------------------------
+# Release Notifications (Admin Notifications)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestReleaseAdminNotifications:
+    async def test_upload_release_sends_notification_to_subscribed_admins(self, admin_client: AsyncClient, db_engine):
+        # Create an extra admin who is unsubscribed and a regular user
+        sub_admin_email = "admin_sub@example.com"
+        unsub_admin_email = "admin_unsub@example.com"
+        regular_user_email = "user_regular@example.com"
+
+        session_factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+        async with session_factory() as session:
+            session.add(User(email=sub_admin_email, password="pw", role="admin", verified=True, notify_admin_notifications=True))
+            session.add(User(email=unsub_admin_email, password="pw", role="admin", verified=True, notify_admin_notifications=False))
+            session.add(User(email=regular_user_email, password="pw", role="user", verified=True, notify_admin_notifications=True))
+            await session.commit()
+
+        zip_content = b"PK\x03\x04" + b"\x00" * 20
+        with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
+            resp = await admin_client.post(
+                "/releases/",
+                data={"version": "3.5.0", "os": "linux", "arch": "amd64"},
+                files={"file": ("rustinel.zip", zip_content, "application/zip")},
+            )
+            assert resp.status_code == 200
+
+        calls = mock_send.call_args_list
+        recipient_emails = [call.args[0] for call in calls]
+        assert sub_admin_email in recipient_emails
+        assert unsub_admin_email not in recipient_emails
+        assert regular_user_email not in recipient_emails
+
+        # Check subject and content
+        sub_call = next(call for call in calls if call.args[0] == sub_admin_email)
+        assert "New Rustinel Release Uploaded: 3.5.0 (linux/amd64)" in sub_call.args[1]
+        assert "3.5.0" in sub_call.args[2]
+        assert sub_call.kwargs.get("email_type") == "admin_notifications"
+
+    async def test_delete_release_sends_notification_to_subscribed_admins(self, admin_client: AsyncClient, db_engine):
+        sub_admin_email = "admin_sub_del@example.com"
+        unsub_admin_email = "admin_unsub_del@example.com"
+
+        session_factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+        async with session_factory() as session:
+            session.add(User(email=sub_admin_email, password="pw", role="admin", verified=True, notify_admin_notifications=True))
+            session.add(User(email=unsub_admin_email, password="pw", role="admin", verified=True, notify_admin_notifications=False))
+            await session.commit()
+
+        zip_content = b"PK\x03\x04" + b"\x00" * 20
+        # Upload first
+        await admin_client.post(
+            "/releases/",
+            data={"version": "3.6.0", "os": "linux", "arch": "amd64"},
+            files={"file": ("rustinel.zip", zip_content, "application/zip")},
+        )
+
+        with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
+            resp = await admin_client.delete("/releases/3.6.0/linux/amd64")
+            assert resp.status_code == 200
+
+        calls = mock_send.call_args_list
+        recipient_emails = [call.args[0] for call in calls]
+        assert sub_admin_email in recipient_emails
+        assert unsub_admin_email not in recipient_emails
+
+        sub_call = next(call for call in calls if call.args[0] == sub_admin_email)
+        assert "Release Deleted: 3.6.0 (linux/amd64)" in sub_call.args[1]
+        assert "3.6.0" in sub_call.args[2]
+        assert sub_call.kwargs.get("email_type") == "admin_notifications"

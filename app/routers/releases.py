@@ -2,12 +2,16 @@ import re
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 import app.routers.install as install_router_module
 from app.dependencies import get_current_user
 from app.models.user import User, UserRole
+from app.services.email import (
+    send_release_deleted_notification,
+    send_release_uploaded_notification,
+)
 
 router = APIRouter(prefix="/releases", tags=["releases"])
 
@@ -87,6 +91,7 @@ def _validate_release_params(version: str, os_name: str, arch: str, is_upload: b
 
 @router.post("/")
 async def upload_release(
+    background_tasks: BackgroundTasks,
     version: str = Form(...),
     os_name: str = Form(..., alias="os"),
     arch: str = Form(...),
@@ -112,6 +117,14 @@ async def upload_release(
     content = await file.read()
     dest.write_bytes(content)
 
+    background_tasks.add_task(
+        send_release_uploaded_notification,
+        version,
+        os_name,
+        arch,
+        user.email,
+    )
+
     stat = dest.stat()
     return {
         "version": version,
@@ -127,6 +140,7 @@ async def delete_release(
     version: str,
     os_name: str,
     arch: str,
+    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
 ):
     """Delete a specific release. Admin only."""
@@ -150,6 +164,14 @@ async def delete_release(
     ver_dir = os_dir.parent
     if ver_dir.exists() and not any(ver_dir.iterdir()):
         ver_dir.rmdir()
+
+    background_tasks.add_task(
+        send_release_deleted_notification,
+        version,
+        os_name,
+        arch,
+        user.email,
+    )
 
     return {"message": f"Release {version}/{os_name}/{arch} deleted"}
 

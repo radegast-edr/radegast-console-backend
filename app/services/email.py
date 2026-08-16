@@ -14,7 +14,7 @@ from app.config import settings
 from app.models.email_bulk_state import EmailBulkState
 from app.models.log import LogSeverity
 from app.models.queued_email import QueuedEmail
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.services.auth import create_signed_token
 from app.utils import ensure_utc, get_worker_lock, utc_now
 
@@ -187,6 +187,40 @@ GROUP_RESPONSE_CHANGED_TEMPLATE = Template("""
 </html>
 """)
 
+RELEASE_UPLOADED_TEMPLATE = Template("""
+<html>
+<body style="font-family: sans-serif; padding: 20px; line-height: 1.6; color: #333;">
+<h2>New Release Uploaded — Radegast EDR</h2>
+<p>A new Rustinel release package has been uploaded.</p>
+<ul>
+    <li><strong>Version:</strong> {{ version }}</li>
+    <li><strong>Operating System:</strong> {{ os_name }}</li>
+    <li><strong>Architecture:</strong> {{ arch }}</li>
+    <li><strong>Uploaded By:</strong> {{ uploader_email }}</li>
+    <li><strong>Time:</strong> {{ time }} UTC</li>
+</ul>
+<p><a href="{{ base_url }}/releases">View Releases</a></p>
+</body>
+</html>
+""")
+
+RELEASE_DELETED_TEMPLATE = Template("""
+<html>
+<body style="font-family: sans-serif; padding: 20px; line-height: 1.6; color: #333;">
+<h2>Release Deleted — Radegast EDR</h2>
+<p>A Rustinel release package has been deleted.</p>
+<ul>
+    <li><strong>Version:</strong> {{ version }}</li>
+    <li><strong>Operating System:</strong> {{ os_name }}</li>
+    <li><strong>Architecture:</strong> {{ arch }}</li>
+    <li><strong>Deleted By:</strong> {{ deleter_email }}</li>
+    <li><strong>Time:</strong> {{ time }} UTC</li>
+</ul>
+<p><a href="{{ base_url }}/releases">View Releases</a></p>
+</body>
+</html>
+""")
+
 
 def get_web_ui_base() -> str:
     if settings.web_ui_url:
@@ -214,6 +248,10 @@ EMAIL_TYPE_TO_PREFERENCE = {
     "news_updates": (
         "notify_news_updates",
         "Platform news and updates",
+    ),
+    "admin_notifications": (
+        "notify_admin_notifications",
+        "Admin notifications",
     ),
 }
 
@@ -487,6 +525,56 @@ async def send_group_response_changed_notification(email: str, group_name: str, 
         html,
         email_type="verify",
     )
+
+
+async def send_release_uploaded_notification(version: str, os_name: str, arch: str, uploader_email: str):
+    ui_base = get_web_ui_base()
+    time_str = utc_now().strftime("%Y-%m-%d %H:%M:%S")
+    html = RELEASE_UPLOADED_TEMPLATE.render(
+        version=version,
+        os_name=os_name,
+        arch=arch,
+        uploader_email=uploader_email,
+        time=time_str,
+        base_url=ui_base,
+    )
+    async with app.database.async_session() as session:
+        result = await session.execute(
+            select(User).where(
+                User.role == UserRole.admin,
+                User.notify_admin_notifications.is_(True),
+            )
+        )
+        admins = result.scalars().all()
+
+    subject = f"[Radegast EDR] New Rustinel Release Uploaded: {version} ({os_name}/{arch})"
+    for admin in admins:
+        await send_email(admin.email, subject, html, email_type="admin_notifications")
+
+
+async def send_release_deleted_notification(version: str, os_name: str, arch: str, deleter_email: str):
+    ui_base = get_web_ui_base()
+    time_str = utc_now().strftime("%Y-%m-%d %H:%M:%S")
+    html = RELEASE_DELETED_TEMPLATE.render(
+        version=version,
+        os_name=os_name,
+        arch=arch,
+        deleter_email=deleter_email,
+        time=time_str,
+        base_url=ui_base,
+    )
+    async with app.database.async_session() as session:
+        result = await session.execute(
+            select(User).where(
+                User.role == UserRole.admin,
+                User.notify_admin_notifications.is_(True),
+            )
+        )
+        admins = result.scalars().all()
+
+    subject = f"Release Deleted: {version} ({os_name}/{arch}) — Radegast EDR"
+    for admin in admins:
+        await send_email(admin.email, subject, html, email_type="admin_notifications")
 
 
 async def send_password_reset_email(email: str, new_password: str):

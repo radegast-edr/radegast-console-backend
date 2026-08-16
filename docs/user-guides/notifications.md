@@ -16,6 +16,7 @@ All notifications are sent via email and are controlled through your user settin
 - **Platform downtime and maintenance emails**: Notified about platform maintenance
 - **API key modification alerts**: Notified when API keys are created or modified
 - **Platform news and updates**: Notified about platform news, updates, and releases
+- **Admin notifications** (Admins only): Notified about administrative events, such as when Rustinel agent releases are uploaded or deleted
 
 ## Step-by-Step Guide
 
@@ -39,6 +40,7 @@ You can enable or disable each type of notification individually:
    - **Platform downtime and maintenance emails**
    - **API key modification**
    - **Platform news and updates**
+   - **Admin notifications** (visible only to Administrator accounts)
 
 2. Toggle each switch ON (enabled) or OFF (disabled) based on your preferences
 

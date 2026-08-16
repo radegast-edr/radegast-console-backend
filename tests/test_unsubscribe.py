@@ -237,3 +237,26 @@ async def test_unsubscribe_get_redirect(client: AsyncClient):
         assert resp2.headers["location"] == "https://custom-ui.radegast.app/unsubscribe"
     finally:
         settings.web_ui_url = orig_web_ui
+
+
+@pytest.mark.asyncio
+async def test_admin_notifications_unsubscribe(client: AsyncClient, db_session):
+    email = "admin_unsub_test@example.com"
+    user = User(email=email, password="hashedpassword", role="admin", verified=True, notify_admin_notifications=True)
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+
+    assert user.notify_admin_notifications is True
+
+    expires_at = (utc_now() + timedelta(weeks=2)).isoformat()
+    token = create_signed_token(
+        {"user_id": user.id, "expires_at": expires_at, "preference_field": "notify_admin_notifications"}, salt="unsubscribe"
+    )
+
+    resp = await client.post("/user/unsubscribe", json={"token": token})
+    assert resp.status_code == 200
+    assert "admin notifications" in resp.json()["message"].lower()
+
+    await db_session.refresh(user)
+    assert user.notify_admin_notifications is False

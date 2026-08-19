@@ -16,6 +16,7 @@ class DeviceResponse(BaseModel):
     signature_public_key: str | None
     encryption_public_key: str | None = None
     last_seen: datetime | None = None
+    healthy: bool | None = None
     agent_version: str | None = None
     rustinel_version: str | None = None
     os: str | None = None
@@ -29,6 +30,7 @@ class DeviceDetailResponse(BaseModel):
     signature_public_key: str | None
     encryption_public_key: str | None = None
     last_seen: datetime | None = None
+    healthy: bool | None = None
     agent_version: str | None = None
     rustinel_version: str | None = None
     os: str | None = None
@@ -57,3 +59,7 @@ class DeviceSetSigningKey(BaseModel):
 
 class DeviceSetEncryptionKey(BaseModel):
     encryption_public_key: str
+
+
+class DeviceHealthReport(BaseModel):
+    healthy: bool | None = None

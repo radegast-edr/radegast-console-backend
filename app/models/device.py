@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -17,6 +17,7 @@ class Device(Base):
     signature_public_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     encryption_public_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    healthy: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     agent_version: Mapped[str | None] = mapped_column(String(255), nullable=True)
     rustinel_version: Mapped[str | None] = mapped_column(String(255), nullable=True)
     os: Mapped[str | None] = mapped_column(String(50), nullable=True)

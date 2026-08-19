@@ -439,3 +439,70 @@ class TestDeviceReinstall:
     async def test_reinstall_unauthenticated(self, client: AsyncClient):
         resp = await client.post("/devices/1/reinstall")
         assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+class TestDeviceHealth:
+    async def test_report_device_health(self, auth_client: AsyncClient, client: AsyncClient):
+        group_id = await _get_default_group_id(auth_client)
+        resp = await auth_client.post("/devices/", json={"name": "Health-01", "group_id": group_id})
+        assert resp.status_code == 200
+        device_id = resp.json()["id"]
+        token = resp.json()["token"]
+
+        device_client = AsyncClient(transport=client._transport, base_url="http://test")
+        resp = await device_client.post("/auth/device/login", json={"token": token})
+        assert resp.status_code == 200
+
+        # Initially healthy is None
+        resp = await auth_client.get(f"/devices/{device_id}")
+        assert resp.status_code == 200
+        assert resp.json()["healthy"] is None
+
+        # Report healthy = True
+        resp = await device_client.post("/devices/health", json={"healthy": True})
+        assert resp.status_code == 200
+        assert resp.json()["message"] == "Health status updated"
+
+        resp = await auth_client.get(f"/devices/{device_id}")
+        assert resp.status_code == 200
+        assert resp.json()["healthy"] is True
+
+        # Report healthy = False
+        resp = await device_client.post("/devices/health", json={"healthy": False})
+        assert resp.status_code == 200
+
+        resp = await auth_client.get(f"/devices/{device_id}")
+        assert resp.status_code == 200
+        assert resp.json()["healthy"] is False
+
+        # Report healthy = None (disabled)
+        resp = await device_client.post("/devices/health", json={"healthy": None})
+        assert resp.status_code == 200
+
+        resp = await auth_client.get(f"/devices/{device_id}")
+        assert resp.status_code == 200
+        assert resp.json()["healthy"] is None
+
+    async def test_report_device_health_via_available_packs(self, auth_client: AsyncClient, client: AsyncClient):
+        group_id = await _get_default_group_id(auth_client)
+        resp = await auth_client.post("/devices/", json={"name": "Health-02", "group_id": group_id})
+        assert resp.status_code == 200
+        device_id = resp.json()["id"]
+        token = resp.json()["token"]
+
+        device_client = AsyncClient(transport=client._transport, base_url="http://test")
+        resp = await device_client.post("/auth/device/login", json={"token": token})
+        assert resp.status_code == 200
+
+        # Report healthy via GET /packs/device/available
+        resp = await device_client.get("/packs/device/available?healthy=true")
+        assert resp.status_code == 200
+
+        resp = await auth_client.get(f"/devices/{device_id}")
+        assert resp.status_code == 200
+        assert resp.json()["healthy"] is True
+
+    async def test_report_device_health_unauthenticated(self, client: AsyncClient):
+        resp = await client.post("/devices/health", json={"healthy": True})
+        assert resp.status_code == 401

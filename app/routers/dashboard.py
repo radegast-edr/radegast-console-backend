@@ -91,6 +91,7 @@ async def get_dashboard_data(
             signature_public_key=d.signature_public_key,
             encryption_public_key=d.encryption_public_key,
             last_seen=d.last_seen,
+            healthy=d.healthy,
             agent_version=d.agent_version,
             rustinel_version=d.rustinel_version,
             os=d.os,

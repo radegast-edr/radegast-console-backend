@@ -583,6 +583,7 @@ async def device_available_packs(
     agent_version: str | None = None,
     rustinel_version: str | None = None,
     os: str | None = None,
+    healthy: bool | None = None,
     device: Device = Depends(get_current_device),
     db: AsyncSession = Depends(get_db),
 ):
@@ -604,6 +605,8 @@ async def device_available_packs(
         device.rustinel_version = rustinel_version
     if os is not None:
         device.os = os
+    if healthy is not None:
+        device.healthy = healthy
     await db.commit()
 
     packs = []

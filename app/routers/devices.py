@@ -14,6 +14,7 @@ from app.schemas.device import (
     DeviceCreate,
     DeviceCreateResponse,
     DeviceDetailResponse,
+    DeviceHealthReport,
     DeviceRename,
     DeviceResponse,
     DeviceSetEncryptionKey,
@@ -96,6 +97,7 @@ async def list_devices(
             signature_public_key=d.signature_public_key,
             encryption_public_key=d.encryption_public_key,
             last_seen=d.last_seen,
+            healthy=d.healthy,
             agent_version=d.agent_version,
             rustinel_version=d.rustinel_version,
             os=d.os,
@@ -179,6 +181,7 @@ async def get_device(
         signature_public_key=device.signature_public_key,
         encryption_public_key=device.encryption_public_key,
         last_seen=device.last_seen,
+        healthy=device.healthy,
         agent_version=device.agent_version,
         rustinel_version=device.rustinel_version,
         os=device.os,
@@ -300,6 +303,7 @@ async def rename_device(
         signature_public_key=device.signature_public_key,
         encryption_public_key=device.encryption_public_key,
         last_seen=device.last_seen,
+        healthy=device.healthy,
         agent_version=device.agent_version,
         rustinel_version=device.rustinel_version,
         os=device.os,
@@ -335,6 +339,18 @@ async def set_encryption_key(
 
     await db.commit()
     return {"message": "Encryption key set"}
+
+
+@router.post("/health")
+async def report_device_health(
+    data: DeviceHealthReport,
+    device: Device = Depends(get_current_device),
+    db: AsyncSession = Depends(get_db),
+):
+    device.last_seen = utc_now()
+    device.healthy = data.healthy
+    await db.commit()
+    return {"message": "Health status updated"}
 
 
 @router.post("/{device_id}/reinstall", response_model=DeviceCreateResponse)

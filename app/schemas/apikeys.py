@@ -12,6 +12,7 @@ class APIKeyScopes(BaseModel):
     groups: list[AccessLevel] = []
     packs: list[AccessLevel] = []
     logs: list[AccessLevel] = []
+    releases: list[AccessLevel] = []
 
 
 class APIKeyCreate(BaseModel):

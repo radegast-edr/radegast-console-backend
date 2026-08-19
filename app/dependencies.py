@@ -65,6 +65,8 @@ def check_api_key_permission(session: SessionData, path: str, method: str):
         scope = "packs"
     elif normalized_path.startswith("/logs"):
         scope = "logs"
+    elif normalized_path.startswith("/releases"):
+        scope = "releases"
 
     if scope is None:
         raise HTTPException(

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.api_key import APIKey
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.apikeys import APIKeyCreate, APIKeyCreatedResponse, APIKeyResponse
 from app.services.email import send_api_key_created_notification
 
@@ -49,12 +49,19 @@ async def create_api_key(
     key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
     prefix = raw_key[:12]  # e.g. rg_xxxxx...
 
+    if data.scopes.releases and user.role != UserRole.admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin users can assign the 'releases' scope",
+        )
+
     scopes_dict = {
         "devices": data.scopes.devices,
         "teams": data.scopes.teams,
         "groups": data.scopes.groups,
         "packs": data.scopes.packs,
         "logs": data.scopes.logs,
+        "releases": data.scopes.releases,
     }
 
     db_key = APIKey(

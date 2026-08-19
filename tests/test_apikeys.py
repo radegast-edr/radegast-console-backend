@@ -211,3 +211,78 @@ class TestAPIKeys:
 
         # Assert no email was sent
         assert len(mock_send.call_args_list) == 0
+
+    async def test_standard_user_cannot_assign_releases_scope(self, auth_client: AsyncClient, db_session: AsyncSession):
+        # Enable API keys for standard user (test@example.com)
+        result = await db_session.execute(select(User).where(User.email == "test@example.com"))
+        user = result.scalar_one()
+        user.api_keys_enabled = True
+        await db_session.commit()
+
+        # Standard user attempts to create API key with releases scope -> should fail with 403
+        resp = await auth_client.post(
+            "/apikeys/",
+            json={"name": "Standard Key with Releases", "scopes": {"devices": [], "teams": [], "groups": [], "packs": [], "logs": [], "releases": ["read"]}},
+        )
+        assert resp.status_code == 403
+        assert "Only admin users can assign the 'releases' scope" in resp.json()["detail"]
+
+    async def test_admin_user_can_manage_releases_via_api_key(self, client: AsyncClient, admin_client: AsyncClient, db_session: AsyncSession):
+        # Enable API keys for admin user (admin@example.com)
+        result_admin = await db_session.execute(select(User).where(User.email == "admin@example.com"))
+        admin = result_admin.scalar_one()
+        admin.api_keys_enabled = True
+        await db_session.commit()
+
+        # 1. Admin user creates API key with releases scope -> should succeed
+        resp = await admin_client.post(
+            "/apikeys/",
+            json={"name": "Admin Key with Releases", "scopes": {"devices": [], "teams": [], "groups": [], "packs": [], "logs": [], "releases": ["read", "create", "delete"]}},
+        )
+        assert resp.status_code == 200
+        admin_key = resp.json()["key"]
+
+        # 2. Admin user creates API key without releases scope
+        resp = await admin_client.post(
+            "/apikeys/",
+            json={"name": "Admin Key without Releases", "scopes": {"devices": [], "teams": [], "groups": [], "packs": [], "logs": [], "releases": []}},
+        )
+        assert resp.status_code == 200
+        admin_key_no_releases = resp.json()["key"]
+
+        # 3. Test uploading release with the releases-enabled key
+        zip_content = b"PK\x03\x04" + b"\x00" * 20
+        resp = await client.post(
+            "/releases/",
+            data={"version": "2.1.0", "os": "linux", "arch": "amd64"},
+            files={"file": ("rustinel.zip", zip_content, "application/zip")},
+            headers={"Authorization": f"Bearer {admin_key}"}
+        )
+        assert resp.status_code == 200
+        
+        # 4. Test uploading release with the key without releases scope -> should fail with 403
+        resp = await client.post(
+            "/releases/",
+            data={"version": "2.2.0", "os": "linux", "arch": "amd64"},
+            files={"file": ("rustinel.zip", zip_content, "application/zip")},
+            headers={"Authorization": f"Bearer {admin_key_no_releases}"}
+        )
+        assert resp.status_code == 403
+        assert "API key does not have 'create' permission for scope 'releases'" in resp.json()["detail"]
+
+        # 5. Test downloading release with the releases-enabled key
+        resp = await client.get(
+            "/releases/2.1.0/linux/amd64/download",
+            headers={"Authorization": f"Bearer {admin_key}"}
+        )
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/zip"
+
+        # 6. Test downloading release with the key without releases scope -> should fail with 403
+        resp = await client.get(
+            "/releases/2.1.0/linux/amd64/download",
+            headers={"Authorization": f"Bearer {admin_key_no_releases}"}
+        )
+        assert resp.status_code == 403
+        assert "API key does not have 'read' permission for scope 'releases'" in resp.json()["detail"]
+

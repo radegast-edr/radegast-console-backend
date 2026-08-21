@@ -206,13 +206,46 @@ class TestAdminStats:
 
     @pytest.mark.asyncio
     async def test_get_admin_device_stats(self, admin_client: AsyncClient):
-        resp = await admin_client.get("/admin/stats/devices?exclude_offline=true&exclude_no_version=true")
+        resp = await admin_client.get("/admin/stats/devices")
         assert resp.status_code == 200
         data = resp.json()
         assert "agent_distribution" in data
         assert "rustinel_distribution" in data
+        assert "os_distribution" in data
+        assert "health_distribution" in data
+        assert "online_distribution" in data
+
+    @pytest.mark.asyncio
+    async def test_get_admin_device_stats_with_filters(self, admin_client: AsyncClient):
+        resp = await admin_client.get(
+            "/admin/stats/devices?online_status=online&health_status=healthy&agent_version=python+0.6.0&rustinel_version=0.3.0&os=linux"
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "agent_distribution" in data
+        assert "rustinel_distribution" in data
+        assert "os_distribution" in data
+        assert "health_distribution" in data
+        assert "online_distribution" in data
 
     @pytest.mark.asyncio
     async def test_get_admin_device_stats_as_user(self, auth_client: AsyncClient):
         resp = await auth_client.get("/admin/stats/devices")
+        assert resp.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_get_admin_device_filter_options(self, admin_client: AsyncClient):
+        resp = await admin_client.get("/admin/stats/devices/options")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "agent_versions" in data
+        assert "rustinel_versions" in data
+        assert "os_list" in data
+        assert isinstance(data["agent_versions"], list)
+        assert isinstance(data["rustinel_versions"], list)
+        assert isinstance(data["os_list"], list)
+
+    @pytest.mark.asyncio
+    async def test_get_admin_device_filter_options_as_user(self, auth_client: AsyncClient):
+        resp = await auth_client.get("/admin/stats/devices/options")
         assert resp.status_code == 403

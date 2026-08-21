@@ -37,6 +37,14 @@ class AdminDeviceStatsResponse(BaseModel):
     agent_distribution: dict[str, int]
     rustinel_distribution: dict[str, int]
     os_distribution: dict[str, int]
+    health_distribution: dict[str, int]
+    online_distribution: dict[str, int]
+
+
+class AdminDeviceFilterOptionsResponse(BaseModel):
+    agent_versions: list[str]
+    rustinel_versions: list[str]
+    os_list: list[str]
 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -356,10 +364,50 @@ async def get_admin_alert_rule_content(
     return AdminRuleContentResponse(content=content)
 
 
+def _sort_filter_options(opts: set[str]) -> list[str]:
+    known = sorted([o for o in opts if o != "unknown"])
+    if "unknown" in opts:
+        known.append("unknown")
+    return known
+
+
+@router.get("/stats/devices/options", response_model=AdminDeviceFilterOptionsResponse)
+async def get_admin_device_filter_options(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_admin(user)
+
+    result = await db.execute(select(Device))
+    devices = result.scalars().all()
+
+    agent_versions: set[str] = set()
+    rustinel_versions: set[str] = set()
+    os_list: set[str] = set()
+
+    for d in devices:
+        agent_ver = d.agent_version.strip() if d.agent_version and d.agent_version.strip() else "unknown"
+        rustinel_ver = d.rustinel_version.strip() if d.rustinel_version and d.rustinel_version.strip() else "unknown"
+        os_val = d.os.strip() if d.os and d.os.strip() else "unknown"
+
+        agent_versions.add(agent_ver)
+        rustinel_versions.add(rustinel_ver)
+        os_list.add(os_val)
+
+    return AdminDeviceFilterOptionsResponse(
+        agent_versions=_sort_filter_options(agent_versions),
+        rustinel_versions=_sort_filter_options(rustinel_versions),
+        os_list=_sort_filter_options(os_list),
+    )
+
+
 @router.get("/stats/devices", response_model=AdminDeviceStatsResponse)
 async def get_admin_device_stats(
-    exclude_offline: bool = False,
-    exclude_no_version: bool = False,
+    online_status: list[str] | None = Query(None),
+    health_status: list[str] | None = Query(None),
+    agent_version: list[str] | None = Query(None),
+    rustinel_version: list[str] | None = Query(None),
+    os: list[str] | None = Query(None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -371,45 +419,56 @@ async def get_admin_device_stats(
     agent_distribution = {}
     rustinel_distribution = {}
     os_distribution = {}
+    health_distribution = {}
+    online_distribution = {}
 
     now_utc = datetime.now(UTC)
     ten_minutes_ago = now_utc - timedelta(minutes=10)
 
     for d in devices:
-        if exclude_offline:
-            if not d.last_seen:
-                continue
+        is_online = False
+        if d.last_seen:
             last_seen_val = d.last_seen
             if last_seen_val.tzinfo is None:
                 last_seen_val = last_seen_val.replace(tzinfo=UTC)
-            if last_seen_val < ten_minutes_ago:
-                continue
+            if last_seen_val >= ten_minutes_ago:
+                is_online = True
+        dev_online = "online" if is_online else "offline"
 
-        agent_ver = d.agent_version
-        if exclude_no_version and (not agent_ver or agent_ver.strip() == ""):
-            pass
+        if d.healthy is True:
+            dev_health = "healthy"
+        elif d.healthy is False:
+            dev_health = "unhealthy"
         else:
-            ver_key = agent_ver if (agent_ver and agent_ver.strip() != "") else "unknown"
-            agent_distribution[ver_key] = agent_distribution.get(ver_key, 0) + 1
+            dev_health = "unknown"
 
-        rustinel_ver = d.rustinel_version
-        if exclude_no_version and (not rustinel_ver or rustinel_ver.strip() == ""):
-            pass
-        else:
-            ver_key = rustinel_ver if (rustinel_ver and rustinel_ver.strip() != "") else "unknown"
-            rustinel_distribution[ver_key] = rustinel_distribution.get(ver_key, 0) + 1
+        dev_agent = d.agent_version.strip() if (d.agent_version and d.agent_version.strip()) else "unknown"
+        dev_rustinel = d.rustinel_version.strip() if (d.rustinel_version and d.rustinel_version.strip()) else "unknown"
+        dev_os = d.os.strip() if (d.os and d.os.strip()) else "unknown"
 
-        os_val = d.os
-        if exclude_no_version and (not os_val or os_val.strip() == ""):
-            pass
-        else:
-            ver_key = os_val if (os_val and os_val.strip() != "") else "unknown"
-            os_distribution[ver_key] = os_distribution.get(ver_key, 0) + 1
+        if online_status and dev_online not in online_status:
+            continue
+        if health_status and dev_health not in health_status:
+            continue
+        if agent_version and dev_agent not in agent_version:
+            continue
+        if rustinel_version and dev_rustinel not in rustinel_version:
+            continue
+        if os and dev_os not in os:
+            continue
+
+        agent_distribution[dev_agent] = agent_distribution.get(dev_agent, 0) + 1
+        rustinel_distribution[dev_rustinel] = rustinel_distribution.get(dev_rustinel, 0) + 1
+        os_distribution[dev_os] = os_distribution.get(dev_os, 0) + 1
+        health_distribution[dev_health] = health_distribution.get(dev_health, 0) + 1
+        online_distribution[dev_online] = online_distribution.get(dev_online, 0) + 1
 
     return AdminDeviceStatsResponse(
         agent_distribution=agent_distribution,
         rustinel_distribution=rustinel_distribution,
         os_distribution=os_distribution,
+        health_distribution=health_distribution,
+        online_distribution=online_distribution,
     )
 
 

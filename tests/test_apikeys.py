@@ -222,12 +222,17 @@ class TestAPIKeys:
         # Standard user attempts to create API key with releases scope -> should fail with 403
         resp = await auth_client.post(
             "/apikeys/",
-            json={"name": "Standard Key with Releases", "scopes": {"devices": [], "teams": [], "groups": [], "packs": [], "logs": [], "releases": ["read"]}},
+            json={
+                "name": "Standard Key with Releases",
+                "scopes": {"devices": [], "teams": [], "groups": [], "packs": [], "logs": [], "releases": ["read"]},
+            },
         )
         assert resp.status_code == 403
         assert "Only admin users can assign the 'releases' scope" in resp.json()["detail"]
 
-    async def test_admin_user_can_manage_releases_via_api_key(self, client: AsyncClient, admin_client: AsyncClient, db_session: AsyncSession):
+    async def test_admin_user_can_manage_releases_via_api_key(
+        self, client: AsyncClient, admin_client: AsyncClient, db_session: AsyncSession
+    ):
         # Enable API keys for admin user (admin@example.com)
         result_admin = await db_session.execute(select(User).where(User.email == "admin@example.com"))
         admin = result_admin.scalar_one()
@@ -237,7 +242,10 @@ class TestAPIKeys:
         # 1. Admin user creates API key with releases scope -> should succeed
         resp = await admin_client.post(
             "/apikeys/",
-            json={"name": "Admin Key with Releases", "scopes": {"devices": [], "teams": [], "groups": [], "packs": [], "logs": [], "releases": ["read", "create", "delete"]}},
+            json={
+                "name": "Admin Key with Releases",
+                "scopes": {"devices": [], "teams": [], "groups": [], "packs": [], "logs": [], "releases": ["read", "create", "delete"]},
+            },
         )
         assert resp.status_code == 200
         admin_key = resp.json()["key"]
@@ -245,7 +253,10 @@ class TestAPIKeys:
         # 2. Admin user creates API key without releases scope
         resp = await admin_client.post(
             "/apikeys/",
-            json={"name": "Admin Key without Releases", "scopes": {"devices": [], "teams": [], "groups": [], "packs": [], "logs": [], "releases": []}},
+            json={
+                "name": "Admin Key without Releases",
+                "scopes": {"devices": [], "teams": [], "groups": [], "packs": [], "logs": [], "releases": []},
+            },
         )
         assert resp.status_code == 200
         admin_key_no_releases = resp.json()["key"]
@@ -256,33 +267,26 @@ class TestAPIKeys:
             "/releases/",
             data={"version": "2.1.0", "os": "linux", "arch": "amd64"},
             files={"file": ("rustinel.zip", zip_content, "application/zip")},
-            headers={"Authorization": f"Bearer {admin_key}"}
+            headers={"Authorization": f"Bearer {admin_key}"},
         )
         assert resp.status_code == 200
-        
+
         # 4. Test uploading release with the key without releases scope -> should fail with 403
         resp = await client.post(
             "/releases/",
             data={"version": "2.2.0", "os": "linux", "arch": "amd64"},
             files={"file": ("rustinel.zip", zip_content, "application/zip")},
-            headers={"Authorization": f"Bearer {admin_key_no_releases}"}
+            headers={"Authorization": f"Bearer {admin_key_no_releases}"},
         )
         assert resp.status_code == 403
         assert "API key does not have 'create' permission for scope 'releases'" in resp.json()["detail"]
 
         # 5. Test downloading release with the releases-enabled key
-        resp = await client.get(
-            "/releases/2.1.0/linux/amd64/download",
-            headers={"Authorization": f"Bearer {admin_key}"}
-        )
+        resp = await client.get("/releases/2.1.0/linux/amd64/download", headers={"Authorization": f"Bearer {admin_key}"})
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "application/zip"
 
         # 6. Test downloading release with the key without releases scope -> should fail with 403
-        resp = await client.get(
-            "/releases/2.1.0/linux/amd64/download",
-            headers={"Authorization": f"Bearer {admin_key_no_releases}"}
-        )
+        resp = await client.get("/releases/2.1.0/linux/amd64/download", headers={"Authorization": f"Bearer {admin_key_no_releases}"})
         assert resp.status_code == 403
         assert "API key does not have 'read' permission for scope 'releases'" in resp.json()["detail"]
-

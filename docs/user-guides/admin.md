@@ -29,16 +29,19 @@ The Admin panel typically includes:
 - **Users**: List of all registered users
 - **Devices**: List of all registered devices
 - **Packs**: List of all detection packs
-- **Stats**: Global statistics including alert distribution by severity and rule ID, and device agent/Rustinel version distributions.
+- **Stats**: Global statistics including alert distribution by severity, resolution, rule ID, and rule type, as well as device stats covering agent version, Rustinel version, OS, health status, and online status distributions.
 
 ### Viewing Admin Stats
 
 1. In the Admin panel, click **"Stats"**
 2. The page displays two main panels:
-   - **Alert Stats**: Displays alert distribution by severity and by Rule ID. You can filter the statistics by selecting a custom **From** and **To** date-time range.
-   - **Device Stats**: Shows endpoint distribution by Agent Version and by Rustinel Version. You can toggle checkboxes to:
-     - **Exclude offline devices**: Exclude devices that have not been seen in the last 10 minutes.
-     - **Exclude devices with unreported version**: Hide devices where versions are not reported.
+   - **Alert Stats**: Displays alert distribution by severity, resolution, rule ID, and rule type. You can filter the statistics by selecting a custom **From** and **To** date-time range, as well as multi-select dropdown filters for **Severity**, **Rule Type**, and **Resolution**, and search by **Rule ID**.
+   - **Device Stats**: Shows endpoint distributions by **Agent Version**, **Rustinel Version**, **OS**, **Health Status**, and **Online Status**. You can filter the statistics with multi-select dropdown filters:
+     - **Online Status**: Filter by `Online` or `Offline` devices.
+     - **Health Status**: Filter by `Healthy`, `Unhealthy`, or `Unknown` device health.
+     - **Agent Version**: Filter by specific agent versions.
+     - **Rustinel Version**: Filter by specific Rustinel versions.
+     - **OS**: Filter by specific operating systems.
 
 ### Managing Users
 

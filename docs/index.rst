@@ -6,13 +6,14 @@ Radegast EDR is a comprehensive Endpoint Detection and Response (EDR) platform t
 Quickstarts
 -----------
 
-* **User Quickstart (Step-by-step guide with screenshots)**: `First Steps with Radegast <https://radegast.app/blog/2026/06/16/first-steps-with-radegast/>`_
-* **Backend Quickstart**: :doc:`README` (specifically the Quick Start section)
+* **User Quickstart (Step-by-step guide with screenshots)**: :doc:`quickstart`
+* **Self-Hosting & Backend Quickstart**: :doc:`README`
 
 .. toctree::
    :maxdepth: 2
    :caption: Getting Started
 
+   quickstart
    README
 
 .. toctree::

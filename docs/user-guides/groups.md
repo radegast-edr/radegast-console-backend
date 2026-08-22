@@ -30,6 +30,8 @@ The Groups page shows:
 - **Exclusion Count**: Number of exclusions configured for this group
 - **Actions**: Buttons to view details, edit, or delete the group
 
+![Device Groups Management](../_static/screenshots/groups-list.png)
+
 ### Creating a New Device Group
 
 #### Steps
@@ -45,6 +47,8 @@ The Groups page shows:
 **Note**: You must be a member of at least one team with admin permissions to create a group.
 
 ### Viewing Group Details
+
+![Device Group Detail](../_static/screenshots/group-detail.png)
 
 1. Click on a group name in the Groups list
 2. The details panel shows:

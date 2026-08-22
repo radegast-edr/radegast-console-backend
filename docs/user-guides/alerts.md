@@ -24,7 +24,7 @@ The Alerts Dashboard is your central workspace for monitoring, investigating, an
 
 The Alerts page displays:
 
-- **Search Bar**: Enter keywords to search through alert content
+- **Search Bar**: Enter keywords or JSONata expressions to search through alert content
 - **Time Range Filter**: Select a date/time range to view alerts from (defaults to last 4 days)
 - **Severity Filters**: Filter by alert severity (Critical, High, Medium, Low, Informational)
 - **Alert Table**: Lists all matching alerts with columns for:
@@ -34,7 +34,9 @@ The Alerts page displays:
   - Rule ID (matched detection rule)
   - Alert type/event
   - Resolution status
-- **Alert Details Panel**: Click an alert to view full details
+- **Alert Details Panel**: Click an alert to view full details including process execution trees, command lines, and triage actions
+
+![Threat Triage and Alert Details](../_static/screenshots/alerts-list.png)
 
 ### Viewing Alert Details
 

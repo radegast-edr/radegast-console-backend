@@ -135,12 +135,42 @@ LC_ALL=C uv run sphinx-build -b html . _build/html
 
 4. **Update README.md** - If documentation changes affect the main README, update it as well.
 
+### Generating Documentation Screenshots & Test Data
+
+The documentation user guides include high-resolution, authentic screenshots of the web console populated with realistic test data (devices, groups, detection packs, encrypted threat triage, hunt queries, admin panels, and settings).
+
+To regenerate or update all documentation screenshots:
+
+1. **Ensure frontend is built**:
+```bash
+cd web
+PUBLIC_BACKEND_URL=/ npm run build
+cd ..
+```
+
+2. **Run the screenshot capture automation**:
+```bash
+uv run --with playwright python docs/scripts/capture_screenshots.py
+```
+
+This standalone script:
+- Spawns an isolated temporary SQLite database populated with comprehensive test seed data (users, teams, devices across multiple OSes and agent versions, detection packs, rules, and encrypted telemetry logs).
+- Starts an ephemeral FastAPI test instance with built frontend static assets.
+- Launches a headless Playwright Chromium instance, performs user authentication, sets up AGE cryptographic keys in browser IndexedDB, and captures all 12 views at high resolution (`device_scale_factor=2`) into `docs/_static/screenshots/`.
+
+3. **Verify documentation build**:
+```bash
+cd docs
+LC_ALL=C uv run sphinx-build -b html . _build/html
+```
+
 ### Documentation Files
 
 - User guides: `docs/user-guides/*.md` (Markdown format, parsed by MyST)
 - Configuration: `docs/conf.py` (Sphinx settings)
 - Main index: `docs/index.rst` (Table of contents)
 - ReadTheDocs config: `.readthedocs.yaml`
+- Screenshot generator: `docs/scripts/capture_screenshots.py`
 
 **IMPORTANT**: Always rebuild and verify documentation before committing changes.
 

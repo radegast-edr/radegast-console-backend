@@ -31,6 +31,8 @@ The Packs page shows:
 - **Teams**: Teams that have access to this pack
 - **Actions**: Buttons to view details, edit, or delete the pack
 
+![Detection Packs Catalog](../_static/screenshots/packs-list.png)
+
 ### Sorting Packs
 
 By default, the packs listed on the page are sorted sequentially using multiple criteria:
@@ -72,6 +74,8 @@ After creating a pack, you need to upload its content (rules, configurations):
 **Tip**: The system will validate the upload and check for required files. If validation fails, you'll see an error message.
 
 ### Viewing Pack Details
+
+![Detection Pack Details](../_static/screenshots/pack-detail.png)
 
 1. Click on a pack name in the Packs list
 2. The details panel shows:

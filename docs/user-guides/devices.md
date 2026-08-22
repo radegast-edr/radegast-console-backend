@@ -31,6 +31,8 @@ The Devices page shows:
 - **Status**: Online/Offline indicator
 - **Actions**: Buttons to view details, edit, or delete the device
 
+![Devices Management List](../_static/screenshots/devices-list.png)
+
 ### Adding a New Device
 
 #### Prerequisites
@@ -66,6 +68,8 @@ Once you've created a device and saved its token:
 See the [Device Installation Guide](device-installation.md) for detailed OS-specific instructions.
 
 ### Viewing Device Details
+
+![Device Details View](../_static/screenshots/device-detail.png)
 
 1. Click on a device name in the Devices list
 2. The details panel shows:

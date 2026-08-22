@@ -24,6 +24,8 @@ Logs are the detailed, encrypted records of security events from your monitored 
 
 ### Understanding the Logs View
 
+![Threat Triage & Encrypted Log Analysis](../_static/screenshots/alerts-list.png)
+
 The Alerts/Logs page displays:
 
 - **Search Bar**: Full-text search across log content

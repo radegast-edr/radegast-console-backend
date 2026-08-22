@@ -22,6 +22,8 @@ All notifications are sent via email and are controlled through your user settin
 
 ### Accessing Notification Settings
 
+![Notification Preferences](../_static/screenshots/settings-view.png)
+
 1. Log in to your Radegast Console
 2. Click your profile icon or email in the top navigation bar
 3. Select **"Settings"** from the dropdown menu

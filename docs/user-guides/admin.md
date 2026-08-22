@@ -43,6 +43,8 @@ The Admin panel typically includes:
      - **Rustinel Version**: Filter by specific Rustinel versions.
      - **OS**: Filter by specific operating systems.
 
+![Admin System & Device Statistics](../_static/screenshots/admin-stats.png)
+
 ### Managing Users
 
 #### Viewing All Users
@@ -57,6 +59,8 @@ The Admin panel typically includes:
    - API keys enabled flag
    - Last login
    - Actions available
+
+![Admin Users Management](../_static/screenshots/admin-users.png)
 
 #### Understanding User Roles
 
@@ -116,6 +120,8 @@ The Admin panel typically includes:
    - Teams that can access it
    - Token information
 
+![Admin Device Management](../_static/screenshots/admin-devices.png)
+
 #### Deleting a Device
 
 1. Click on the device in the list
@@ -137,6 +143,14 @@ The Admin panel typically includes:
    - Teams with access
    - Versions
    - Description
+
+![Admin Pack Management](../_static/screenshots/admin-packs.png)
+
+### Sending Broadcast Emails
+
+Administrators can broadcast announcements and maintenance notices directly to all subscribed platform users from the **Broadcast** tab.
+
+![Admin Email Broadcast](../_static/screenshots/admin-broadcast.png)
 
 #### Deleting a Pack
 

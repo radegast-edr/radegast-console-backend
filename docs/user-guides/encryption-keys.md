@@ -121,18 +121,22 @@ You can have multiple key pairs stored, but only one is used as the default for 
 
 If you lose access to your private key (e.g., browser cleared, new device), you have two recovery options:
 
-#### Option 1: Recovery Key (Recommended)
+#### Option 1: Using a Recovery Key
 
-If you previously saved a recovery key:
+![Key Recovery](../_static/screenshots/key-recovery.png)
+
+If you have a recovery key for the key pair:
 
 1. Go to **Keys** > **Recovery** in the navigation
-2. Paste your **Recovery Key** (a 256-bit AES key in hex format)
+2. Enter your **Recovery Key** (the 64-character hex string)
 3. The system will decrypt your stored encrypted private key
 4. Your private key will be restored to browser storage
 
 **Note**: The recovery key is generated when you first create a key pair and choose the recovery option.
 
 #### Option 2: Key Transfer from Another Browser
+
+![Key Transfer](../_static/screenshots/key-transfer.png)
 
 If you have your private key stored in another browser:
 

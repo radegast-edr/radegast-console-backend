@@ -38,6 +38,8 @@ The Hunt Mode page includes:
 - **Search Button**: Execute your query
 - **Results Display**: Shows matching events with decrypted content
 
+![Hunt Mode Telemetry Querying](../_static/screenshots/hunts-view.png)
+
 ### Creating a Basic Query
 
 1. **Set your time range**:

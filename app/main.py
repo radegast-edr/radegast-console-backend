@@ -104,6 +104,16 @@ async def favicon() -> FileResponse:
     return FileResponse(file_favicon, media_type="image/x-icon")
 
 
+@app.get("/agewasm/{path:path}")
+async def agewasm_static(path: str) -> FileResponse:
+    file_path = ui.dir_web / "agewasm" / path
+    if not file_path.exists():
+        file_path = Path("web") / "static" / "agewasm" / path
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path)
+
+
 @app.get("/")
 async def root() -> RedirectResponse:
     return RedirectResponse(url="/ui/", status_code=302)

@@ -22,6 +22,8 @@ Teams are the primary organizational unit in Radegast EDR. They allow you to gro
 
 ### Understanding Teams List
 
+![Teams List](../_static/screenshots/teams-list.png)
+
 The Teams page shows:
 
 - **Team Name**: The name of the team
@@ -58,6 +60,8 @@ The Teams page shows:
 **Note**: If you select Admin permission as "None", you must specify a managing team that has admin=write, or you won't be able to manage this team.
 
 ### Viewing Team Details
+
+![Team Detail](../_static/screenshots/team-detail.png)
 
 1. Click on a team name in the Teams list
 2. The details panel shows:

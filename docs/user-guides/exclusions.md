@@ -42,6 +42,8 @@ The Exclusions page shows:
 
 ### Creating a New Exclusion
 
+![Device Group Exclusions Management](../_static/screenshots/group-detail.png)
+
 #### Steps
 
 1. Navigate to the Exclusions page or to a specific device group

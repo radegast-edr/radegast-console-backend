@@ -31,6 +31,8 @@ Your central hub for monitoring security status across all your endpoints. The d
 - Distribution of alerts by team and device group
 - Quick access to recent security events
 
+![Radegast EDR Platform Dashboard](../_static/screenshots/platform-dashboard.png)
+
 ### Alerts & Logs
 The heart of your security monitoring:
 - **Alerts**: Security events that require your attention, categorized by severity

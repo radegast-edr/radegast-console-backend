@@ -24,7 +24,11 @@ Radegast EDR supports three MFA methods:
 
 ### Setting Up MFA
 
+![Authentication Screen](../_static/screenshots/login-page.png)
+
 When you first log in, or when MFA is required for your role, you'll be prompted to set up MFA.
+
+![User Settings and MFA Configuration](../_static/screenshots/settings-view.png)
 
 #### Step 1: Initial Login
 

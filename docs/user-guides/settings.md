@@ -22,6 +22,8 @@ The Settings page includes these main sections:
 - **API Keys Support**: Enable/disable API keys feature
 - **MFA**: Multi-Factor Authentication settings
 
+![User Settings and Preferences](../_static/screenshots/settings-view.png)
+
 ## Profile Settings
 
 **Note**: Changing your email may require re-verification.

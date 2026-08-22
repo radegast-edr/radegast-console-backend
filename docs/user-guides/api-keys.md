@@ -37,6 +37,8 @@ API Keys allow you to authenticate with the Radegast EDR API programmatically, e
 
 ### Understanding the API Keys List
 
+![API Keys Management](../_static/screenshots/apikeys-view.png)
+
 The API Keys page shows:
 
 - **Name**: Descriptive name you assigned to the key

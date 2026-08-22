@@ -20,6 +20,8 @@ Before installing the agent:
 
 ### Linux Installation
 
+![Device Setup and Installation](../_static/screenshots/device-detail.png)
+
 1. In the Radegast Console, go to **Devices**
 2. Click on your device, or go to the Install page
 3. Select **Linux** as the OS
@@ -29,7 +31,7 @@ Before installing the agent:
 
 The command will automatically:
 - Install required dependencies
-- Download and install the latest agent
+- Download and install the latest agent from the [Releases catalog](../_static/screenshots/releases-list.png)
 - Configure the agent with your token
 - Set up systemd services
 - Start the agent automatically

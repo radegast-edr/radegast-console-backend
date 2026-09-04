@@ -35,8 +35,9 @@ The Hunt Mode page includes:
 - **JSONata Text Query**: Input field for your search query
 - **Start Time**: Date/time picker for the beginning of your search range
 - **End Time**: Date/time picker for the end of your search range
-- **Search Button**: Execute your query
-- **Results Display**: Shows matching events with decrypted content
+- **Search / Stop Button**: Execute your query or interrupt a search in progress
+- **Search Progress**: Displays dynamic progress including page number, events fetched, earliest fetched timestamp, and latest fetched timestamp
+- **Results Display**: Shows matching events as they are fetched and decrypted
 
 ![Hunt Mode Telemetry Querying](../_static/screenshots/hunts-view.png)
 
@@ -44,7 +45,7 @@ The Hunt Mode page includes:
 
 1. **Set your time range**:
    - Click the calendar icons for Start Time and End Time
-   - Select the date range you want to search (default is typically the last 24 hours)
+   - Select the date range you want to search (default is typically the last 15 minutes)
 
 2. **Enter your JSONata query**:
    ```
@@ -52,7 +53,7 @@ The Hunt Mode page includes:
    ```
    This query finds all process-related alerts from devices with "laptop" in their name.
 
-3. Click the **Search** button to execute the query
+3. Click the **Search** button to execute the query. As pages of telemetry are fetched dynamically, matching results are shown immediately, and you can click **Stop** at any time to halt further queries while keeping all events fetched so far.
 
 ### Common Query Examples
 

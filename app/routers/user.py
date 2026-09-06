@@ -25,6 +25,8 @@ from app.models.key_transfer import KeyTransfer
 from app.models.public_key import PublicKey
 from app.models.user import User
 from app.schemas.user import (
+    AccountDeletionConfirmResponse,
+    AccountDeletionStatusResponse,
     AiAnalysisToolSettings,
     ApiKeysEnabledSettings,
     ChangePasswordRequest,
@@ -48,6 +50,7 @@ from app.schemas.user import (
     PublicKeyResponse,
     UserResponse,
 )
+from app.services.account_deletion import check_user_can_be_deleted
 from app.services.auth import (
     create_signed_token,
     hash_password,
@@ -57,6 +60,8 @@ from app.services.auth import (
 )
 from app.services.email import (
     EMAIL_TYPE_TO_PREFERENCE,
+    send_account_deletion_confirmation_email,
+    send_account_deletion_scheduled_email,
     send_api_keys_toggled_notification,
     send_keys_transferred_notification,
     send_new_keys_notification,
@@ -383,6 +388,8 @@ async def me(user: User = Depends(get_current_user), db: AsyncSession = Depends(
         api_keys_enabled=user.api_keys_enabled,
         ai_analysis_tool=user.ai_analysis_tool,
         onboarding_completed=user.onboarding_completed,
+        deletion_requested_at=user.deletion_requested_at,
+        deletion_scheduled_at=user.deletion_scheduled_at,
     )
 
 
@@ -910,3 +917,97 @@ async def unsubscribe_get(token: str | None = None):
     if token:
         url += f"?token={token}"
     return RedirectResponse(url=url)
+
+
+@router.post("/delete-account/request")
+async def request_account_deletion(
+    background_tasks: BackgroundTasks,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Initiate account self-deletion. Validates that no teams, groups, devices, or packs
+    will be orphaned or left without administrators. If safe, records request timestamp
+    and sends confirmation email.
+    """
+    conflicts = await check_user_can_be_deleted(user.id, db)
+    if conflicts:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Cannot delete account due to dependent resources.",
+                "reasons": conflicts,
+            },
+        )
+
+    user.deletion_requested_at = utc_now()
+    await db.commit()
+
+    background_tasks.add_task(
+        send_account_deletion_confirmation_email,
+        user.email,
+        settings.account_deletion_grace_days,
+    )
+
+    return {
+        "message": "A confirmation email has been sent. Please check your inbox.",
+        "grace_days": settings.account_deletion_grace_days,
+    }
+
+
+@router.post("/delete-account/confirm", response_model=AccountDeletionConfirmResponse)
+async def confirm_account_deletion(
+    token: str,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Confirm account deletion using the signed token from the confirmation email.
+    Sets the scheduled deletion date based on the configured grace period.
+    """
+    token_data = verify_signed_token(token, salt="account-delete", max_age=86400)
+    if not token_data or "email" not in token_data:
+        raise HTTPException(status_code=400, detail="Invalid or expired deletion confirmation link.")
+
+    email = token_data["email"]
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    if not user.deletion_requested_at:
+        raise HTTPException(
+            status_code=400,
+            detail="Account deletion was not requested or has already been canceled.",
+        )
+
+    grace_days = settings.account_deletion_grace_days
+    scheduled_at = utc_now() + timedelta(days=grace_days)
+    user.deletion_scheduled_at = scheduled_at
+    await db.commit()
+
+    date_str = scheduled_at.strftime("%Y-%m-%d %H:%M:%S")
+    background_tasks.add_task(
+        send_account_deletion_scheduled_email,
+        user.email,
+        date_str,
+        grace_days,
+    )
+
+    return AccountDeletionConfirmResponse(
+        message="Your account has been scheduled for permanent deletion.",
+        deletion_scheduled_at=scheduled_at,
+        grace_days=grace_days,
+    )
+
+
+@router.get("/delete-account/status", response_model=AccountDeletionStatusResponse)
+async def get_account_deletion_status(
+    user: User = Depends(get_current_user),
+):
+    """Get current account deletion status and grace period details."""
+    return AccountDeletionStatusResponse(
+        deletion_requested=user.deletion_requested_at is not None,
+        deletion_scheduled_at=user.deletion_scheduled_at,
+        grace_days=settings.account_deletion_grace_days,
+    )

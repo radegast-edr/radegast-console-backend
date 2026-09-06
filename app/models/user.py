@@ -45,6 +45,8 @@ class User(Base):
     api_keys_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
     ai_analysis_tool: Mapped[str] = mapped_column(String(50), default="lumo-guest", server_default="lumo-guest", nullable=False)
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
+    deletion_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deletion_scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     public_keys = relationship("PublicKey", back_populates="user", cascade="all, delete-orphan")
     teams = relationship("Team", secondary=team_users, back_populates="users")
     hardware_tokens = relationship("HardwareToken", back_populates="user", cascade="all, delete-orphan")

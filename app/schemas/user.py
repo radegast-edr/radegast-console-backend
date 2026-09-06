@@ -31,6 +31,8 @@ class UserResponse(BaseModel):
     notification_level: str = "medium"
     ai_analysis_tool: str = "lumo-guest"
     onboarding_completed: bool = False
+    deletion_requested_at: datetime | None = None
+    deletion_scheduled_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -206,3 +208,15 @@ class PasswordResetRequest(BaseModel):
 
 class PasswordResetConfirm(BaseModel):
     token: str
+
+
+class AccountDeletionStatusResponse(BaseModel):
+    deletion_requested: bool
+    deletion_scheduled_at: datetime | None = None
+    grace_days: int
+
+
+class AccountDeletionConfirmResponse(BaseModel):
+    message: str
+    deletion_scheduled_at: datetime
+    grace_days: int

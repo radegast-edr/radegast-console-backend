@@ -52,6 +52,7 @@ from app.services.auth import (
     verify_signed_token,
 )
 from app.services.email import (
+    send_account_deletion_cancelled_email,
     send_login_notification,
     send_password_reset_link_email,
     send_user_password_reset_email,
@@ -321,11 +322,18 @@ async def login(
         path="/",
     )
 
+    deletion_cancelled = False
+    if user.deletion_requested_at or user.deletion_scheduled_at:
+        user.deletion_requested_at = None
+        user.deletion_scheduled_at = None
+        deletion_cancelled = True
+        background_tasks.add_task(send_account_deletion_cancelled_email, user.email)
+
     if user.notify_login:
         background_tasks.add_task(send_login_notification, user.email, _client_ip(request))
 
     await db.commit()
-    return {"message": "Login successful", "user_id": user.id}
+    return {"message": "Login successful", "user_id": user.id, "deletion_cancelled": deletion_cancelled}
 
 
 @router.post("/logout")
@@ -533,11 +541,18 @@ async def mfa_verify(
         path="/",
     )
 
+    deletion_cancelled = False
+    if user.deletion_requested_at or user.deletion_scheduled_at:
+        user.deletion_requested_at = None
+        user.deletion_scheduled_at = None
+        deletion_cancelled = True
+        background_tasks.add_task(send_account_deletion_cancelled_email, user.email)
+
     if user.notify_login:
         background_tasks.add_task(send_login_notification, user.email, _client_ip(request))
 
     await db.commit()
-    return {"message": "Login successful", "user_id": user.id}
+    return {"message": "Login successful", "user_id": user.id, "deletion_cancelled": deletion_cancelled}
 
 
 @router.get("/config")

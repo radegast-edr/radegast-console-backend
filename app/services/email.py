@@ -221,6 +221,44 @@ RELEASE_DELETED_TEMPLATE = Template("""
 </html>
 """)
 
+ACCOUNT_DELETION_CONFIRMATION_TEMPLATE = Template("""
+<html>
+<body style="font-family: sans-serif; padding: 20px; line-height: 1.6; color: #333;">
+<h2>Account Deletion Request — Radegast EDR</h2>
+<p>You have requested to delete your Radegast EDR account.</p>
+<p>To proceed, click the link below to confirm the deletion request:</p>
+<p><a href="{{ url }}" style="display: inline-block; padding: 10px 20px; background-color: #dc3545; color: #fff; text-decoration: none; border-radius: 3px; font-weight: bold;">Confirm Account Deletion</a></p>
+<p>This link is valid for 24 hours.</p>
+<p><strong>Important:</strong> After confirmation, your account will enter a <strong>{{ grace_days }}-day grace period</strong> before permanent deletion. If you log in again within the next {{ grace_days }} days, your account deletion will be automatically canceled.</p>
+<p>If you did not request this, please ignore this email and your account will remain active.</p>
+</body>
+</html>
+""")
+
+ACCOUNT_DELETION_SCHEDULED_TEMPLATE = Template("""
+<html>
+<body style="font-family: sans-serif; padding: 20px; line-height: 1.6; color: #333;">
+<h2>Account Deletion Scheduled — Radegast EDR</h2>
+<p>Your Radegast EDR account has been scheduled for permanent deletion.</p>
+<p><strong>Scheduled deletion date:</strong> {{ deletion_date }} UTC</p>
+<p><strong>Grace period:</strong> {{ grace_days }} days</p>
+<p><strong>To cancel deletion:</strong> If you log in again within the next {{ grace_days }} days (before the scheduled deletion date), your account deletion will be automatically canceled.</p>
+<p>After the grace period expires, all your personal data, unshared teams, device groups, devices, and rules will be permanently removed.</p>
+</body>
+</html>
+""")
+
+ACCOUNT_DELETION_CANCELLED_TEMPLATE = Template("""
+<html>
+<body style="font-family: sans-serif; padding: 20px; line-height: 1.6; color: #333;">
+<h2>Account Deletion Canceled — Radegast EDR</h2>
+<p>Your Radegast EDR account deletion request has been canceled because a login to your account was detected.</p>
+<p>Your account remains fully active and no data has been deleted.</p>
+<p>If you did not perform this login, please change your password and review your account security immediately.</p>
+</body>
+</html>
+""")
+
 
 def get_web_ui_base() -> str:
     if settings.web_ui_url:
@@ -364,6 +402,24 @@ async def send_user_password_reset_email(email: str, new_password: str):
     <p><strong>Please note:</strong> Only your password has been reset. If you have configured Multi-Factor Authentication (MFA), it remains active and was NOT reset. If you need your MFA reset, you must contact your administrator.</p>
     """
     await send_email_direct(email, "Your Radegast EDR password has been reset", html, email_type="verify")
+
+
+async def send_account_deletion_confirmation_email(email: str, grace_days: int):
+    token = create_signed_token({"email": email}, salt="account-delete")
+    ui_base = get_web_ui_base()
+    url = f"{ui_base}/delete-account/confirm?token={token}"
+    html = ACCOUNT_DELETION_CONFIRMATION_TEMPLATE.render(url=url, grace_days=grace_days)
+    await send_email_direct(email, "Confirm Account Deletion — Radegast EDR", html, email_type="verify")
+
+
+async def send_account_deletion_scheduled_email(email: str, deletion_date: str, grace_days: int):
+    html = ACCOUNT_DELETION_SCHEDULED_TEMPLATE.render(deletion_date=deletion_date, grace_days=grace_days)
+    await send_email_direct(email, "Account Deletion Scheduled — Radegast EDR", html, email_type="verify")
+
+
+async def send_account_deletion_cancelled_email(email: str):
+    html = ACCOUNT_DELETION_CANCELLED_TEMPLATE.render()
+    await send_email_direct(email, "Account Deletion Canceled — Radegast EDR", html, email_type="verify")
 
 
 async def send_invite_email(email: str, team_id: int, team_name: str, invited_by: str | None = None):

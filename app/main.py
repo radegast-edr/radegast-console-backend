@@ -26,6 +26,7 @@ from app.routers import (
     ui,
     user,
 )
+from app.services.account_deletion import process_account_deletions_loop
 from app.services.email import process_email_queue_loop
 
 
@@ -37,8 +38,10 @@ async def lifespan(_app: FastAPI):
     Path(settings.releases_dir).mkdir(parents=True, exist_ok=True)
 
     email_task = None
+    deletion_task = None
     if settings.enable_email_worker:
         email_task = asyncio.create_task(process_email_queue_loop())
+        deletion_task = asyncio.create_task(process_account_deletions_loop())
 
     try:
         yield
@@ -47,6 +50,12 @@ async def lifespan(_app: FastAPI):
             email_task.cancel()
             try:
                 await email_task
+            except asyncio.CancelledError:
+                pass
+        if deletion_task:
+            deletion_task.cancel()
+            try:
+                await deletion_task
             except asyncio.CancelledError:
                 pass
 

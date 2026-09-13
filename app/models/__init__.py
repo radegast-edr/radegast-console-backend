@@ -11,6 +11,7 @@ from app.models.pack import Pack
 from app.models.pack_enabled import PackEnabled
 from app.models.pack_version import PackVersion
 from app.models.pack_version_rule import PackVersionRule, RuleType
+from app.models.prevention_allowlist import PreventionAllowlist
 from app.models.public_key import PublicKey
 from app.models.queued_email import QueuedEmail
 from app.models.team import Team
@@ -31,6 +32,7 @@ __all__ = [
     "PackEnabled",
     "PackVersion",
     "PackVersionRule",
+    "PreventionAllowlist",
     "PublicKey",
     "QueuedEmail",
     "RuleType",

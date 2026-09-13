@@ -14,6 +14,7 @@ from app.models.team_invitation import TeamInvitation
 from app.models.user import User
 from app.schemas.device import DeviceResponse
 from app.schemas.exclusion import ExclusionResponse
+from app.schemas.prevention_allowlist import PreventionAllowlistResponse
 from app.schemas.team import (
     DeviceAddPayload,
     DeviceGroupResponse,
@@ -50,6 +51,7 @@ class DeviceGroupDetail(BaseModel):
     teams: list[TeamResponse]
     devices: list[DeviceResponse]
     exclusions: list[ExclusionResponse]
+    prevention_allowlists: list[PreventionAllowlistResponse]
     public_key: str | None = None
     private_key: str | None = None
     invitations: list[dict] = []
@@ -121,6 +123,17 @@ def _group_detail(group: DeviceGroup, invitations: list[TeamInvitation] | None =
             }
             for e in group.exclusions
         ],
+        "prevention_allowlists": [
+            {
+                "id": p.id,
+                "device_group_id": p.device_group_id,
+                "entry_type": p.entry_type,
+                "value": p.value,
+                "description": p.description,
+                "created_at": p.created_at,
+            }
+            for p in group.prevention_allowlists
+        ],
         "invitations": [
             {
                 "id": inv.id,
@@ -189,6 +202,7 @@ async def get_group(
             selectinload(DeviceGroup.teams).selectinload(Team.users),
             selectinload(DeviceGroup.devices),
             selectinload(DeviceGroup.exclusions),
+            selectinload(DeviceGroup.prevention_allowlists),
         )
         .where(DeviceGroup.id == group_id)
     )

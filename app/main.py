@@ -21,6 +21,7 @@ from app.routers import (
     install,
     logs,
     packs,
+    prevention_allowlist,
     releases,
     teams,
     ui,
@@ -88,6 +89,7 @@ app.include_router(prefix=api_prefix, router=devices.router)
 app.include_router(prefix=api_prefix, router=install.install_router)
 app.include_router(prefix=api_prefix, router=groups.router)
 app.include_router(prefix=api_prefix, router=exclusions.router)
+app.include_router(prefix=api_prefix, router=prevention_allowlist.router)
 app.include_router(prefix=api_prefix, router=packs.router)
 app.include_router(prefix=api_prefix, router=apikeys.router)
 app.include_router(prefix=api_prefix, router=logs.router)

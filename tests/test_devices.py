@@ -400,6 +400,30 @@ class TestDeviceInstall:
         finally:
             settings.agent_package = old_package
 
+    async def test_install_script_rustinel_config_telemetry_disabled(self, client: AsyncClient):
+        # Linux
+        resp_linux = await client.get("/device/install?os=linux")
+        assert resp_linux.status_code == 200
+        assert "[telemetry]" in resp_linux.text
+        assert "enabled = false" in resp_linux.text
+
+        # Mac
+        resp_mac = await client.get("/device/install?os=mac")
+        assert resp_mac.status_code == 200
+        assert "[telemetry]" in resp_mac.text
+        assert "enabled = false" in resp_mac.text
+
+        # Windows
+        resp_win = await client.get("/device/install?os=windows")
+        assert resp_win.status_code == 200
+        chunks = re.findall(r"\(echo\s+([A-Za-z0-9+/=]+)\)", resp_win.text)
+        decoded_service = base64.b64decode("".join(chunks)).decode("utf-8")
+        match = re.search(r'config_b64\s*=\s*"([^"]+)"', decoded_service)
+        assert match is not None
+        win_config = base64.b64decode(match.group(1)).decode("utf-8")
+        assert "[telemetry]" in win_config
+        assert "enabled = false" in win_config
+
 
 @pytest.mark.asyncio
 class TestDeviceReinstall:

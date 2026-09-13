@@ -72,3 +72,9 @@ domains_path = "/etc/rustinel/rules/ioc/domains.txt"
 paths_regex_path = "/etc/rustinel/rules/ioc/paths_regex.txt"
 default_severity = "high"
 max_file_size_mb = 50
+
+# 6. Pipeline Telemetry Counters
+# Controls whether dropped-event totals are written to telemetry.json
+[telemetry]
+enabled = false
+

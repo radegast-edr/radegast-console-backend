@@ -22,6 +22,7 @@ from app.routers import (
     logs,
     packs,
     prevention_allowlist,
+    public_releases,
     releases,
     teams,
     ui,
@@ -95,6 +96,7 @@ app.include_router(prefix=api_prefix, router=apikeys.router)
 app.include_router(prefix=api_prefix, router=logs.router)
 app.include_router(prefix=api_prefix, router=admin.router)
 app.include_router(prefix=api_prefix, router=releases.router)
+app.include_router(prefix=api_prefix, router=public_releases.router)
 app.include_router(prefix=api_prefix, router=dashboard.router)
 app.include_router(prefix="/ui", router=ui.router)
 app.add_middleware(RequestLoggingMiddleware)

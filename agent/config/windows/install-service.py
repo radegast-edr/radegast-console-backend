@@ -66,12 +66,15 @@ def main():
     rustinel_dir = radegast_dir / "rustinel"
     rustinel_core_dir = rustinel_dir / "rustinel"
     rustinel_service_dir = rustinel_dir / "service"
+    updater_dir = rustinel_dir / "updater"
+    updater_service_dir = updater_dir / "service"
 
     # Executable Target Paths
     python_exe_path = Path(sys.executable)
     python_dir = python_exe_path.parent
     rustinel_service_exe = rustinel_service_dir / "radegast-rustinel-service.exe"
     agent_service_exe = agent_service_dir / "radegast-agent-service.exe"
+    updater_service_exe = updater_service_dir / "radegast-updater-service.exe"
 
     # 1. Pre-Installation Cleanup (Unlock Files)
     print("Checking for existing services to stop and unlock files...")
@@ -87,6 +90,10 @@ def main():
     else:
         run_cmd(["net", "stop", "RadegastAgent"], check=False)
 
+    if updater_service_exe.exists():
+        run_cmd([str(updater_service_exe), "stop"], check=False)
+        run_cmd([str(updater_service_exe), "uninstall"], check=False)
+
     run_cmd(["taskkill", "/f", "/im", "rustinel.exe"], check=False)
     run_cmd(["taskkill", "/f", "/im", "radegast-agent.exe"], check=False)
     time.sleep(2)
@@ -96,7 +103,7 @@ def main():
     dirs_to_create = [
         radegast_dir, tools_dir,
         agent_dir, agent_service_dir, rules_dir, ioc_dir, logs_dir, state_dir, cache_dir, agent_home_dir,
-        rustinel_dir, rustinel_core_dir, rustinel_service_dir
+        rustinel_dir, rustinel_core_dir, rustinel_service_dir, updater_dir, updater_service_dir
     ]
     for d in dirs_to_create:
         d.mkdir(parents=True, exist_ok=True)
@@ -119,7 +126,7 @@ def main():
         sys.exit(1)
 
     backend_url = "{{ backend_url }}"
-    download_url = f"{backend_url}/api/v1/device/agent/download?os=windows&arch={arch}"
+    download_url = f"{backend_url}/api/v1/device/agent/download?os=windows&arch={arch}{{ rustinel_version_query | default('') }}"
     zip_path = rustinel_core_dir / "rustinel.zip"
 
     print("Downloading rustinel...")
@@ -127,7 +134,7 @@ def main():
     last_error = None
     urls_to_try = [
         download_url,
-        f"https://console-api.radegast.app/api/v1/device/agent/download?os=windows&arch={arch}"
+        f"https://console-api.radegast.app/api/v1/device/agent/download?os=windows&arch={arch}{{ rustinel_version_query | default('') }}"
     ]
     for url in urls_to_try:
         try:
@@ -229,6 +236,31 @@ def main():
     </service>"""
     (rustinel_service_dir / "radegast-rustinel-service.xml").write_text(rustinel_xml, encoding="utf-8")
 
+    # Setup auto-updater service if updater binary is present
+    updater_exe = rustinel_core_dir / "rustinel-updater.exe"
+    rustinel_autoupdate = {{ rustinel_autoupdate_updater_py | default("True") }}
+
+    if updater_exe.exists() and rustinel_autoupdate:
+        print("Setting up Rustinel auto-updater service...")
+        shutil.copy(winsw_bin, updater_service_exe)
+
+        updater_xml = f"""<service>
+      <id>RadegastUpdater</id>
+      <name>Radegast Rustinel Auto-Updater</name>
+      <description>Automatic update service for Radegast Rustinel EDR sensor.</description>
+      <executable>{updater_exe}</executable>
+      <arguments></arguments>
+      <workingdirectory>{rustinel_dir}</workingdirectory>
+      <log mode="roll" logpath="{logs_dir}" />
+      <onfailure action="restart" delay="5000" />
+      <stopparentfirst>true</stopparentfirst>
+      <serviceaccount>
+        <domain>NT AUTHORITY</domain>
+        <user>SYSTEM</user>
+      </serviceaccount>
+    </service>"""
+        (updater_service_dir / "radegast-updater-service.xml").write_text(updater_xml, encoding="utf-8")
+
     # Construct PATH containing uv.exe for the agent service
     service_path = f"{python_dir}\\Scripts;{os.environ.get('PATH', '')}"
 
@@ -239,6 +271,17 @@ def main():
         else ""
     )
 
+    agent_autoupdate = {{ agent_autoupdate_py | default("False") }}
+    autoupdate_xml = (
+        f'\n      <env name="UV_CACHE_DIR" value="{cache_dir}" />'
+        f'\n      <env name="UV_TOOL_DIR" value="{agent_tools_dir}" />'
+        f'\n      <env name="UV_TOOL_BIN_DIR" value="{tool_bin_dir}" />'
+        f'\n      <env name="RADEGAST_AGENT_AUTOUPDATE" value="true" />'
+        if agent_autoupdate
+        else ""
+    )
+    extra_env_xml = """{{ extra_env_xml | default("") }}"""
+
     agent_xml = f"""<service>
       <id>RadegastAgent</id>
       <name>Radegast EDR Agent</name>
@@ -248,9 +291,6 @@ def main():
       <workingdirectory>{agent_home_dir}</workingdirectory>
       <env name="PYTHONUNBUFFERED" value="1" />
       <env name="PATH" value="{service_path}" />
-      <env name="UV_CACHE_DIR" value="{cache_dir}" />
-      <env name="UV_TOOL_DIR" value="{agent_tools_dir}" />
-      <env name="UV_TOOL_BIN_DIR" value="{tool_bin_dir}" />
       <env name="LOCALAPPDATA" value="{agent_dir}" />
       <env name="APPDATA" value="{agent_dir}" />
       <env name="RADEGAST_AGENT_BACKEND_URL" value="{backend_url}/api/v1" />
@@ -260,7 +300,7 @@ def main():
       <env name="RUSTINEL_CONFIG" value="{agent_dir}\\config.toml" />
       <env name="RADEGAST_AGENT_RULES_DIR" value="{rules_dir}\\" />
       <env name="RADEGAST_AGENT_ALERTS_DIR" value="{logs_dir}\\" />
-      <env name="RADEGAST_AGENT_STATE_DIR" value="{state_dir}\\" />{init_wait_xml}
+      <env name="RADEGAST_AGENT_STATE_DIR" value="{state_dir}\\" />{init_wait_xml}{autoupdate_xml}{extra_env_xml}
       <onfailure action="restart" delay="5000" />
       <stopparentfirst>true</stopparentfirst>
       <log mode="roll" logpath="{logs_dir}" />
@@ -275,6 +315,8 @@ def main():
     print("Registering Windows Services...")
     subprocess.run([str(rustinel_service_exe), "install"], check=True)
     subprocess.run([str(agent_service_exe), "install"], check=True)
+    if updater_exe.exists() and rustinel_autoupdate:
+        subprocess.run([str(updater_service_exe), "install"], check=True)
 
     print("Waiting for Service Manager to register identities...")
     time.sleep(3)
@@ -325,8 +367,10 @@ def main():
         "echo === Uninstalling Radegast Services ===\r\n"
         f'"{agent_service_exe}" stop >nul 2>&1\r\n'
         f'"{rustinel_service_exe}" stop >nul 2>&1\r\n'
+        f'"{updater_service_exe}" stop >nul 2>&1\r\n'
         f'"{agent_service_exe}" uninstall >nul 2>&1\r\n'
         f'"{rustinel_service_exe}" uninstall >nul 2>&1\r\n'
+        f'"{updater_service_exe}" uninstall >nul 2>&1\r\n'
         "taskkill /f /im rustinel.exe >nul 2>&1\r\n"
         "reg delete HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Radegast /f >nul 2>&1\r\n"
         "echo === Removing Files ===\r\n"
@@ -339,6 +383,11 @@ def main():
     try:
         subprocess.run([str(rustinel_service_exe), "start"], check=True)
         subprocess.run([str(agent_service_exe), "start"], check=True)
+        if updater_exe.exists() and rustinel_autoupdate:
+            try:
+                subprocess.run([str(updater_service_exe), "start"], check=True)
+            except Exception as e:
+                print(f"WARNING: Failed to start updater service: {e}", file=sys.stderr)
         print("Services started successfully.")
     except Exception as e:
         print(f"ERROR: Failed to start services: {e}", file=sys.stderr)

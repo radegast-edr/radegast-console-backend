@@ -424,6 +424,148 @@ class TestDeviceInstall:
         assert "[telemetry]" in win_config
         assert "enabled = false" in win_config
 
+    async def test_install_script_rustinel_version(self, client: AsyncClient):
+        # Linux default vs custom
+        resp_linux_default = await client.get("/device/install?os=linux")
+        assert resp_linux_default.status_code == 200
+        assert "&version=" not in resp_linux_default.text
+
+        resp_linux = await client.get("/device/install?os=linux&rustinel-version=1.2.3")
+        assert resp_linux.status_code == 200
+        assert "/download?os=linux&arch=${ARCH_NAME}&version=1.2.3" in resp_linux.text
+
+        # Mac custom
+        resp_mac = await client.get("/device/install?os=mac&rustinel-version=1.2.3")
+        assert resp_mac.status_code == 200
+        assert "/download?os=mac&arch=${ARCH_NAME}&version=1.2.3" in resp_mac.text
+
+        # Windows custom
+        resp_win = await client.get("/device/install?os=windows&rustinel-version=1.2.3")
+        assert resp_win.status_code == 200
+        chunks = re.findall(r"\(echo\s+([A-Za-z0-9+/=]+)\)", resp_win.text)
+        decoded = base64.b64decode("".join(chunks)).decode("utf-8")
+        assert "download?os=windows&arch={arch}&version=1.2.3" in decoded
+
+        # Invalid version format
+        resp_invalid = await client.get("/device/install?os=linux&rustinel-version=bad-version")
+        assert resp_invalid.status_code == 400
+
+    async def test_install_script_agent_autoupdate(self, client: AsyncClient):
+        # Default: unset
+        resp_linux = await client.get("/device/install?os=linux")
+        assert "Environment=HOME=/opt/radegast/home" not in resp_linux.text
+        assert "UV_TOOL_DIR" not in resp_linux.text
+        assert "RADEGAST_AGENT_AUTOUPDATE" not in resp_linux.text
+
+        # Enabled
+        resp_linux_auto = await client.get("/device/install?os=linux&agent-autoupdate=true")
+        assert resp_linux_auto.status_code == 200
+        assert "Environment=HOME=/opt/radegast/home" in resp_linux_auto.text
+        assert "Environment=UV_TOOL_DIR=/opt/radegast/home/.local/share/uv/tools" in resp_linux_auto.text
+        assert "Environment=UV_TOOL_BIN_DIR=/opt/radegast/home/.local/bin" in resp_linux_auto.text
+        assert "Environment=UV_CACHE_DIR=/opt/radegast/home/.cache/uv" in resp_linux_auto.text
+        assert "Environment=RADEGAST_AGENT_AUTOUPDATE=true" in resp_linux_auto.text
+
+        resp_mac_auto = await client.get("/device/install?os=mac&agent-autoupdate=true")
+        assert resp_mac_auto.status_code == 200
+        assert "<key>HOME</key>\n        <string>/Library/Radegast/home</string>" in resp_mac_auto.text
+        assert "<key>UV_TOOL_DIR</key>" in resp_mac_auto.text
+        assert "<key>UV_TOOL_BIN_DIR</key>" in resp_mac_auto.text
+        assert "<key>RADEGAST_AGENT_AUTOUPDATE</key>\n        <string>true</string>" in resp_mac_auto.text
+
+        resp_win_auto = await client.get("/device/install?os=windows&agent-autoupdate=true")
+        assert resp_win_auto.status_code == 200
+        chunks = re.findall(r"\(echo\s+([A-Za-z0-9+/=]+)\)", resp_win_auto.text)
+        decoded = base64.b64decode("".join(chunks)).decode("utf-8")
+        assert '<env name="UV_TOOL_DIR" value="{agent_tools_dir}" />' in decoded
+        assert '<env name="RADEGAST_AGENT_AUTOUPDATE" value="true" />' in decoded
+
+        # Disabled
+        resp_linux_noauto = await client.get("/device/install?os=linux&agent-autoupdate=false")
+        assert resp_linux_noauto.status_code == 200
+        assert "Environment=UV_TOOL_DIR" not in resp_linux_noauto.text
+        assert "Environment=RADEGAST_AGENT_AUTOUPDATE=false" in resp_linux_noauto.text
+
+    async def test_install_script_agent_send_severity(self, client: AsyncClient):
+        # Default unset
+        resp_def = await client.get("/device/install?os=linux")
+        assert "RADEGAST_AGENT_SEND_SEVERITY" not in resp_def.text
+
+        # False
+        resp_f = await client.get("/device/install?os=linux&agent-send-severity=false")
+        assert "Environment=RADEGAST_AGENT_SEND_SEVERITY=false" in resp_f.text
+
+        # True
+        resp_t = await client.get("/device/install?os=linux&agent-send-severity=true")
+        assert "Environment=RADEGAST_AGENT_SEND_SEVERITY=true" in resp_t.text
+
+        # Mac
+        resp_mac = await client.get("/device/install?os=mac&agent-send-severity=false")
+        assert "<key>RADEGAST_AGENT_SEND_SEVERITY</key>\n        <string>false</string>" in resp_mac.text
+
+        # Windows
+        resp_win = await client.get("/device/install?os=windows&agent-send-severity=true")
+        chunks = re.findall(r"\(echo\s+([A-Za-z0-9+/=]+)\)", resp_win.text)
+        decoded = base64.b64decode("".join(chunks)).decode("utf-8")
+        assert '<env name="RADEGAST_AGENT_SEND_SEVERITY" value="true" />' in decoded
+
+    async def test_install_script_agent_send_rule_id(self, client: AsyncClient):
+        # Default unset
+        resp_def = await client.get("/device/install?os=linux")
+        assert "RADEGAST_AGENT_SEND_RULE_ID" not in resp_def.text
+
+        # False
+        resp_f = await client.get("/device/install?os=linux&agent-send-rule-id=false")
+        assert "Environment=RADEGAST_AGENT_SEND_RULE_ID=false" in resp_f.text
+
+        # True
+        resp_t = await client.get("/device/install?os=linux&agent-send-rule-id=true")
+        assert "Environment=RADEGAST_AGENT_SEND_RULE_ID=true" in resp_t.text
+
+        # Mac
+        resp_mac = await client.get("/device/install?os=mac&agent-send-rule-id=false")
+        assert "<key>RADEGAST_AGENT_SEND_RULE_ID</key>\n        <string>false</string>" in resp_mac.text
+
+        # Windows
+        resp_win = await client.get("/device/install?os=windows&agent-send-rule-id=true")
+        chunks = re.findall(r"\(echo\s+([A-Za-z0-9+/=]+)\)", resp_win.text)
+        decoded = base64.b64decode("".join(chunks)).decode("utf-8")
+        assert '<env name="RADEGAST_AGENT_SEND_RULE_ID" value="true" />' in decoded
+
+    async def test_install_script_agent_healthcheck(self, client: AsyncClient):
+        # Default unset
+        resp_def = await client.get("/device/install?os=linux")
+        assert "RADEGAST_AGENT_HEALTHCHECK" not in resp_def.text
+
+        # False
+        resp_f = await client.get("/device/install?os=linux&agent-healthcheck=false")
+        assert "Environment=RADEGAST_AGENT_HEALTHCHECK=false" in resp_f.text
+
+        # True
+        resp_t = await client.get("/device/install?os=linux&agent-healthcheck=true")
+        assert "Environment=RADEGAST_AGENT_HEALTHCHECK=true" in resp_t.text
+
+        # Mac
+        resp_mac = await client.get("/device/install?os=mac&agent-healthcheck=false")
+        assert "<key>RADEGAST_AGENT_HEALTHCHECK</key>\n        <string>false</string>" in resp_mac.text
+
+        # Windows
+        resp_win = await client.get("/device/install?os=windows&agent-healthcheck=true")
+        chunks = re.findall(r"\(echo\s+([A-Za-z0-9+/=]+)\)", resp_win.text)
+        decoded = base64.b64decode("".join(chunks)).decode("utf-8")
+        assert '<env name="RADEGAST_AGENT_HEALTHCHECK" value="true" />' in decoded
+
+    async def test_install_script_snake_case_aliases(self, client: AsyncClient):
+        resp = await client.get(
+            "/device/install?os=linux&rustinel_version=2.0.0&agent_autoupdate=true&agent_send_severity=false&agent_send_rule_id=false&agent_healthcheck=false"
+        )
+        assert resp.status_code == 200
+        assert "&version=2.0.0" in resp.text
+        assert "Environment=HOME=/opt/radegast/home" in resp.text
+        assert "Environment=RADEGAST_AGENT_SEND_SEVERITY=false" in resp.text
+        assert "Environment=RADEGAST_AGENT_SEND_RULE_ID=false" in resp.text
+        assert "Environment=RADEGAST_AGENT_HEALTHCHECK=false" in resp.text
+
 
 @pytest.mark.asyncio
 class TestDeviceReinstall:

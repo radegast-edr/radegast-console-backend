@@ -229,6 +229,8 @@ touch "$LOG_DIR"/radegast-agent-stderr.log
 touch "$LOG_DIR"/rustinel-stdout.log
 touch "$LOG_DIR"/rustinel-stderr.log
 touch "$LOG_DIR"/alerts.json
+touch "$LOG_DIR"/rustinel-updater-stdout.log
+touch "$LOG_DIR"/rustinel-updater-stderr.log
 
 chown -R _radegast:wheel "$LOG_DIR" 2>/dev/null || chown -R _radegast:staff "$LOG_DIR" 2>/dev/null || chown -R _radegast "$LOG_DIR"
 chmod 775 "$LOG_DIR"
@@ -317,9 +319,9 @@ BACKEND_URL="${RADEGAST_BACKEND_URL:-{{ backend_url }}}"
 mkdir -p "$RADEGAST_DIR"/rustinel
 
 # Try local download first, then fall back to the official server
-if ! curl -sSL -f -o "$RADEGAST_DIR"/rustinel/rustinel.zip "${BACKEND_URL}/api/v1/device/agent/download?os=mac&arch=${ARCH_NAME}"; then
+if ! curl -sSL -f -o "$RADEGAST_DIR"/rustinel/rustinel.zip "${BACKEND_URL}/api/v1/device/agent/download?os=mac&arch=${ARCH_NAME}{{ rustinel_version_query | default('') }}"; then
     echo "Local rustinel download failed, falling back to official console..."
-    if ! curl -sSL -f -o "$RADEGAST_DIR"/rustinel/rustinel.zip "https://console-api.radegast.app/api/v1/device/agent/download?os=mac&arch=${ARCH_NAME}"; then
+    if ! curl -sSL -f -o "$RADEGAST_DIR"/rustinel/rustinel.zip "https://console-api.radegast.app/api/v1/device/agent/download?os=mac&arch=${ARCH_NAME}{{ rustinel_version_query | default('') }}"; then
         echo "ERROR: Failed to download rustinel for macOS (${ARCH_NAME}) from local and official instances." >&2
         echo "Please upload a macOS release for ${ARCH_NAME} in the Releases management section." >&2
         exit 1
@@ -352,6 +354,22 @@ chown -R root:wheel "$RADEGAST_DIR"/rustinel
 chmod -R 755 "$RADEGAST_DIR"/rustinel
 xattr -dr com.apple.quarantine "$RADEGAST_DIR"/rustinel 2>/dev/null || true
 
+# Setup auto-updater (if rustinel-updater binary was bundled in the archive)
+{% if rustinel_autoupdate %}
+if [ -f "$RADEGAST_DIR/rustinel/rustinel-updater" ]; then
+    echo "Setting up Rustinel auto-updater service..."
+    chmod +x "$RADEGAST_DIR/rustinel/rustinel-updater"
+    xattr -dr com.apple.quarantine "$RADEGAST_DIR/rustinel/rustinel-updater" 2>/dev/null || true
+
+    cat << 'EOF' > /Library/LaunchDaemons/app.radegast.rustinel-updater.plist
+{{ rustinel_updater_plist_content }}
+EOF
+    chmod 644 /Library/LaunchDaemons/app.radegast.rustinel-updater.plist
+else
+    echo "Rustinel auto-updater binary not found in archive, skipping auto-updater setup."
+fi
+{% endif %}
+
 # 7. Write configs and LaunchDaemon plists
 echo "Writing configuration files..."
 cat << 'EOF' > "$RADEGAST_DIR"/etc/config.toml
@@ -380,9 +398,11 @@ echo "=== Starting Radegast EDR Agent & Rustinel Uninstallation ==="
 
 launchctl unload /Library/LaunchDaemons/app.radegast.agent.plist 2>/dev/null || true
 launchctl unload /Library/LaunchDaemons/io.rustinel.daemon.plist 2>/dev/null || true
+launchctl unload /Library/LaunchDaemons/app.radegast.rustinel-updater.plist 2>/dev/null || true
 
 rm -f /Library/LaunchDaemons/app.radegast.agent.plist
 rm -f /Library/LaunchDaemons/io.rustinel.daemon.plist
+rm -f /Library/LaunchDaemons/app.radegast.rustinel-updater.plist
 
 if dscl . -read /Users/_radegast >/dev/null 2>&1; then
     dscl . -delete /Users/_radegast || true
@@ -416,6 +436,13 @@ launchctl unload -w /Library/LaunchDaemons/app.radegast.agent.plist 2>/dev/null 
 
 launchctl load -w /Library/LaunchDaemons/io.rustinel.daemon.plist 2>/dev/null || true
 launchctl load -w /Library/LaunchDaemons/app.radegast.agent.plist 2>/dev/null || true
+
+{% if rustinel_autoupdate %}
+if [ -f "$RADEGAST_DIR/rustinel/rustinel-updater" ]; then
+    launchctl unload -w /Library/LaunchDaemons/app.radegast.rustinel-updater.plist 2>/dev/null || true
+    launchctl load -w /Library/LaunchDaemons/app.radegast.rustinel-updater.plist 2>/dev/null || true
+fi
+{% endif %}
 
 echo ""
 echo "=== Radegast EDR Agent & Rustinel setup completed ==="

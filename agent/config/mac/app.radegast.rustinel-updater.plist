@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>app.radegast.rustinel-updater</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Library/Radegast/rustinel/rustinel-updater</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Library/Logs/Radegast/rustinel-updater-stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Library/Logs/Radegast/rustinel-updater-stderr.log</string>
+</dict>
+</plist>

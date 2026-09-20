@@ -207,3 +207,24 @@ class TestReleasesDelete:
     async def test_delete_release_nonexistent_fails(self, admin_client: AsyncClient):
         resp = await admin_client.delete("/releases/9.9.9/linux/amd64")
         assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+class TestPublicReleases:
+    async def test_public_releases_list_unauthenticated(self, client: AsyncClient):
+        resp = await client.get("/public/releases/")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert any(r["version"] == "0.0.1" and r["os"] == "linux" and r["arch"] == "amd64" for r in data)
+
+    async def test_public_releases_download_unauthenticated(self, client: AsyncClient):
+        resp = await client.get("/public/releases/0.0.1/linux/amd64/download")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/zip"
+        assert b"stub" in resp.content
+
+    async def test_public_releases_download_invalid_or_nonexistent(self, client: AsyncClient):
+        resp = await client.get("/public/releases/0.0.1/windows/arm64/download")
+        assert resp.status_code == 404
+

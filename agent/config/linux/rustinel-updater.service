@@ -1,0 +1,37 @@
+[Unit]
+Description=Radegast Rustinel Auto-Updater
+Documentation=https://radegast.app
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/radegast/rustinel/rustinel-updater
+WorkingDirectory=/opt/radegast
+Restart=on-failure
+RestartSec=30s
+User=root
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service @network-io
+ReadWritePaths=/opt/radegast/rustinel
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rustinel-updater
+
+[Install]
+WantedBy=multi-user.target

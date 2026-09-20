@@ -155,9 +155,9 @@ echo "Downloading rustinel..."
 mkdir -p /opt/radegast/rustinel
 
 # Try local download first, then fall back to the official server
-if ! curl -sSL -f -o /opt/radegast/rustinel/rustinel.zip "{{ backend_url }}/api/v1/device/agent/download?os=linux&arch=${ARCH_NAME}"; then
+if ! curl -sSL -f -o /opt/radegast/rustinel/rustinel.zip "{{ backend_url }}/api/v1/device/agent/download?os=linux&arch=${ARCH_NAME}{{ rustinel_version_query | default('') }}"; then
     echo "Local rustinel download failed, falling back to official console..."
-    if ! curl -sSL -f -o /opt/radegast/rustinel/rustinel.zip "https://console-api.radegast.app/api/v1/device/agent/download?os=linux&arch=${ARCH_NAME}"; then
+    if ! curl -sSL -f -o /opt/radegast/rustinel/rustinel.zip "https://console-api.radegast.app/api/v1/device/agent/download?os=linux&arch=${ARCH_NAME}{{ rustinel_version_query | default('') }}"; then
         echo "ERROR: Failed to download rustinel from both local and official instances." >&2
         exit 1
     fi
@@ -169,6 +169,21 @@ chmod +x /opt/radegast/rustinel/rustinel
 chown -R root:root /opt/radegast/rustinel
 chmod 755 /opt/radegast/rustinel
 chmod 755 /opt/radegast/rustinel/rustinel
+
+# Setup auto-updater (if rustinel-updater binary was bundled in the archive)
+{% if rustinel_autoupdate %}
+if [ -f /opt/radegast/rustinel/rustinel-updater ]; then
+    echo "Setting up Rustinel auto-updater service..."
+    chmod +x /opt/radegast/rustinel/rustinel-updater
+
+    cat << 'EOF' > /etc/systemd/system/rustinel-updater.service
+{{ rustinel_updater_service_content }}
+EOF
+    chmod 644 /etc/systemd/system/rustinel-updater.service
+else
+    echo "Rustinel auto-updater binary not found in archive, skipping auto-updater setup."
+fi
+{% endif %}
 
 # 7. Write configs and service files
 echo "Writing configuration files..."
@@ -200,9 +215,12 @@ systemctl stop radegast-agent || true
 systemctl disable radegast-agent || true
 systemctl stop rustinel || true
 systemctl disable rustinel || true
+systemctl stop rustinel-updater || true
+systemctl disable rustinel-updater || true
 
 rm -f /etc/systemd/system/radegast-agent.service
 rm -f /etc/systemd/system/rustinel.service
+rm -f /etc/systemd/system/rustinel-updater.service
 systemctl daemon-reload
 
 if id "radegast-agent" >/dev/null 2>&1; then
@@ -242,6 +260,13 @@ systemctl daemon-reload
 systemctl enable rustinel
 systemctl restart rustinel
 
+{% if rustinel_autoupdate %}
+if [ -f /opt/radegast/rustinel/rustinel-updater ]; then
+    systemctl enable rustinel-updater
+    systemctl restart rustinel-updater
+fi
+{% endif %}
+
 systemctl enable radegast-agent
 systemctl restart radegast-agent
 
@@ -260,5 +285,14 @@ if ! systemctl is-active --quiet radegast-agent; then
     systemctl status radegast-agent
     exit 1
 fi
+
+{% if rustinel_autoupdate %}
+if [ -f /opt/radegast/rustinel/rustinel-updater ]; then
+    if ! systemctl is-active --quiet rustinel-updater; then
+        echo "WARNING: rustinel-updater service is not running." >&2
+        systemctl status rustinel-updater || true
+    fi
+fi
+{% endif %}
 
 echo "=== Radegast EDR Agent & Rustinel setup completed successfully ==="

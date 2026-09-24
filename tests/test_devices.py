@@ -486,6 +486,53 @@ class TestDeviceInstall:
         assert "Environment=UV_TOOL_DIR" not in resp_linux_noauto.text
         assert "Environment=RADEGAST_AGENT_AUTOUPDATE=false" in resp_linux_noauto.text
 
+    async def test_install_script_rustinel_autoupdate(self, client: AsyncClient):
+        # Default: enabled (rustinel_autoupdate = True)
+        resp_linux_def = await client.get("/device/install?os=linux")
+        assert resp_linux_def.status_code == 200
+        assert "cat << 'EOF' > /etc/systemd/system/rustinel-updater.service" in resp_linux_def.text
+        assert "systemctl enable rustinel-updater" in resp_linux_def.text
+
+        resp_mac_def = await client.get("/device/install?os=mac")
+        assert resp_mac_def.status_code == 200
+        assert "cat << 'EOF' > /Library/LaunchDaemons/app.radegast.rustinel-updater.plist" in resp_mac_def.text
+        assert "launchctl load -w /Library/LaunchDaemons/app.radegast.rustinel-updater.plist" in resp_mac_def.text
+
+        resp_win_def = await client.get("/device/install?os=windows")
+        assert resp_win_def.status_code == 200
+        chunks = re.findall(r"\(echo\s+([A-Za-z0-9+/=]+)\)", resp_win_def.text)
+        decoded = base64.b64decode("".join(chunks)).decode("utf-8")
+        assert "rustinel_autoupdate = True" in decoded
+        assert "<id>RadegastUpdater</id>" in decoded
+
+        # Explicitly enabled
+        resp_linux_on = await client.get("/device/install?os=linux&rustinel-autoupdate=true")
+        assert resp_linux_on.status_code == 200
+        assert "cat << 'EOF' > /etc/systemd/system/rustinel-updater.service" in resp_linux_on.text
+
+        # Explicitly disabled
+        resp_linux_off = await client.get("/device/install?os=linux&rustinel-autoupdate=false")
+        assert resp_linux_off.status_code == 200
+        assert "cat << 'EOF' > /etc/systemd/system/rustinel-updater.service" not in resp_linux_off.text
+        assert "systemctl enable rustinel-updater" not in resp_linux_off.text
+
+        resp_mac_off = await client.get("/device/install?os=mac&rustinel-autoupdate=false")
+        assert resp_mac_off.status_code == 200
+        assert "cat << 'EOF' > /Library/LaunchDaemons/app.radegast.rustinel-updater.plist" not in resp_mac_off.text
+
+        resp_win_off = await client.get("/device/install?os=windows&rustinel-autoupdate=false")
+        assert resp_win_off.status_code == 200
+        chunks_off = re.findall(r"\(echo\s+([A-Za-z0-9+/=]+)\)", resp_win_off.text)
+        decoded_off = base64.b64decode("".join(chunks_off)).decode("utf-8")
+        assert "rustinel_autoupdate = False" in decoded_off
+
+        # Aliases test (snake_case, 0, no)
+        resp_alias1 = await client.get("/device/install?os=linux&rustinel_autoupdate=false")
+        assert "cat << 'EOF' > /etc/systemd/system/rustinel-updater.service" not in resp_alias1.text
+
+        resp_alias2 = await client.get("/device/install?os=linux&rustinel-autoupdate=0")
+        assert "cat << 'EOF' > /etc/systemd/system/rustinel-updater.service" not in resp_alias2.text
+
     async def test_install_script_agent_send_severity(self, client: AsyncClient):
         # Default unset
         resp_def = await client.get("/device/install?os=linux")
@@ -557,7 +604,7 @@ class TestDeviceInstall:
 
     async def test_install_script_snake_case_aliases(self, client: AsyncClient):
         resp = await client.get(
-            "/device/install?os=linux&rustinel_version=2.0.0&agent_autoupdate=true&agent_send_severity=false&agent_send_rule_id=false&agent_healthcheck=false"
+            "/device/install?os=linux&rustinel_version=2.0.0&agent_autoupdate=true&agent_send_severity=false&agent_send_rule_id=false&agent_healthcheck=false&rustinel_autoupdate=false"
         )
         assert resp.status_code == 200
         assert "&version=2.0.0" in resp.text
@@ -565,6 +612,7 @@ class TestDeviceInstall:
         assert "Environment=RADEGAST_AGENT_SEND_SEVERITY=false" in resp.text
         assert "Environment=RADEGAST_AGENT_SEND_RULE_ID=false" in resp.text
         assert "Environment=RADEGAST_AGENT_HEALTHCHECK=false" in resp.text
+        assert "cat << 'EOF' > /etc/systemd/system/rustinel-updater.service" not in resp.text
 
 
 @pytest.mark.asyncio

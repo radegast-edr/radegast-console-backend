@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -32,6 +32,7 @@ class Log(Base):
         ForeignKey("pack_version_rules.id", ondelete="SET NULL"), nullable=True, index=True
     )
     excluded_by: Mapped[int | None] = mapped_column(ForeignKey("exclusions.id", ondelete="SET NULL"), nullable=True, index=True)
+    bytes_used: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", nullable=False)
 
     device = relationship("Device", back_populates="logs")
     pack_version_rule = relationship("PackVersionRule")

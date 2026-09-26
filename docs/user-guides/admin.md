@@ -112,13 +112,11 @@ The Admin panel typically includes:
 
 1. In the Admin panel, click **"Devices"**
 2. The Devices list shows ALL devices in the system, not just those in your teams
-3. Each device shows:
+3. An overview summary indicates the total database space consumed across all registered devices.
+4. Each device shows:
    - Device name
-   - Last seen timestamp
-   - Agent version
-   - Groups it belongs to
-   - Teams that can access it
-   - Token information
+   - Total database space used by its ingested alerts and telemetry logs
+   - Actions available (such as device deletion)
 
 ![Admin Device Management](../_static/screenshots/admin-devices.png)
 

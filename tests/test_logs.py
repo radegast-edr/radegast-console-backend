@@ -757,3 +757,60 @@ class TestTriggeredRule:
         assert resp.status_code == 200
         data = resp.json()
         assert data["triggered_rule"] is None
+
+    async def test_submit_log_computes_bytes_used_and_updates_device_total_space(self, auth_client: AsyncClient) -> None:
+        """Submitting a log computes bytes_used and updates device.total_space_used."""
+        resp = await auth_client.get("/teams/")
+        team_id = resp.json()[0]["id"]
+        resp = await auth_client.get(f"/teams/{team_id}/groups")
+        group_id = resp.json()[0]["id"]
+
+        resp = await auth_client.post("/devices/", json={"name": "Logger-SpaceTrack", "group_id": group_id})
+        device_id = resp.json()["id"]
+        token = resp.json()["token"]
+
+        # Initially space used is 0
+        dev_resp = await auth_client.get(f"/devices/{device_id}")
+        assert dev_resp.json()["total_space_used"] == 0
+
+        # Login as device using a separate client
+        device_client = AsyncClient(transport=auth_client._transport, base_url="http://test")
+        await device_client.post("/auth/device/login", json={"token": token})
+
+        # Submit first log
+        payload1 = "encrypted-payload-part-1-abcdef123456"
+        expected_bytes1 = len(payload1.encode("utf-8"))
+        resp1 = await device_client.post(
+            "/logs/",
+            json={
+                "time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                "content": payload1,
+                "severity": "low",
+            },
+        )
+        assert resp1.status_code == 200
+        data1 = resp1.json()
+        assert data1["bytes_used"] == expected_bytes1
+
+        # Check device space updated
+        dev_resp = await auth_client.get(f"/devices/{device_id}")
+        assert dev_resp.json()["total_space_used"] == expected_bytes1
+
+        # Submit second log
+        payload2 = "second-longer-alert-blob-data-bytes-789"
+        expected_bytes2 = len(payload2.encode("utf-8"))
+        resp2 = await device_client.post(
+            "/logs/",
+            json={
+                "time": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                "content": payload2,
+                "severity": "medium",
+            },
+        )
+        assert resp2.status_code == 200
+        data2 = resp2.json()
+        assert data2["bytes_used"] == expected_bytes2
+
+        # Check device space accumulated
+        dev_resp = await auth_client.get(f"/devices/{device_id}")
+        assert dev_resp.json()["total_space_used"] == expected_bytes1 + expected_bytes2

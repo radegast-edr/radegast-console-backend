@@ -101,6 +101,7 @@ async def list_devices(
             agent_version=d.agent_version,
             rustinel_version=d.rustinel_version,
             os=d.os,
+            total_space_used=d.total_space_used or 0,
         )
         for d in devices
     ]
@@ -185,6 +186,7 @@ async def get_device(
         agent_version=device.agent_version,
         rustinel_version=device.rustinel_version,
         os=device.os,
+        total_space_used=device.total_space_used or 0,
         groups=[{"id": g.id, "name": g.name} for g in device.groups],
     )
 

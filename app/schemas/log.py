@@ -67,6 +67,7 @@ class LogResponse(BaseModel):
     rule_type: str | None = None
     triggered_rule: TriggeredRuleResponse | None = None
     excluded_by: ExclusionRefResponse | None = None
+    bytes_used: int = 0
 
     @field_validator("time", mode="after")
     @classmethod

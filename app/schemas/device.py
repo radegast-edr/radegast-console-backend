@@ -20,6 +20,7 @@ class DeviceResponse(BaseModel):
     agent_version: str | None = None
     rustinel_version: str | None = None
     os: str | None = None
+    total_space_used: int = 0
 
     model_config = {"from_attributes": True}
 
@@ -34,6 +35,7 @@ class DeviceDetailResponse(BaseModel):
     agent_version: str | None = None
     rustinel_version: str | None = None
     os: str | None = None
+    total_space_used: int = 0
     groups: list[DeviceGroupResponse]
 
     model_config = {"from_attributes": True}

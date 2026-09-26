@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -85,6 +85,7 @@ def _make_log_response(log: Log, seen: bool, pack_version_rule: PackVersionRule 
         rule_type=log.rule_type,
         triggered_rule=_make_triggered_rule(pack_version_rule),
         excluded_by=excluded_by_val,
+        bytes_used=log.bytes_used,
     )
 
 
@@ -95,6 +96,7 @@ async def submit_log(
     device: Device = Depends(get_current_device),
     db: AsyncSession = Depends(get_db),
 ):
+    blob_bytes = len(data.content.encode("utf-8"))
     log = Log(
         device_id=device.id,
         time=ensure_utc(data.time),
@@ -103,6 +105,11 @@ async def submit_log(
         severity=data.severity,
         rule_id=data.rule_id,
         rule_type=data.rule_type,
+        bytes_used=blob_bytes,
+    )
+
+    await db.execute(
+        update(Device).where(Device.id == device.id).values(total_space_used=func.coalesce(Device.total_space_used, 0) + blob_bytes)
     )
 
     if data.excluded_by is not None:

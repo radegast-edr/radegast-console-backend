@@ -55,8 +55,26 @@ class TestAdminUsers:
 class TestAdminDevices:
     @pytest.mark.asyncio
     async def test_list_devices_as_admin(self, admin_client: AsyncClient):
+        resp = await admin_client.get("/teams/")
+        team_id = resp.json()[0]["id"]
+        resp = await admin_client.get(f"/teams/{team_id}/groups")
+        group_id = resp.json()[0]["id"]
+
+        create_resp = await admin_client.post("/devices/", json={"name": "Admin Space Device", "group_id": group_id})
+        device_id = create_resp.json()["id"]
+        token = create_resp.json()["token"]
+
+        device_client = AsyncClient(transport=admin_client._transport, base_url="http://test")
+        await device_client.post("/auth/device/login", json={"token": token})
+        blob = "admin-test-alert-content-xyz"
+        blob_bytes = len(blob.encode("utf-8"))
+        await device_client.post("/logs/", json={"time": "2026-09-26T12:00:00Z", "content": blob})
+
         resp = await admin_client.get("/admin/devices")
         assert resp.status_code == 200
+        devices = resp.json()
+        target = next(d for d in devices if d["id"] == device_id)
+        assert target["total_space_used"] == blob_bytes
 
     @pytest.mark.asyncio
     async def test_delete_device_as_admin(self, admin_client: AsyncClient):

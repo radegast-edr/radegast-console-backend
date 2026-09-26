@@ -95,6 +95,7 @@ async def get_dashboard_data(
             agent_version=d.agent_version,
             rustinel_version=d.rustinel_version,
             os=d.os,
+            total_space_used=d.total_space_used or 0,
         )
         for d in devices_dict.values()
     ]

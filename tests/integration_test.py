@@ -1,18 +1,22 @@
 import ctypes
+import http.server
 import io
 import json
 import os
+import platform
 import shutil
 import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
+import yaml
 
 # Ensure project root is in python path
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
@@ -126,18 +130,211 @@ def run_command(cmd, shell=False, check=True, input_data=None, env=None):
         return None
 
 
+def get_updater_asset_name(os_name: str, arch: str) -> tuple[str, str]:
+    """Return (download_asset_name, archive_inner_name) for rustinel-updater."""
+    if os_name == "linux":
+        if arch in ("arm64", "aarch64"):
+            return "radegast-rustinel-updater-aarch64-unknown-linux-musl", "rustinel-updater"
+        return "radegast-rustinel-updater-x86_64-unknown-linux-musl", "rustinel-updater"
+    elif os_name == "mac":
+        if arch in ("arm64", "aarch64", "m5"):
+            return "radegast-rustinel-updater-aarch64-apple-darwin", "rustinel-updater"
+        return "radegast-rustinel-updater-x86_64-apple-darwin", "rustinel-updater"
+    elif os_name == "windows":
+        return "radegast-rustinel-updater-x86_64-pc-windows-gnu.exe", "rustinel-updater.exe"
+    raise ValueError(f"Unsupported OS: {os_name}")
+
+
+def ensure_base_release_zip(releases_dir: Path, os_name: str, arch: str, cache_dir: Path) -> Path:
+    """Ensure an older base release zip (e.g. 1.3.0 / 1.3.0r1) is available for (os_name, arch)."""
+    zip_paths = [p for p in releases_dir.glob(f"*/{os_name}/{arch}/rustinel.zip") if not p.parts[-4].startswith("1.8.")]
+    if zip_paths:
+        return zip_paths[0]
+
+    base_version = "1.3.0" if os_name == "mac" else "1.3.0r1"
+    target_zip = releases_dir / base_version / os_name / arch / "rustinel.zip"
+    target_zip.parent.mkdir(parents=True, exist_ok=True)
+
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cached_zip = cache_dir / f"rustinel-{base_version}-{os_name}-{arch}.zip"
+    if not cached_zip.exists():
+        url = f"https://console-api.radegast.app/api/v1/public/releases/{base_version}/{os_name}/{arch}/download"
+        print(f"Downloading base rustinel release {base_version} ({os_name}/{arch}) from upstream...")
+        req = httpx.get(url, follow_redirects=True, timeout=120.0)
+        req.raise_for_status()
+        cached_zip.write_bytes(req.content)
+
+    shutil.copy2(cached_zip, target_zip)
+    print(f"Provisioned base release {base_version} at {target_zip}")
+    return target_zip
+
+
+def ensure_updater_in_release_zip(releases_dir: Path, os_name: str, arch: str, cache_dir: Path) -> None:
+    """Ensure rustinel-updater is packaged in the test release zip for (os_name, arch)."""
+    ensure_base_release_zip(releases_dir, os_name, arch, cache_dir)
+    zip_paths = list(releases_dir.glob(f"*/{os_name}/{arch}/rustinel.zip"))
+    if not zip_paths:
+        raise RuntimeError(f"No release zip found for {os_name}/{arch} under {releases_dir}")
+
+    asset_name, inner_name = get_updater_asset_name(os_name, arch)
+
+    for zip_path in zip_paths:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            if inner_name in zf.namelist():
+                print(f"rustinel-updater ({inner_name}) already present in {zip_path}")
+                continue
+
+        cached_updater = cache_dir / asset_name
+        if not cached_updater.exists():
+            print(f"Downloading prebuilt updater {asset_name} from GitHub release...")
+            url = f"https://github.com/radegast-edr/radegast-rustinel-updater/releases/download/v0.1.1/{asset_name}"
+            req = httpx.get(url, follow_redirects=True, timeout=60.0)
+            req.raise_for_status()
+            cached_updater.write_bytes(req.content)
+            cached_updater.chmod(0o755)
+
+        print(f"Injecting {inner_name} into {zip_path}...")
+        updater_data = cached_updater.read_bytes()
+        temp_zip = zip_path.with_suffix(".tmp.zip")
+        with zipfile.ZipFile(zip_path, "r") as src, zipfile.ZipFile(temp_zip, "w", zipfile.ZIP_DEFLATED) as dst:
+            for item in src.infolist():
+                dst.writestr(item, src.read(item.filename))
+            zinfo = zipfile.ZipInfo(inner_name)
+            zinfo.external_attr = 0o755 << 16  # rwxr-xr-x
+            zinfo.compress_type = zipfile.ZIP_DEFLATED
+            dst.writestr(zinfo, updater_data)
+        temp_zip.replace(zip_path)
+        print(f"Successfully packaged {inner_name} into {zip_path}")
+
+
+VERIFIED_FALLBACK_MANIFEST = [
+    {
+        "version": "1.8.0r2",
+        "hash_sha256": (
+            "f9a8c5bd2d6e15b1a7a4c062a6466473b3d1aee0fd74a895ad5fad48e29b376f  linux-amd64.zip\n"
+            "4790c03a6b86336536d7eb9a7060c56cc5e284ca7d6d25961934d3d65776798e  linux-arm64.zip\n"
+            "c321b8d810794eead9c55bb1ebfe4daa703862e848ed648f354efc60694ecd30  windows-amd64.zip\n"
+        ),
+        "sign_gpg": (
+            "-----BEGIN PGP SIGNATURE-----\n\n"
+            "iQIzBAABCgAdFiEE09RBOxFH8cabfO/ja9UaMJ3zQ88FAmqwNaMACgkQa9UaMJ3z\n"
+            "Q8/tnxAAnbA0etDrScuwWDfY3hR1qkkZNRl9z1dD+sXEclt5poeDcHt2iDJl+SYA\n"
+            "Kl0kSi8LqlcQ/cikMu4yT3tM4XKy8JAPjPwAGBKCy4zckRhXIQHIu9+m1WnYacVM\n"
+            "P6AyW/hul2qrEWjuBAYIRwRSAWTRQx44IknGVJbyAQLOlNBV+2ALM7tuANToPsQv\n"
+            "Khp9+x0li5MYMr4CUqQhowvT7sQJeexawTzef4EqWHg6alZwtXTw8bTeVdN28DK3\n"
+            "v064anLJfFB4KOOTpyr8pFlaWTSDBmsAVNtg+Hj3zINoKakzfDCl8RFsvG3cEXRF\n"
+            "LDgszZ+DLKtfsf6GzJ/ibCnlWHJqmMiYYo6AnfTRAH4gywkWJxSKxUMdVFwA5F/M\n"
+            "PrLZzbOW08t8dlaTXhX+AQrd2U0AsTbr93/sfZl44vgd1nnGVNmb6QgrxvXZ9Jn1\n"
+            "dYSoi7Y+xFyCi+TVL4va7mUycGqcFOR8MAKXi0qjRfJZGf7SpmwKsL1JKmppyxY9\n"
+            "5FNrz/v/bIpkPzf4NA4CNQWte/OJoVcX0617lDczMarPYAQT9k1vaLh3Tmh/EBPS\n"
+            "91gqfd5KDWQRqBq3WV/jvae5TnqJwLnMZJw4I4skmsAwZ7bLJHgf68gp9KuatUq+\n"
+            "baL3RDVZJm5YsRkaLSJhaOTTMDnumnYHALDTKA9LM4YSzDt/SG8=\n"
+            "=uZg5\n"
+            "-----END PGP SIGNATURE-----\n"
+        ),
+    },
+    {
+        "version": "1.8.0",
+        "hash_sha256": (
+            "2e5b4d8aa9ab482301c5be1dd690dbd96e9e4c61275fcb95dbdc80fdf646eaa9  linux-amd64.zip\n"
+            "e793a291b7b7a2543f9ffc80e31f0931a7676e771ecb3a0e751b8c6bf7a89a5f  linux-arm64.zip\n"
+            "f63c76c9b0e7dbf230afc45039c92336b116149cbf4f8a6ce3cd67249699ff2b  mac-amd64.zip\n"
+            "ebd56f7b17fb1f819bb7d6d079d8d863375cdc76735ccd95061395d088f84036  mac-m5.zip\n"
+            "01e0ca55abf6a0c2a19e8c4e5b7c44e168b4b66f6de03c5d55482e0f10866a36  windows-amd64.zip\n"
+        ),
+        "sign_gpg": (
+            "-----BEGIN PGP SIGNATURE-----\n\n"
+            "iQIzBAABCgAdFiEE09RBOxFH8cabfO/ja9UaMJ3zQ88FAmqwGX4ACgkQa9UaMJ3z\n"
+            "Q89OrA//ae9EfGdCg6ZkCeL4UxeBvhdXY9VJ9Pf9bXyQ82nZ2tgu6qhBMn4inuK4\n"
+            "kMlhZhtEWX86rUOGdwAWhXQm6SAX4ixwBQZcuwD3Zo3dlYDmlu6zyWMb+4bVkIwr\n"
+            "+QSzDHx07S3gbdTvSRFU/buFdcpzCXteR7LZaERMkQ0Na/iKDp+nU8usX4WNlhQk\n"
+            "JVICV6msaS6bOACMooNk3LRBLYjsj2WMwlqV8YA5HBUE5oFQRgb7/7qH1gYIJQHl\n"
+            "Wwpu92T8lAJIt7dWLR+OGU9vr/huGLW7MvJceT8GGfBW21p2RBpCgGzex0D2vCmP\n"
+            "m2XXIR8E8YIM15mk3O53/M7RmaAPLjf7uxm9ofzh5GiGuSlthqZWS8OKKIRx3OAD\n"
+            "1BoQFBkGXVQTwiIp0Nk2rlRb/lPc4xNWJrTIY8FxLdUOnkvNwCXBz7j/G7KpHy/C\n"
+            "eZyzgslljKeFcObgrxprJrKJRx4PHfZz5EDjIrytU6yYmzZzaASIYrtQbX3uniNW\n"
+            "9sXgNLE1RQswkxVr8zcKlWQE1smgTYQfgnVJpRY0xjEF9DaIBx3PYM3M7c+/chYe\n"
+            "/4aMh+FnQ7P1YllnsNuy8O5zIUQPtUXolkIh9GPSnbROE6NvAWnY50MGVjeQaYMz\n"
+            "IInDCrh4JTtIHmj6WVINHJkXo7fIQ7ei/BFod05KTLpYqURZf0w=\n"
+            "=L3Zp\n"
+            "-----END PGP SIGNATURE-----\n"
+        ),
+    },
+]
+
+
+def get_verified_manifest_url() -> tuple[str, http.server.HTTPServer | None]:
+    """Return a working manifest URL for testing rustinel-updater.
+
+    If UPDATER_MANIFEST_URL is explicitly set, use it.
+    Otherwise, check if the upstream production manifest has the known
+    mac-m5 hash mismatch (1bdb76a4ecbe... instead of ebd56f7b17fb...).
+    If so, or if unavailable, start a local background HTTP server serving
+    the verified manifest so tests pass reliably on all platforms.
+    """
+    explicit = os.environ.get("UPDATER_MANIFEST_URL")
+    if explicit:
+        return explicit, None
+
+    prod_url = "https://radegast.app/api/rustinel-releases.json"
+    use_fallback = False
+    try:
+        resp = httpx.get(prod_url, timeout=5.0)
+        if resp.status_code == 200:
+            entries = resp.json()
+            e180 = next((e for e in entries if str(e.get("version")) == "1.8.0"), None)
+            if e180 and "1bdb76a4ecbe1a4000c894b47fed41cb4a805e37db802c5719e7d5be885dc344" in e180.get("hash_sha256", ""):
+                use_fallback = True
+        else:
+            use_fallback = True
+    except Exception:
+        use_fallback = True
+
+    if not use_fallback:
+        return prod_url, None
+
+    print("Note: Upstream radegast.app manifest has stale 1.8.0 hashes. Serving verified manifest locally for test...")
+    web_yml = PROJECT_ROOT.parent / "radegast-web" / "_data" / "rustninel-releases.yml"
+    if web_yml.exists():
+        manifest_data = yaml.safe_load(web_yml.read_text(encoding="utf-8"))
+    else:
+        manifest_data = VERIFIED_FALLBACK_MANIFEST
+
+    manifest_json = json.dumps(manifest_data).encode("utf-8")
+
+    class _Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(manifest_json)
+
+        def log_message(self, format, *args):
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), _Handler)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return f"http://127.0.0.1:{port}/rustinel-releases.json", server
+
+
 def main():
     check_privileges()
 
+    machine = platform.machine().lower()
     if sys.platform.startswith("linux"):
         os_name = "linux"
         expected_rule_id = LINUX_WHOAMI_RULE_ID
+        arch = "arm64" if machine in ("aarch64", "arm64") else "amd64"
     elif sys.platform.startswith("darwin"):
         os_name = "mac"
         expected_rule_id = MAC_WHOAMI_RULE_ID
+        arch = "m5" if machine in ("aarch64", "arm64") else "amd64"
     else:
         os_name = "windows"
         expected_rule_id = WINDOWS_WHOAMI_RULE_ID
+        arch = "arm64" if machine in ("aarch64", "arm64") else "amd64"
 
     # 1. Create clean temp workspace
     temp_dir = tempfile.TemporaryDirectory()
@@ -147,15 +344,29 @@ def main():
     uploads_dir = temp_path / "uploads"
     uploads_dir.mkdir(parents=True, exist_ok=True)
 
+    # Prepare isolated test releases directory with an older base release + rustinel-updater bundled
+    test_releases_dir = temp_path / "releases"
+    test_releases_dir.mkdir(parents=True, exist_ok=True)
+    source_releases = PROJECT_ROOT / "agent" / "releases"
+    if source_releases.exists():
+        for ver_dir in source_releases.iterdir():
+            if ver_dir.is_dir() and not ver_dir.name.startswith("1.8."):
+                shutil.copytree(ver_dir, test_releases_dir / ver_dir.name)
+
+    cache_dir = Path(tempfile.gettempdir()) / "radegast_test_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    ensure_updater_in_release_zip(test_releases_dir, os_name, arch, cache_dir)
+
     print(f"Temporary database: {db_url}")
     print(f"Temporary uploads: {uploads_dir}")
+    print(f"Temporary releases: {test_releases_dir}")
 
     # Set environment variables for the test process and sub-processes
     env = os.environ.copy()
     env["RADEGAST_DATABASE_URL"] = db_url
     env["RADEGAST_SECRET_KEY"] = "integration-test-secret-key"
     env["RADEGAST_UPLOAD_DIR"] = str(uploads_dir)
-    env["RADEGAST_RELEASES_DIR"] = str(PROJECT_ROOT / "agent" / "releases")
+    env["RADEGAST_RELEASES_DIR"] = str(test_releases_dir)
     env["RADEGAST_ENVIRONMENT"] = "dev"
     env["RADEGAST_ENABLE_EMAIL_WORKER"] = "False"
 
@@ -376,15 +587,95 @@ exec "$@"
                 run_command(["bash", str(install_script_file)], env=install_env)
             installed = True
 
-            # Start processes manually since systemd/launchd is mocked
+        else:
+            # Windows batch installer
+            install_bat_file = temp_path / "install.bat"
+            install_bat_file.write_text(install_script, encoding="utf-8")
+            # The batch file deletes itself, which causes CMD to exit with code 1
+            # and print 'The batch file cannot be found.' We ignore check here.
+            run_command([str(install_bat_file)], env=install_env, check=False)
+            installed = True
+
+        # Define client paths across platforms
+        if os_name == "linux":
+            rustinel_bin_path = Path("/opt/radegast/rustinel/rustinel")
+            rustinel_config_dir = Path("/etc/rustinel")
+            updater_bin_path = Path("/opt/radegast/rustinel/rustinel-updater")
+            updater_service_path = Path("/etc/systemd/system/rustinel-updater.service")
+        elif os_name == "mac":
+            rustinel_bin_path = Path("/Library/Radegast/rustinel/rustinel")
+            rustinel_config_dir = Path("/Library/Radegast/etc")
+            updater_bin_path = Path("/Library/Radegast/rustinel/rustinel-updater")
+            updater_service_path = Path("/Library/LaunchDaemons/app.radegast.rustinel-updater.plist")
+        else:
+            program_files = Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
+            rustinel_bin_path = program_files / "Radegast" / "rustinel" / "rustinel" / "rustinel.exe"
+            rustinel_config_dir = program_files / "Radegast" / "agent"
+            updater_bin_path = program_files / "Radegast" / "rustinel" / "rustinel" / "rustinel-updater.exe"
+            updater_service_path = program_files / "Radegast" / "rustinel" / "updater" / "service" / "radegast-updater-service.xml"
+
+        # 6a. Verify rustinel-updater installation
+        print("Verifying rustinel-updater installation...")
+        if not updater_bin_path.exists():
+            raise RuntimeError(f"rustinel-updater binary was not installed at {updater_bin_path}")
+        print(f"Confirmed: rustinel-updater binary installed at {updater_bin_path}")
+
+        if not updater_service_path.exists():
+            raise RuntimeError(f"rustinel-updater service definition was not created at {updater_service_path}")
+        print(f"Confirmed: rustinel-updater service definition created at {updater_service_path}")
+
+        # 6b. Test rustinel-updater execution (updating rustinel to new release)
+        print("Testing rustinel-updater execution (updating rustinel to new release)...")
+        initial_version_res = run_command([str(rustinel_bin_path), "--version"], check=True)
+        initial_version = initial_version_res.stdout.strip()
+        print(f"Initial installed rustinel version: {initial_version}")
+
+        # On Windows, stop the running service if active to release file locks
+        if os_name == "windows":
+            rustinel_service_exe = program_files / "Radegast" / "rustinel" / "service" / "radegast-rustinel-service.exe"
+            if rustinel_service_exe.exists():
+                run_command([str(rustinel_service_exe), "stop"], check=False)
+
+        # Run rustinel-updater --once
+        manifest_url, manifest_server = get_verified_manifest_url()
+        try:
+            updater_env = os.environ.copy()
+            updater_env["UPDATER_MANIFEST_URL"] = manifest_url
+            updater_env["UPDATER_DOWNLOAD_URL"] = os.environ.get("UPDATER_DOWNLOAD_URL", "https://console-api.radegast.app/api/v1")
+            updater_env["UPDATER_RUSTINEL_PATH"] = str(rustinel_bin_path)
+            updater_env["UPDATER_AUTO_RESTART"] = "false"
+            updater_env["UPDATER_LOG_LEVEL"] = "info"
+
+            updater_cmd = [str(updater_bin_path), "--once"]
+            if os_name in ("linux", "mac") and os.getuid() != 0 and has_sudo:
+                updater_cmd = [real_sudo_path, "-E", *updater_cmd]
+
+            run_command(updater_cmd, env=updater_env, check=True)
+        finally:
+            if manifest_server:
+                manifest_server.shutdown()
+
+        updated_version_res = run_command([str(rustinel_bin_path), "--version"], check=True)
+        updated_version = updated_version_res.stdout.strip()
+        print(f"Updated rustinel version: {updated_version}")
+
+        if updated_version == initial_version:
+            raise RuntimeError(f"rustinel was not updated! Version is still {updated_version}")
+        print(f"SUCCESS: rustinel successfully updated from {initial_version} to {updated_version}!")
+
+        # On Windows, restart the service after update
+        if os_name == "windows":
+            if rustinel_service_exe.exists():
+                run_command([str(rustinel_service_exe), "start"], check=False)
+
+        # Start client processes manually on Linux/macOS since systemd/launchd is mocked
+        if os_name in ("linux", "mac"):
             print("Starting client processes manually...")
-            # 6a. Start rustinel
+            # 6c. Start rustinel (updated binary)
             print("Starting rustinel...")
-            rustinel_bin_path = "/opt/radegast/rustinel/rustinel" if os_name == "linux" else "/Library/Radegast/rustinel/rustinel"
-            rustinel_config_dir = "/etc/rustinel" if os_name == "linux" else "/Library/Radegast/etc"
             rustinel_process = subprocess.Popen(  # noqa: S603
-                [rustinel_bin_path, "run"],
-                cwd=rustinel_config_dir,
+                [str(rustinel_bin_path), "run"],
+                cwd=str(rustinel_config_dir),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -400,20 +691,20 @@ exec "$@"
             else:
                 print("rustinel started successfully in background.")
 
-            # 6b. Start radegast-agent
+            # 6d. Start radegast-agent
             print("Starting radegast-edr-agent...")
             agent_env = os.environ.copy()
             agent_env["RADEGAST_AGENT_BACKEND_URL"] = "http://127.0.0.1:8000/api/v1"
             agent_env["RADEGAST_AGENT_DEVICE_TOKEN"] = device_token
             if os_name == "linux":
-                agent_env["RADEGAST_AGENT_RUSTINEL_BINARY"] = "/opt/radegast/rustinel/rustinel"
+                agent_env["RADEGAST_AGENT_RUSTINEL_BINARY"] = str(rustinel_bin_path)
                 agent_env["RADEGAST_AGENT_RUSTINEL_CONFIG"] = "/etc/rustinel/config.toml"
                 agent_env["RADEGAST_AGENT_RULES_DIR"] = "/etc/rustinel/rules/"
                 agent_env["RADEGAST_AGENT_ALERTS_DIR"] = "/var/log/rustinel/"
                 agent_env["RADEGAST_AGENT_STATE_DIR"] = "/opt/radegast/state/"
                 agent_exe_path = "/opt/radegast/home/.local/bin/radegast-edr-agent"
             else:
-                agent_env["RADEGAST_AGENT_RUSTINEL_BINARY"] = "/Library/Radegast/rustinel/rustinel"
+                agent_env["RADEGAST_AGENT_RUSTINEL_BINARY"] = str(rustinel_bin_path)
                 agent_env["RADEGAST_AGENT_RUSTINEL_CONFIG"] = "/Library/Radegast/etc/config.toml"
                 agent_env["RADEGAST_AGENT_RULES_DIR"] = "/Library/Radegast/etc/rules/"
                 agent_env["RADEGAST_AGENT_ALERTS_DIR"] = "/Library/Logs/Radegast/"
@@ -430,14 +721,6 @@ exec "$@"
                 agent_cmd, env=agent_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
             print("radegast-edr-agent started in background.")
-        else:
-            # Windows batch installer
-            install_bat_file = temp_path / "install.bat"
-            install_bat_file.write_text(install_script, encoding="utf-8")
-            # The batch file deletes itself, which causes CMD to exit with code 1
-            # and print 'The batch file cannot be found.' We ignore check here.
-            run_command([str(install_bat_file)], env=install_env, check=False)
-            installed = True
 
         # 7. Wait for the agent to check in and pull rules
         print("Waiting for the agent to check in and synchronize rules...")

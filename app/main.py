@@ -1,14 +1,18 @@
 import asyncio
+import logging
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.database import get_db
 from app.middleware.request_logging import RequestLoggingMiddleware
 from app.routers import (
     admin,
@@ -28,8 +32,11 @@ from app.routers import (
     ui,
     user,
 )
+from app.schemas.health import HealthResponse
 from app.services.account_deletion import process_account_deletions_loop
 from app.services.email import process_email_queue_loop
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -102,9 +109,27 @@ app.include_router(prefix="/ui", router=ui.router)
 app.add_middleware(RequestLoggingMiddleware)
 
 
-@app.get(f"/api/v{api_version}/health")
-async def health():
-    return {"status": "ok"}
+@app.get(
+    f"/api/v{api_version}/health",
+    response_model=HealthResponse,
+    responses={
+        200: {"description": "Service is healthy and database is connected"},
+        503: {
+            "model": HealthResponse,
+            "description": "Service is unhealthy (database connection failed)",
+        },
+    },
+)
+async def health(db: AsyncSession = Depends(get_db)):
+    try:
+        await asyncio.wait_for(db.execute(text("SELECT 1")), timeout=5.0)
+        return HealthResponse(status="ok", database="ok")
+    except Exception as exc:
+        logger.error("Health check failed: database unavailable: %s", exc)
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content=HealthResponse(status="error", database="unavailable").model_dump(),
+        )
 
 
 @app.get("/favicon.ico")

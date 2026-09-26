@@ -27,3 +27,4 @@ web/.env*
 docs/_build
 infra/
 .env
+*.pem

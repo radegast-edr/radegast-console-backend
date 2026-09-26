@@ -84,6 +84,19 @@ By default, the application runs on SQLite. If you want to use MySQL or MariaDB:
      docker.io/radegastedr/console:latest
    ```
 
+SSL/TLS parameters such as `?ssl_verify_cert=false` (for self-signed certs), `?ssl_ca=/path/to/ca.pem`, `?ssl_cert=...`, or `?ssl_mode=...` in the URL query string are automatically parsed into the appropriate TLS context for `aiomysql`.
+
+To copy an existing SQLite database (e.g. `radegast.db`) to MySQL, use the migration utility script:
+
+```bash
+# Run migration (applies Alembic migrations to MySQL and copies all data)
+uv run python migrate-to-mysql.py \
+  --sqlite-path radegast.db \
+  --mysql-url "mysql+aiomysql://user:password@mysql-host:3306/db_name?ssl_ca=cert.pem"
+```
+
+The script automatically runs Alembic migrations on MySQL, disables foreign key checks to handle circular dependencies, normalizes datetime formats, batches transactions to stay within MySQL's binlog limits, preserves auto-increment counters, and verifies matching row counts across all tables.
+
 ---
 
 

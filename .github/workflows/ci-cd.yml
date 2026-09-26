@@ -30,7 +30,7 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies (dev)
-        run: uv sync --frozen --dev
+        run: uv sync --group mysql --frozen --dev
 
       - name: Run tests
         run: uv run pytest tests/ -v --tb=short

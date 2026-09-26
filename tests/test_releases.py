@@ -227,4 +227,3 @@ class TestPublicReleases:
     async def test_public_releases_download_invalid_or_nonexistent(self, client: AsyncClient):
         resp = await client.get("/public/releases/0.0.1/windows/arm64/download")
         assert resp.status_code == 404
-

@@ -48,3 +48,4 @@ app/web_build/
 app/agent_config/
 docs/
 infra/
+.pem

@@ -9,7 +9,7 @@ from alembic import context
 
 # Import settings, Base, and all models
 from app.config import settings
-from app.database import Base
+from app.database import Base, prepare_database_url_and_connect_args
 from app.models import *  # noqa: F403
 
 # this is the Alembic Config object, which provides
@@ -36,7 +36,8 @@ def on_column_reflect(inspector, table, column_info):
 target_metadata = Base.metadata
 
 # Inject database URL dynamically from Settings
-config.set_main_option("sqlalchemy.url", settings.database_url)
+db_url, connect_args = prepare_database_url_and_connect_args(settings.database_url)
+config.set_main_option("sqlalchemy.url", db_url)
 
 
 def run_migrations_offline() -> None:
@@ -85,6 +86,7 @@ async def run_async_migrations() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
 
     async with connectable.connect() as connection:

@@ -220,3 +220,8 @@ class AccountDeletionConfirmResponse(BaseModel):
     message: str
     deletion_scheduled_at: datetime
     grace_days: int
+
+
+class AuthConfigResponse(BaseModel):
+    turnstile_site_key: str | None = None
+    registration_message: str | None = None

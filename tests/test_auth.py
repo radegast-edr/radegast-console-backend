@@ -111,6 +111,28 @@ class TestRegistration:
 
 
 @pytest.mark.asyncio
+class TestAuthConfig:
+    async def test_get_auth_config_default(self, client: AsyncClient):
+        resp = await client.get("/auth/config")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "turnstile_site_key" in data
+        assert "registration_message" in data
+        assert data["registration_message"] is None
+
+    async def test_get_auth_config_with_custom_registration_message(self, client: AsyncClient):
+        old_msg = settings.registration_message
+        settings.registration_message = "Welcome to Radegast! Registration is invite-only."
+        try:
+            resp = await client.get("/auth/config")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["registration_message"] == "Welcome to Radegast! Registration is invite-only."
+        finally:
+            settings.registration_message = old_msg
+
+
+@pytest.mark.asyncio
 class TestVerification:
     async def test_verify_valid_token(self, client: AsyncClient):
         await client.post(

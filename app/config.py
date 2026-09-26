@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     session_max_age: int = 86400 * 7  # 7 days
     turnstile_site_key: str | None = None
     turnstile_secret_key: str | None = None
+    registration_message: str | None = None
     email_debounce_seconds: int = 180
     email_bulk_intervals: str = "3,3,6,16,37,62,122,193"
     email_bulk_reset_hours: int = 24

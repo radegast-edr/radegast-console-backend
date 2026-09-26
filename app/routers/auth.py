@@ -35,6 +35,7 @@ from app.models.team_invitation import TeamInvitation
 from app.models.user import User
 from app.schemas.device import DeviceLogin
 from app.schemas.user import (
+    AuthConfigResponse,
     MfaHardwareTokenAssertionOptionsRequest,
     MfaHardwareTokenAssertionOptionsResponse,
     MfaVerifyRequest,
@@ -555,10 +556,11 @@ async def mfa_verify(
     return {"message": "Login successful", "user_id": user.id, "deletion_cancelled": deletion_cancelled}
 
 
-@router.get("/config")
+@router.get("/config", response_model=AuthConfigResponse)
 async def get_auth_config():
     return {
         "turnstile_site_key": settings.turnstile_site_key,
+        "registration_message": settings.registration_message,
     }
 
 

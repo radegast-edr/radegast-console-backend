@@ -131,11 +131,13 @@ A group can be owned by multiple teams. This allows:
 
 Active Response allows the agent to automatically terminate offending processes that trigger detection rules.
 
-> [!NOTE]
-> Active Response controls are visible only if **Extended EDR Features** is enabled in your user [Settings](file:///home/adam/Projekty/radegast/radegast-console-backend/docs/user-guides/settings.md).
+:::{note}
+Active Response controls are visible only if **Extended EDR Features** is enabled in your user [Settings](settings.md).
+:::
 
-> [!CAUTION]
-> **Agent Version Requirement**: Active Response requires Radegast EDR Agent version **python 0.6.0** or higher. If a device in the group is running an older agent version (e.g. lower than 0.6.0 or unknown), a red warning alert will be displayed in the Group Detail page, and Active Response **will not apply or be enabled** for that device.
+:::{caution}
+**Agent Version Requirement**: Active Response requires Radegast EDR Agent version **python 0.6.0** or higher. If a device in the group is running an older agent version (e.g. lower than 0.6.0 or unknown), a red warning alert will be displayed in the Group Detail page, and Active Response **will not apply or be enabled** for that device.
+:::
 
 #### Steps to Configure
 
@@ -148,6 +150,94 @@ Active Response allows the agent to automatically terminate offending processes 
 
 #### Multi-Group Severity Resolution
 If a device belongs to multiple groups with Active Response enabled, the agent dynamically selects the **lowest severity level** of all the matching groups (mapping `Low` -> `Medium` -> `High` -> `Critical`) to ensure the maximum level of coverage and safety.
+
+### Prevention Allowlist
+
+Directly beneath Active Response Settings on the Group details page is the **Prevention Allowlist**. When automated process termination is active, the Prevention Allowlist defines explicit process image names and filesystem path prefixes that the agent is **strictly prohibited from terminating**, regardless of whether they trigger a detection rule.
+
+#### Why is the Prevention Allowlist Useful?
+
+Automated endpoint prevention is powerful, but without granular safeguards it introduces operational risk. The Prevention Allowlist addresses several critical operational requirements:
+
+1. **Prevents Severe Outages and Service Disruptions**:
+   Mission-critical infrastructure services—such as database engines (`postgres`, `mysqld`), web servers (`nginx`, `httpd`), container runtimes (`dockerd`, `containerd`), or orchestration daemons—frequently perform complex operations that can resemble attacker behavior. If a detection rule triggers a false positive against a primary database, an unshielded Active Response policy could kill the service. Allowlisting ensures vital infrastructure stays online.
+
+2. **Eliminates Administrator Lockout**:
+   Remote administration tools and daemons (such as `sshd`, remote desktop services, or IT management agents) execute high-privilege commands and spawn child shells. If automated response kills `sshd` on a remote server, administrators can be permanently locked out of the host. Adding `sshd` to the Prevention Allowlist guarantees remote connectivity is maintained.
+
+3. **Preserves Threat Visibility (Decoupling Response from Detection)**:
+   A common mistake in security operations is using detection exclusions to protect critical tools from being killed. However, doing so blinds the security team to actual attacks! 
+   With Prevention Allowlists:
+   - **Detection rules still trigger and fire alerts**: Security analysts retain 100% visibility into suspicious behavior or policy violations involving the process.
+   - **Alerts remain visible in the Threat Triage and Alerts dashboard**: Full telemetry, process lineage, and severity details are preserved for threat hunting and auditing.
+   - **Only the termination action is suppressed**: The process is spared from termination, giving analysts the opportunity to investigate manually without causing an immediate business outage.
+
+4. **Group-Scoped Policy Granularity**:
+   Different device groups serve different functions. A "Production Web Servers" group can protect `nginx` and internal reverse proxies, a "Database Clusters" group can protect database binaries and backup scripts, and a "Developer Workstations" group can protect compilers and debuggers without granting broad exemptions across the organization.
+
+5. **End-to-End Encryption (E2EE)**:
+   All allowlist entry paths, binary names, and descriptions are encrypted in the browser with the device group's AGE public key before transmission to the console backend. Only endpoints holding the group's private key and authorized team members can decrypt the entries.
+
+#### Prevention Allowlist vs. Detection Exclusions
+
+Radegast EDR provides two distinct mechanisms to customize endpoint behavior. Choose the right mechanism for your operational goal:
+
+| Attribute                  | Detection Exclusions                                                           | Prevention Allowlist                                                                          |
+|:---------------------------|:-------------------------------------------------------------------------------|:----------------------------------------------------------------------------------------------|
+| **Primary Objective**      | Filter out false positive alerts to reduce noise                               | Exempt trusted processes from automated termination                                           |
+| **Active Response Effect** | Prevents termination only because alert is silenced                            | Directly bypasses termination while rule match occurs                                         |
+| **Console Visibility**     | **Hard**: Alert never sent to console<br>**Soft**: Downgraded to informational | **Full Visibility**: Alert appears in console with original severity                          |
+| **Query Format**           | JSONata expressions matching alert event fields                                | Plain path prefix or process image name                                                       |
+| **Threat Hunting Value**   | Excluded events are hidden (Hard) or de-prioritized (Soft)                     | Events remain fully indexed, searchable, and reviewable in Hunt Mode                          |
+| **Best Used For**          | Known noisy scripts that create repetitive false alarms                        | Critical daemons, databases, or LOLBins where visibility is required but killing is hazardous |
+
+#### Supported Entry Types
+
+You can configure two types of prevention allowlist entries:
+
+- **Path Prefix (`path`)**: Processes whose executable binary path starts with the specified directory prefix will never be terminated.
+  - *Linux Examples*: `/usr/local/bin/`, `/opt/company-agent/`, `/usr/lib/systemd/`
+  - *Windows Examples*: `C:\Program Files\Datadog\`, `C:\Windows\System32\`
+  :::{tip}
+  Always ensure path prefixes end with a trailing slash (`/` on Linux/macOS, `\` on Windows) to prevent unintended substring matches against sibling directories.
+  :::
+
+- **Image Name (`image`)**: Processes matching the exact executable image name or binary basename will never be terminated, regardless of which directory they are launched from.
+  - *Linux Examples*: `sshd`, `systemd`, `dockerd`, `auditd`
+  - *Windows Examples*: `svchost.exe`, `lsass.exe`, `csrss.exe`, `services.exe`
+
+#### Managing Group Allowlist Entries
+
+##### Prerequisites
+- **Extended EDR Features** enabled under user [Settings](settings.md).
+- **Pack Write** permissions on at least one team that owns the Device Group.
+- Endpoints running Radegast EDR Agent version **python 0.6.0** or higher.
+
+##### Adding an Entry
+1. In the console, navigate to **"Groups"** and select the target Device Group.
+2. Scroll to the **"Prevention Allowlist"** card (located directly below Active Response Settings).
+3. Click the **"Add Entry"** button.
+4. Select the entry type:
+   - **Path Prefix**: Directory prefix where binaries are located (e.g., `/usr/local/bin/`).
+   - **Image Name**: Process binary basename (e.g., `sshd`).
+5. Enter the value and an optional descriptive justification (e.g., *"Critical SSH daemon for remote management"*).
+6. Click **"Add Entry"**. The browser encrypts the data using Age-WASM before saving.
+
+##### Deleting an Entry
+1. Scroll to the **"Prevention Allowlist"** table on the Group details page.
+2. Find the entry you wish to remove and click the red trash icon.
+3. Confirm the deletion prompt. Endpoints will update their policies on their next sync cycle.
+
+#### Multi-Group Resolution Rules
+When a device belongs to multiple groups:
+- **Union of All Entries**: The agent retrieves allowlists from **all** groups the device belongs to.
+- **Safe-by-Default**: If a process matches an allowlist entry from *any* of the device's assigned groups, it is shielded from termination.
+
+#### Best Practices
+- **Protect Remote Access First**: Before enabling Active Response on any server group, immediately add `sshd` (or your platform's remote management daemon) to the Prevention Allowlist.
+- **Avoid Overly Broad Exemptions**: Do not allowlist generic script interpreters (e.g. `/bin/bash`, `/usr/bin/python`, or `powershell.exe`) directly as image names. Attackers commonly execute malicious payloads through these interpreters.
+- **Document Audit Justifications**: Always provide a descriptive explanation in the Description field for auditing and compliance tracking.
+- **Combine with Soft Exclusions for Noisy Approved Tools**: If a trusted tool causes repeated alerts, combine a Prevention Allowlist entry (to protect it from termination) with a **Soft Detection Exclusion** (to downgrade its alerts to informational while preserving hunt visibility).
 
 ## Tips & Validations
 

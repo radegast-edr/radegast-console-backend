@@ -17,8 +17,9 @@ This quickstart walks you through creating your account, enrolling your first en
    - Radegast features **end-to-end client-side encryption (E2EE)**. Your private encryption keys are stored locally in your browser and never transmitted to the backend.
    - Save your 256-bit AES recovery key in your password manager. This allows you to restore your private key or transfer it to another browser.
 
-> [!TIP]
-> For advanced account security, you can set up Two-Factor Authentication (OTP, WebAuthn, or FIDO2 hardware tokens like YubiKey). See the [Multi-Factor Authentication (MFA) Guide](user-guides/mfa.md), [Encryption Keys Guide](user-guides/encryption-keys.md), and [User Settings Guide](user-guides/settings.md).
+:::{tip}
+For advanced account security, you can set up Two-Factor Authentication (OTP, WebAuthn, or FIDO2 hardware tokens like YubiKey). See the [Multi-Factor Authentication (MFA) Guide](user-guides/mfa.md), [Encryption Keys Guide](user-guides/encryption-keys.md), and [User Settings Guide](user-guides/settings.md).
+:::
 
 ---
 
@@ -69,8 +70,9 @@ Once the agent completes its initial handshake, refresh the **Devices** list in 
 
 ![Successful Installation](_static/screenshots/first-steps/successful_install.png)
 
-> [!NOTE]
-> For in-depth prerequisites, distribution packages, and troubleshooting, consult the [Device Installation Guide](user-guides/device-installation.md) and [Devices Management Guide](user-guides/devices.md).
+:::{note}
+For in-depth prerequisites, distribution packages, and troubleshooting, consult the [Device Installation Guide](user-guides/device-installation.md) and [Devices Management Guide](user-guides/devices.md).
+:::
 
 ---
 
@@ -109,8 +111,9 @@ You can explore all available detection rules, version history, and rule metadat
 
 ![Packs Catalog](_static/screenshots/first-steps/packs.png)
 
-> [!TIP]
-> Read the [Detection Packs Guide](user-guides/packs.md), [Device Groups Guide](user-guides/groups.md), and [Exclusions Guide](user-guides/exclusions.md) to learn how to customize rules and create JSONata exclusions for benign business processes.
+:::{tip}
+Read the [Detection Packs Guide](user-guides/packs.md), [Device Groups Guide](user-guides/groups.md), and [Exclusions Guide](user-guides/exclusions.md) to learn how to customize rules and create JSONata exclusions for benign business processes.
+:::
 
 ---
 

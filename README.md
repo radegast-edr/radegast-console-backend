@@ -17,6 +17,7 @@ Built with FastAPI and SQLAlchemy, the backend handles device authorization, use
 - **Team Collaboration**: Create teams, manage device group permissions, and receive email notifications for critical events
 - **Zero-Trust Architecture**: All data is encrypted client-side; the server never has access to your private keys or decrypted log contents
 - **Self-Contained Deployment**: Built-in SQLite database means no external database server required
+- **Active Response & Prevention Allowlist**: Automated process termination on high-severity alerts with end-to-end encrypted path and process allowlists to protect mission-critical services
 - **Agent Distribution**: Serve the Rustinel eBPF sensor and provide single-command installation for Linux and Windows
 
 ---

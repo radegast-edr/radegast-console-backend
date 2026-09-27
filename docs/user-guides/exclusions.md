@@ -11,6 +11,17 @@ When Extended EDR is enabled, you can choose between two different exclusion beh
 - **Hard Exclusion** (Default): The agent filters matching events completely. These events are never sent to the console database, preventing any console visibility.
 - **Soft Exclusion**: The events are still sent to the console database, but their severity is automatically downgraded to `informational`, and they are visually marked with an `Excluded` badge in the threat triage view. This preserves visibility and queryability of these events for threat hunting without causing alert fatigue.
 
+### Exclusions vs. Prevention Allowlist
+
+It is important to distinguish between **Detection Exclusions** and the **[Prevention Allowlist](groups.md#prevention-allowlist)**:
+
+- **Detection Exclusions** (this guide) modify the *alerting pipeline* using JSONata queries. They determine whether an alert is generated and sent to the console (Hard Exclusion silences the alert; Soft Exclusion downgrades it to informational).
+- **Prevention Allowlists** modify the *prevention pipeline* of Active Response. They exempt specific path prefixes or process images (such as `sshd` or databases) from being terminated while **preserving full alert generation and console visibility**.
+
+:::{tip}
+If your goal is to stop Active Response from killing a critical daemon without blinding your team to potential abuse of that daemon, configure a **[Prevention Allowlist](groups.md#prevention-allowlist)** entry on the Device Group rather than an exclusion.
+:::
+
 ## What Value Does This Feature Add?
 
 - **False Positive Reduction**: Eliminate known-safe events from your alerts

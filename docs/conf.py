@@ -51,6 +51,7 @@ myst_enable_extensions = [
     'substitution',
     'tasklist',
 ]
+myst_heading_anchors = 3
 
 # The suffix of source filenames.
 # source_suffix = '.rst'

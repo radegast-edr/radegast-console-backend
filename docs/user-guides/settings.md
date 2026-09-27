@@ -107,7 +107,7 @@ Extended EDR mode changes how alerts are managed and unlocks advanced response o
 - **Basic Mode** (Default): Alerts are "active" until you mark them as seen. Resolution is optional.
 - **Extended EDR Mode**:
   - Alerts remain "active" until you explicitly set a resolution (True Positive, False Positive, etc.). Marking as "seen" doesn't close the alert.
-  - Unlocks **Active Response (Process Termination)** settings inside your [Device Groups](groups.md) page, allowing automated process killing for high-severity rule matches (requires EDR agent version **python 0.6.0** or higher).
+  - Unlocks **Active Response (Process Termination)** and **[Prevention Allowlist](groups.md#prevention-allowlist)** settings inside your [Device Groups](groups.md) page, allowing automated process killing for high-severity rule matches and granular process termination exemptions (requires EDR agent version **python 0.6.0** or higher).
 
 ### Enabling Extended EDR Mode
 

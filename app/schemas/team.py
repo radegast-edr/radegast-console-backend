@@ -27,6 +27,7 @@ class TeamResponse(BaseModel):
     permission_admin: str | None
     permission_logs: str | None
     managing_team_id: int | None = None
+    total_space_used: int = 0
 
     model_config = {"from_attributes": True}
 
@@ -50,6 +51,7 @@ class DeviceGroupResponse(BaseModel):
     user_has_admin: bool = False
     response_enabled: bool = False
     response_min_severity: str = "critical"
+    total_space_used: int = 0
 
     model_config = {"from_attributes": True}
 
@@ -65,6 +67,7 @@ class DeviceGroupDetailResponse(BaseModel):
     user_has_admin: bool = False
     response_enabled: bool = False
     response_min_severity: str = "critical"
+    total_space_used: int = 0
     # devices imported lazily to avoid circular import — built manually in router
 
     model_config = {"from_attributes": True}

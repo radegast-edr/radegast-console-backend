@@ -33,6 +33,7 @@ class UserResponse(BaseModel):
     onboarding_completed: bool = False
     deletion_requested_at: datetime | None = None
     deletion_scheduled_at: datetime | None = None
+    total_space_used: int = 0
 
     model_config = {"from_attributes": True}
 

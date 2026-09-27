@@ -23,6 +23,8 @@ from app.services.auth import create_signed_token
 
 # Disable email worker for tests
 settings.enable_email_worker = False
+# Disable space usage worker for tests
+settings.enable_space_usage_worker = False
 # Disable secure cookies for tests
 auth_router.SECURE_COOKIE = False
 user_router.SECURE_COOKIE = False

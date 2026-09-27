@@ -94,6 +94,7 @@ async def list_all_users(
                 mfa_configured_level=conf_level,
                 extended_edr_enabled=u.extended_edr_enabled,
                 api_keys_enabled=u.api_keys_enabled,
+                total_space_used=u.total_space_used or 0,
             )
         )
     return response_users

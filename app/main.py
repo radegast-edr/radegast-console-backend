@@ -35,6 +35,7 @@ from app.routers import (
 from app.schemas.health import HealthResponse
 from app.services.account_deletion import process_account_deletions_loop
 from app.services.email import process_email_queue_loop
+from app.services.space_usage import process_space_usage_loop
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +49,12 @@ async def lifespan(_app: FastAPI):
 
     email_task = None
     deletion_task = None
+    space_task = None
     if settings.enable_email_worker:
         email_task = asyncio.create_task(process_email_queue_loop())
         deletion_task = asyncio.create_task(process_account_deletions_loop())
+    if settings.enable_space_usage_worker:
+        space_task = asyncio.create_task(process_space_usage_loop())
 
     try:
         yield
@@ -65,6 +69,12 @@ async def lifespan(_app: FastAPI):
             deletion_task.cancel()
             try:
                 await deletion_task
+            except asyncio.CancelledError:
+                pass
+        if space_task:
+            space_task.cancel()
+            try:
+                await space_task
             except asyncio.CancelledError:
                 pass
 

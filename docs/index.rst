@@ -36,6 +36,7 @@ Quickstarts
    user-guides/notifications
    user-guides/settings
    user-guides/admin
+   user-guides/storage-quota
 
 Indices and Tables
 ==================

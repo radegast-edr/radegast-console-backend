@@ -63,6 +63,7 @@ async def get_dashboard_data(
                 permission_admin=team.permission_admin,
                 permission_logs=team.permission_logs,
                 managing_team_id=team.managing_team_id,
+                total_space_used=team.total_space_used or 0,
             )
         )
         for g in team.groups:

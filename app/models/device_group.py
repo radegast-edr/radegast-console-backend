@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -15,6 +15,7 @@ class DeviceGroup(Base):
     private_key_needs_refresh: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     response_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     response_min_severity: Mapped[str] = mapped_column(String(50), default="critical", server_default="critical")
+    total_space_used: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", nullable=False)
 
     devices = relationship("Device", secondary=device_group_devices, back_populates="groups")
     teams = relationship("Team", secondary=team_device_groups, back_populates="groups")

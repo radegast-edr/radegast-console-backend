@@ -390,6 +390,7 @@ async def me(user: User = Depends(get_current_user), db: AsyncSession = Depends(
         onboarding_completed=user.onboarding_completed,
         deletion_requested_at=user.deletion_requested_at,
         deletion_scheduled_at=user.deletion_scheduled_at,
+        total_space_used=user.total_space_used or 0,
     )
 
 

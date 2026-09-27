@@ -10,6 +10,7 @@ class TestAdminUsers:
         resp = await admin_client.get("/admin/users")
         assert resp.status_code == 200
         assert len(resp.json()) >= 1
+        assert "total_space_used" in resp.json()[0]
 
     @pytest.mark.asyncio
     async def test_list_users_as_regular_user(self, auth_client: AsyncClient):

@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     pack_max_size_mb_maintainer: int | None = None
     agent_package: str = "radegast-edr-agent"
     account_deletion_grace_days: int = 14
+    enable_space_usage_worker: bool = True
+    space_usage_interval_minutes: int = 15
 
     model_config = {"env_prefix": "radegast_"}
 

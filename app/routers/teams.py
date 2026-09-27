@@ -500,6 +500,7 @@ async def list_team_devices(
             agent_version=d.agent_version,
             rustinel_version=d.rustinel_version,
             os=d.os,
+            total_space_used=d.total_space_used or 0,
         )
         for d in seen.values()
     ]

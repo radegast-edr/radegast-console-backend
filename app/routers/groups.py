@@ -60,6 +60,7 @@ class DeviceGroupDetail(BaseModel):
     user_has_admin: bool = False
     response_enabled: bool = False
     response_min_severity: str = "critical"
+    total_space_used: int = 0
 
 
 async def _user_has_admin(group: DeviceGroup, user: User, db: AsyncSession) -> bool:
@@ -84,6 +85,7 @@ def _group_detail(group: DeviceGroup, invitations: list[TeamInvitation] | None =
         "private_key_needs_refresh": group.private_key_needs_refresh,
         "response_enabled": group.response_enabled,
         "response_min_severity": group.response_min_severity,
+        "total_space_used": group.total_space_used or 0,
         "teams": [
             {
                 "id": t.id,
@@ -92,6 +94,8 @@ def _group_detail(group: DeviceGroup, invitations: list[TeamInvitation] | None =
                 "permission_invite": t.permission_invite,
                 "permission_admin": t.permission_admin,
                 "permission_logs": t.permission_logs,
+                "managing_team_id": t.managing_team_id,
+                "total_space_used": t.total_space_used or 0,
             }
             for t in group.teams
         ],
@@ -106,6 +110,7 @@ def _group_detail(group: DeviceGroup, invitations: list[TeamInvitation] | None =
                 "agent_version": d.agent_version,
                 "rustinel_version": d.rustinel_version,
                 "os": d.os,
+                "total_space_used": d.total_space_used or 0,
             }
             for d in group.devices
         ],

@@ -1,6 +1,6 @@
 from enum import StrEnum
 
-from sqlalchemy import Enum, ForeignKey, Integer, String
+from sqlalchemy import BigInteger, Enum, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -34,6 +34,7 @@ class Team(Base):
     permission_admin: Mapped[PermissionAdmin | None] = mapped_column(Enum(PermissionAdmin), nullable=True)
     permission_logs: Mapped[PermissionLogs | None] = mapped_column(Enum(PermissionLogs), nullable=True)
     managing_team_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("teams.id"), nullable=True)
+    total_space_used: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", nullable=False)
 
     users = relationship("User", secondary=team_users, back_populates="teams")
     groups = relationship("DeviceGroup", secondary=team_device_groups, back_populates="teams")

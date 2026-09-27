@@ -56,10 +56,12 @@ def upgrade() -> None:
 
     if "logs" in tables and "devices" in tables:
         # If columns already existed (e.g. from an earlier interrupted run),
-        # check if there are any unmigrated logs with bytes_used = 0 or NULL
+        # check if there are any unmigrated logs with bytes_used = 0 (and content > 0) or NULL
         if not needs_backfill:
             has_unmigrated = conn.execute(
-                sa.text("SELECT 1 FROM logs WHERE bytes_used = 0 OR bytes_used IS NULL LIMIT 1")
+                sa.text(
+                    "SELECT 1 FROM logs WHERE bytes_used IS NULL OR (bytes_used = 0 AND LENGTH(content) > 0) LIMIT 1"
+                )
             ).first()
             if has_unmigrated:
                 needs_backfill = True
@@ -67,8 +69,6 @@ def upgrade() -> None:
         if needs_backfill:
             # Reset total_space_used to 0 before batched recalculation to ensure clean state
             conn.execute(sa.text("UPDATE devices SET total_space_used = 0"))
-            if hasattr(conn, "commit"):
-                conn.commit()
 
             BATCH_SIZE = 1000
             last_id = 0
@@ -110,9 +110,6 @@ def upgrade() -> None:
                         ),
                         [{"delta": delta, "device_id": dev_id} for dev_id, delta in device_deltas.items()],
                     )
-
-                if hasattr(conn, "commit"):
-                    conn.commit()
 
                 last_id = max_id
 

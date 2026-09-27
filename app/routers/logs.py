@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -306,7 +306,8 @@ async def list_logs(
     to_time: datetime | None = None,
     min_level: LogSeverity | None = None,
     page: int = 1,
-    limit: int = 100,
+    limit: int = Query(100, ge=1, le=5000),
+    offset: int | None = Query(None, ge=0),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -315,7 +316,8 @@ async def list_logs(
     if not visible_device_ids:
         return []
 
-    offset = (page - 1) * limit
+    if offset is None:
+        offset = (page - 1) * limit
 
     if device_id:
         if device_id not in visible_device_ids:

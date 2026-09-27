@@ -206,6 +206,42 @@ class TestLogRetrieval:
         assert len(logs) >= 1
         assert all(log["device_id"] == device_id for log in logs)
 
+    async def test_list_logs_pagination_with_offset(self, auth_client: AsyncClient, client: AsyncClient):
+        resp = await auth_client.get("/teams/")
+        team_id = resp.json()[0]["id"]
+        resp = await auth_client.get(f"/teams/{team_id}/groups")
+        group_id = resp.json()[0]["id"]
+
+        resp = await auth_client.post("/devices/", json={"name": "Logger-Offset", "group_id": group_id})
+        token = resp.json()["token"]
+        device_id = resp.json()["id"]
+
+        await client.post("/auth/device/login", json={"token": token})
+        for i in range(5):
+            await client.post(
+                "/logs/",
+                json={"time": datetime.now(UTC).replace(tzinfo=None).isoformat(), "content": f"offset-log-{i}"},
+            )
+
+        await client.post("/auth/login", json={"email": "test@example.com", "password": "TestPass123!"})
+
+        # Fetch first 2 using offset 0
+        resp1 = await auth_client.get(f"/logs/?device_id={device_id}&limit=2&offset=0")
+        assert resp1.status_code == 200
+        logs1 = resp1.json()
+        assert len(logs1) == 2
+
+        # Fetch next 3 using offset 2 and limit 3
+        resp2 = await auth_client.get(f"/logs/?device_id={device_id}&limit=3&offset=2")
+        assert resp2.status_code == 200
+        logs2 = resp2.json()
+        assert len(logs2) == 3
+
+        # Ensure no overlap between batches
+        ids1 = {log["id"] for log in logs1}
+        ids2 = {log["id"] for log in logs2}
+        assert ids1.isdisjoint(ids2)
+
 
 @pytest.mark.asyncio
 class TestEncryptionKeys:

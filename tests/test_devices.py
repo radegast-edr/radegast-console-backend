@@ -478,13 +478,31 @@ class TestDeviceInstall:
         chunks = re.findall(r"\(echo\s+([A-Za-z0-9+/=]+)\)", resp_win_auto.text)
         decoded = base64.b64decode("".join(chunks)).decode("utf-8")
         assert '<env name="UV_TOOL_DIR" value="{agent_tools_dir}" />' in decoded
-        assert '<env name="RADEGAST_AGENT_AUTOUPDATE" value="true" />' in decoded
+        assert '<env name="UV_PYTHON" value="{python_exe_path}" />' in decoded
+        assert "agent_autoupdate = True" in decoded
+
+        # Default Windows: UV tool environment is always set even when autoupdate is unset
+        resp_win_def = await client.get("/device/install?os=windows")
+        assert resp_win_def.status_code == 200
+        chunks_def = re.findall(r"\(echo\s+([A-Za-z0-9+/=]+)\)", resp_win_def.text)
+        decoded_def = base64.b64decode("".join(chunks_def)).decode("utf-8")
+        assert '<env name="UV_TOOL_DIR" value="{agent_tools_dir}" />' in decoded_def
+        assert '<env name="UV_PYTHON" value="{python_exe_path}" />' in decoded_def
+        assert "agent_autoupdate = False" in decoded_def
 
         # Disabled
         resp_linux_noauto = await client.get("/device/install?os=linux&agent-autoupdate=false")
         assert resp_linux_noauto.status_code == 200
         assert "Environment=UV_TOOL_DIR" not in resp_linux_noauto.text
         assert "Environment=RADEGAST_AGENT_AUTOUPDATE=false" in resp_linux_noauto.text
+
+        resp_win_noauto = await client.get("/device/install?os=windows&agent-autoupdate=false")
+        assert resp_win_noauto.status_code == 200
+        chunks_noauto = re.findall(r"\(echo\s+([A-Za-z0-9+/=]+)\)", resp_win_noauto.text)
+        decoded_noauto = base64.b64decode("".join(chunks_noauto)).decode("utf-8")
+        assert '<env name="UV_TOOL_DIR" value="{agent_tools_dir}" />' in decoded_noauto
+        assert '<env name="UV_PYTHON" value="{python_exe_path}" />' in decoded_noauto
+        assert "agent_autoupdate = False" in decoded_noauto
 
     async def test_install_script_rustinel_autoupdate(self, client: AsyncClient):
         # Default: enabled (rustinel_autoupdate = True)

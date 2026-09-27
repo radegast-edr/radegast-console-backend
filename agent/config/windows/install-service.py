@@ -276,10 +276,10 @@ def main():
         f'\n      <env name="UV_CACHE_DIR" value="{cache_dir}" />'
         f'\n      <env name="UV_TOOL_DIR" value="{agent_tools_dir}" />'
         f'\n      <env name="UV_TOOL_BIN_DIR" value="{tool_bin_dir}" />'
-        f'\n      <env name="RADEGAST_AGENT_AUTOUPDATE" value="true" />'
-        if agent_autoupdate
-        else ""
+        f'\n      <env name="UV_PYTHON" value="{python_exe_path}" />'
     )
+    if agent_autoupdate:
+        autoupdate_xml += '\n      <env name="RADEGAST_AGENT_AUTOUPDATE" value="true" />'
     extra_env_xml = """{{ extra_env_xml | default("") }}"""
 
     agent_xml = f"""<service>

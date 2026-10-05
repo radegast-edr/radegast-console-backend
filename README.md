@@ -1,24 +1,13 @@
-# Radegast EDR — Backend
+# Radegast EDR -- Backend
 
-Radegast EDR is a lightweight, privacy-focused Endpoint Detection and Response platform **perfect for smaller teams, home labbers, and families**. With complete end-to-end encryption (E2EE) using age encryption, your log data remains private and secure — even from the server itself. **No custom infrastructure is required**: the built-in SQLite database and self-contained deployment make it easy to get started without complex setup. You don't need to host any custom infrastructure if you don't want to.
+Radegast EDR is a lightweight, privacy-focused Endpoint Detection and Response platform **perfect for smaller teams, home labbers, and families**. With complete end-to-end encryption (E2EE) using age encryption, your log data remains private and secure -- even from the server itself.
 
 ### Quickstarts
 
-- **User Quickstart (Step-by-step guide with screenshots)**: [First Steps with Radegast](https://radegast.app/blog/2026/06/16/first-steps-with-radegast/)
+- **User Quickstart**: [First Steps with Radegast EDR](https://docs.radegast.app/quickstart#)
 - **Backend Quickstart**: [Deployment & Quick Start](#quick-start)
 
 Built with FastAPI and SQLAlchemy, the backend handles device authorization, user configuration packs, encrypted log storage, alert status tracking, and key/session management.
-
-## Features
-
-- **Device Management**: Create and enroll EDR agent devices, assign them to groups, and generate secure authorization tokens
-- **Configuration Packs**: Store and distribute YAML/binary endpoint detection policies and versions
-- **End-to-End Encrypted Log Storage**: All logs are encrypted on the device using `age` before transmission; the server stores only encrypted data it cannot read
-- **Team Collaboration**: Create teams, manage device group permissions, and receive email notifications for critical events
-- **Zero-Trust Architecture**: All data is encrypted client-side; the server never has access to your private keys or decrypted log contents
-- **Self-Contained Deployment**: Built-in SQLite database means no external database server required
-- **Active Response & Prevention Allowlist**: Automated process termination on high-severity alerts with end-to-end encrypted path and process allowlists to protect mission-critical services
-- **Agent Distribution**: Serve the Rustinel eBPF sensor and provide single-command installation for Linux and Windows
 
 ---
 
@@ -175,7 +164,7 @@ All settings are controlled via environment variables prefixed with `RADEGAST_` 
 | Environment Variable                     | Required | Default                             | Description                                                                                                                                        |
 |------------------------------------------|----------|-------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
 | `RADEGAST_ENVIRONMENT`                   | N        | `prod`                              | The deployment environment. Valid values: `dev`, `prod`. If `dev`, skips default secret key warning.                                               |
-| `RADEGAST_SECRET_KEY`                    | Y        | `change-me-in-production`           | Secret key used for session signing — **must be changed in production**                                                                            |
+| `RADEGAST_SECRET_KEY`                    | Y        | `change-me-in-production`           | Secret key used for session signing -- **must be changed in production**                                                                            |
 | `RADEGAST_DATABASE_URL`                  | N        | `sqlite+aiosqlite:///./radegast.db` | Async SQLAlchemy database URL                                                                                                                      |
 | `RADEGAST_CORS_ORIGINS`                  | N        | `http://localhost:5173,...`         | Comma-separated list of allowed CORS origins                                                                                                       |
 | `RADEGAST_BASE_URL`                      | N        | `http://localhost:8000`             | Public base URL of the API server (used in emails and install scripts)                                                                             |

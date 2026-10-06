@@ -28,3 +28,5 @@ docs/_build
 infra/
 .env
 *.pem
+test-assets/
+test-output*/

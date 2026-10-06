@@ -37,6 +37,21 @@ if ! command -v unzip >/dev/null 2>&1; then
     fi
 fi
 
+# Install sudo if missing
+if ! command -v sudo >/dev/null 2>&1; then
+    echo "sudo is missing, attempting to install..."
+    if command -v apt-get >/dev/null 2>&1; then
+        apt-get update && apt-get install -y sudo
+    elif command -v yum >/dev/null 2>&1; then
+        yum install -y sudo
+    elif command -v dnf >/dev/null 2>&1; then
+        dnf install -y sudo
+    else
+        echo "ERROR: sudo is required but could not be installed automatically." >&2
+        exit 1
+    fi
+fi
+
 # 2. Check platform and arch
 OS_NAME=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH_NAME=$(uname -m)
@@ -68,38 +83,73 @@ fi
 
 # 3. Create radegast-agent system user and directories
 echo "Creating radegast-agent system user..."
+if ! getent group radegast-agent >/dev/null 2>&1; then
+    groupadd -r radegast-agent
+fi
 if ! id "radegast-agent" >/dev/null 2>&1; then
-    useradd -r -m -d /opt/radegast/home -s /bin/bash radegast-agent
+    useradd -r -g radegast-agent -m -d /opt/radegast/home -s /bin/bash radegast-agent
     chmod 700 /opt/radegast/home
 else
     echo "User radegast-agent already exists."
+    usermod -a -G radegast-agent radegast-agent 2>/dev/null || true
 fi
 
 # Setup directories with least privileges
 echo "Setting up directories and permissions..."
+
+mkdir -p /etc/rustinel/rules/sigma
+mkdir -p /etc/rustinel/rules/yara
 mkdir -p /etc/rustinel/rules/ioc
 touch /etc/rustinel/rules/ioc/hashes.txt
 touch /etc/rustinel/rules/ioc/ips.txt
 touch /etc/rustinel/rules/ioc/domains.txt
 touch /etc/rustinel/rules/ioc/paths_regex.txt
-chown -R radegast-agent:root /etc/rustinel/rules
-chmod 750 /etc/rustinel/rules
-chmod 750 /etc/rustinel/rules/ioc
-chmod 640 /etc/rustinel/rules/ioc/*.txt
-chown radegast-agent:root /etc/rustinel/
+chown root:radegast-agent /etc/rustinel/
 chmod 750 /etc/rustinel/
+chown -R root:radegast-agent /etc/rustinel/rules
+chmod -R g+rwX,o-rwx /etc/rustinel/rules
+find /etc/rustinel/rules -type d -exec chmod 2770 {} +
+chmod 660 /etc/rustinel/rules/ioc/*.txt 2>/dev/null || true
 
 mkdir -p /var/log/rustinel
 chown root:radegast-agent /var/log/rustinel
-chmod 750 /var/log/rustinel
+chmod 2750 /var/log/rustinel
+chgrp radegast-agent /var/log/rustinel/* 2>/dev/null || true
+chmod 640 /var/log/rustinel/* 2>/dev/null || true
 
-mkdir -p /opt/radegast/home
-chown radegast-agent:radegast-agent /opt/radegast/home
+mkdir -p /opt/radegast/home/.config /opt/radegast/home/.local/bin /opt/radegast/home/.local/share /opt/radegast/home/.cache
+chown -R radegast-agent:radegast-agent /opt/radegast/home
 chmod 700 /opt/radegast/home
 
 mkdir -p /opt/radegast/state
 chown radegast-agent:radegast-agent /opt/radegast/state
 chmod 700 /opt/radegast/state
+
+# Run commands in a strictly isolated environment for radegast-agent
+run_as_agent() {
+    (
+        cd /opt/radegast/home 2>/dev/null || cd /tmp || exit 1
+        sudo -u radegast-agent -H env -i \
+            HOME=/opt/radegast/home \
+            USER=radegast-agent \
+            LOGNAME=radegast-agent \
+            PATH="/opt/radegast/home/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+            XDG_CONFIG_HOME=/opt/radegast/home/.config \
+            XDG_DATA_HOME=/opt/radegast/home/.local/share \
+            XDG_CACHE_HOME=/opt/radegast/home/.cache \
+            XDG_STATE_HOME=/opt/radegast/home/.local/state \
+            UV_TOOL_DIR=/opt/radegast/home/.local/share/uv/tools \
+            UV_TOOL_BIN_DIR=/opt/radegast/home/.local/bin \
+            UV_CACHE_DIR=/opt/radegast/home/.cache/uv \
+            ${HTTP_PROXY:+HTTP_PROXY="$HTTP_PROXY"} \
+            ${HTTPS_PROXY:+HTTPS_PROXY="$HTTPS_PROXY"} \
+            ${NO_PROXY:+NO_PROXY="$NO_PROXY"} \
+            ${http_proxy:+http_proxy="$http_proxy"} \
+            ${https_proxy:+https_proxy="$https_proxy"} \
+            ${no_proxy:+no_proxy="$no_proxy"} \
+            "$@"
+    )
+}
 
 # 4. Check/Install uv for radegast-agent user (never use system-wide uv)
 echo "Checking if uv is installed for radegast-agent user..."
@@ -121,11 +171,11 @@ if [ -z "$UV_BIN" ]; then
     # Attempt 1: official astral.sh installer (recommended, works on all distros)
     if command -v curl > /dev/null 2>&1; then
         echo "Installing uv via astral.sh installer..."
-        sudo -u radegast-agent -H env HOME=/opt/radegast/home PATH="/opt/radegast/home/.local/bin:$PATH" sh -c "curl -LsSf https://astral.sh/uv/install.sh | sh"
+        run_as_agent sh -c "curl -LsSf https://astral.sh/uv/install.sh | sh"
     else
         # Attempt 2: via pip as last resort
         echo "curl not found, attempting uv install via pip..."
-        sudo -u radegast-agent -H env HOME=/opt/radegast/home PATH="/opt/radegast/home/.local/bin:$PATH" python3 -m pip install --user --break-system-packages uv || true
+        run_as_agent python3 -m pip install --user --break-system-packages uv || true
     fi
     
     UV_BIN=$(get_uv_path || true)
@@ -136,13 +186,13 @@ if [ -z "$UV_BIN" ]; then
 else
     echo "uv is already installed for radegast-agent at: $UV_BIN"
     echo "Attempting to upgrade uv to the newest version..."
-    sudo -u radegast-agent -H env HOME=/opt/radegast/home "$UV_BIN" self update || echo "Update not available or failed, continuing with current version"
+    run_as_agent "$UV_BIN" self update || echo "Update not available or failed, continuing with current version"
 fi
 echo "uv found at: $UV_BIN"
 
 # 5. Install radegast-agent via uv
 echo "Installing/upgrading radegast-agent tool..."
-sudo -u radegast-agent -H env HOME=/opt/radegast/home PATH="/opt/radegast/home/.local/bin:$PATH" "$UV_BIN" tool install --upgrade {{ agent_package }}
+run_as_agent "$UV_BIN" tool install --upgrade {{ agent_package }}
 
 # Verify agent executable exists
 if [ ! -f "/opt/radegast/home/.local/bin/radegast-edr-agent" ]; then
@@ -190,7 +240,7 @@ echo "Writing configuration files..."
 cat << 'EOF' > /etc/rustinel/config.toml
 {{ config_content }}
 EOF
-chown radegast-agent:root /etc/rustinel/config.toml
+chown root:radegast-agent /etc/rustinel/config.toml
 chmod 660 /etc/rustinel/config.toml
 
 echo "Writing uninstall script..."
@@ -226,6 +276,7 @@ systemctl daemon-reload
 if id "radegast-agent" >/dev/null 2>&1; then
     userdel -r radegast-agent || true
 fi
+groupdel radegast-agent 2>/dev/null || true
 
 rm -rf /etc/rustinel
 rm -rf /var/log/rustinel

@@ -1,0 +1,99 @@
+name: Rustinel real-device integration
+description: Install through the backend and verify a native Rustinel alert reaches it through the agent.
+inputs:
+  agent-source:
+    description: Agent checkout to build and install. Verifies installed wheel provenance and the running service version; no PyPI fallback.
+    default: ''
+  rustinel-zip:
+    description: Candidate archive path, relative to the caller workspace or absolute.
+    default: ''
+  asset-dir:
+    description: Directory containing upstream-{os}-{arch}.zip archives. If neither archive input is set, download the latest upstream release.
+    default: ''
+  version:
+    description: Candidate version, required when the supplied archive has no version metadata.
+    default: ''
+  backend-dir:
+    description: Backend checkout to test. Defaults to the backend bundled with this action revision.
+    default: ''
+  output-dir:
+    description: Diagnostics directory. Defaults to a platform-specific directory in runner.temp.
+    default: ''
+  timeout:
+    description: Seconds to wait for an alert.
+    default: '180'
+  artifact-name:
+    description: Diagnostics artifact name. Defaults to integration-test-diagnostics-{os}.
+    default: ''
+  retention-days:
+    description: Diagnostics artifact retention in days.
+    default: '7'
+outputs:
+  output-dir:
+    description: Absolute diagnostics directory.
+    value: ${{ steps.prepare.outputs.output-dir }}
+  os:
+    description: Detected runner OS (linux, mac, windows).
+    value: ${{ steps.prepare.outputs.os }}
+  arch:
+    description: Detected release architecture (amd64, arm64, m5).
+    value: ${{ steps.prepare.outputs.arch }}
+runs:
+  using: composite
+  steps:
+    - name: Resolve platform and paths
+      id: prepare
+      shell: bash
+      env:
+        ACTION_DIR: ${{ github.action_path }}
+        INPUT_BACKEND_DIR: ${{ inputs.backend-dir }}
+        INPUT_RUSTINEL_ZIP: ${{ inputs.rustinel-zip }}
+        INPUT_ASSET_DIR: ${{ inputs.asset-dir }}
+        INPUT_OUTPUT_DIR: ${{ inputs.output-dir }}
+        INPUT_ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        INPUT_AGENT_SOURCE: ${{ inputs.agent-source }}
+      run: python "$ACTION_DIR/run.py" prepare
+    - name: Install uv
+      uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+      with:
+        enable-cache: true
+        cache-dependency-glob: ${{ steps.prepare.outputs.cache-dependency-glob }}
+    - name: Install backend dependencies
+      shell: bash
+      env:
+        BACKEND_DIR: ${{ steps.prepare.outputs.backend-dir }}
+      run: uv sync --frozen --project "$BACKEND_DIR"
+    - name: Run real-device integration test
+      id: test
+      shell: bash
+      env:
+        ACTION_DIR: ${{ github.action_path }}
+        BACKEND_DIR: ${{ steps.prepare.outputs.backend-dir }}
+        OUTPUT_DIR: ${{ steps.prepare.outputs.output-dir }}
+        RUSTINEL_ZIP: ${{ steps.prepare.outputs.rustinel-zip }}
+        ASSET_DIR: ${{ steps.prepare.outputs.asset-dir }}
+        DOWNLOAD: ${{ steps.prepare.outputs.download }}
+        TEST_OS: ${{ steps.prepare.outputs.os }}
+        TEST_ARCH: ${{ steps.prepare.outputs.arch }}
+        TEST_TIMEOUT: ${{ inputs.timeout }}
+        TEST_VERSION: ${{ inputs.version }}
+        AGENT_SOURCE: ${{ steps.prepare.outputs.agent-source }}
+      run: uv run --no-project --python 3.12 python "$ACTION_DIR/run.py" test
+    - name: Report integration diagnostics
+      if: ${{ always() && steps.prepare.outcome == 'success' }}
+      shell: bash
+      env:
+        ACTION_DIR: ${{ github.action_path }}
+        BACKEND_DIR: ${{ steps.prepare.outputs.backend-dir }}
+        OUTPUT_DIR: ${{ steps.prepare.outputs.output-dir }}
+        TEST_OS: ${{ steps.prepare.outputs.os }}
+        TEST_ARCH: ${{ steps.prepare.outputs.arch }}
+        TEST_EXIT_CODE: ${{ steps.test.outcome == 'success' && '0' || '1' }}
+      run: uv run --no-project --python 3.12 python "$ACTION_DIR/run.py" report
+    - name: Upload integration diagnostics
+      if: ${{ always() && steps.prepare.outcome == 'success' }}
+      uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4
+      with:
+        name: ${{ steps.prepare.outputs.artifact-name }}
+        path: ${{ steps.prepare.outputs.output-dir }}
+        retention-days: ${{ inputs.retention-days }}

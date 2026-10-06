@@ -454,7 +454,7 @@ class TestDeviceInstall:
         # Default: unset
         resp_linux = await client.get("/device/install?os=linux")
         assert "Environment=HOME=/opt/radegast/home" not in resp_linux.text
-        assert "UV_TOOL_DIR" not in resp_linux.text
+        assert "Environment=UV_TOOL_DIR" not in resp_linux.text
         assert "RADEGAST_AGENT_AUTOUPDATE" not in resp_linux.text
 
         # Enabled
@@ -631,6 +631,78 @@ class TestDeviceInstall:
         assert "Environment=RADEGAST_AGENT_SEND_RULE_ID=false" in resp.text
         assert "Environment=RADEGAST_AGENT_HEALTHCHECK=false" in resp.text
         assert "cat << 'EOF' > /etc/systemd/system/rustinel-updater.service" not in resp.text
+
+    async def test_install_script_agent_init_wait_seconds(self, client: AsyncClient):
+        # Linux
+        resp_linux = await client.get("/device/install?os=linux&agent-init-wait-seconds=1")
+        assert resp_linux.status_code == 200
+        assert "Environment=RADEGAST_AGENT_INIT_WAIT_SECONDS=1" in resp_linux.text
+
+        # Windows
+        resp_win = await client.get("/device/install?os=windows&agent-init-wait-seconds=1")
+        assert resp_win.status_code == 200
+        chunks = re.findall(r"\(echo\s+([A-Za-z0-9+/=]+)\)", resp_win.text)
+        decoded_win = base64.b64decode("".join(chunks)).decode("utf-8")
+        assert '<env name="RADEGAST_AGENT_INIT_WAIT_SECONDS" value="1" />' in decoded_win
+
+        # macOS
+        resp_mac = await client.get("/device/install?os=mac&agent-init-wait-seconds=1")
+        assert resp_mac.status_code == 200
+        assert "<key>RADEGAST_AGENT_INIT_WAIT_SECONDS</key>" in resp_mac.text
+        assert "<string>1</string>" in resp_mac.text
+
+    async def test_install_script_ownership_and_security_integration(self, client: AsyncClient):
+        # Linux verification
+        resp_linux = await client.get("/device/install?os=linux")
+        assert resp_linux.status_code == 200
+        linux_text = resp_linux.text
+        assert 'integration_group = "radegast-agent"' in linux_text
+        assert 'integration_rules_directory = "/etc/rustinel/rules"' in linux_text
+        assert 'directory = "/var/log/rustinel"' in linux_text
+        assert 'filename = "alerts.json"' in linux_text
+        assert "groupadd -r radegast-agent" in linux_text
+        assert "chown root:radegast-agent /etc/rustinel/" in linux_text
+        assert "chmod 750 /etc/rustinel/" in linux_text
+        assert "chown -R root:radegast-agent /etc/rustinel/rules" in linux_text
+        assert "find /etc/rustinel/rules -type d -exec chmod 2770 {} +" in linux_text
+        assert "chmod 2750 /var/log/rustinel" in linux_text
+        assert "chown root:radegast-agent /etc/rustinel/config.toml" in linux_text
+        assert "chmod 660 /etc/rustinel/config.toml" in linux_text
+
+        # Mac verification
+        resp_mac = await client.get("/device/install?os=mac")
+        assert resp_mac.status_code == 200
+        mac_text = resp_mac.text
+        assert 'integration_group = "_radegast"' in mac_text
+        assert 'integration_rules_directory = "/Library/Radegast/etc/rules"' in mac_text
+        assert 'directory = "/Library/Logs/Radegast"' in mac_text
+        assert 'filename = "alerts.json"' in mac_text
+        assert "dscl . -create /Groups/_radegast" in mac_text
+        assert 'chown root:_radegast "$LOG_DIR"' in mac_text
+        assert 'chmod 2750 "$LOG_DIR"' in mac_text
+        assert 'chown root:_radegast "$RADEGAST_DIR"/etc' in mac_text
+        assert 'chmod 750 "$RADEGAST_DIR"/etc' in mac_text
+        assert 'find "$RADEGAST_DIR"/etc/rules -type d -exec chmod 2770 {} +' in mac_text
+        assert 'chown root:_radegast "$RADEGAST_DIR"/etc/config.toml' in mac_text
+        assert 'chmod 660 "$RADEGAST_DIR"/etc/config.toml' in mac_text
+
+        # Windows verification
+        resp_win = await client.get("/device/install?os=windows")
+        assert resp_win.status_code == 200
+        chunks = re.findall(r"\(echo\s+([A-Za-z0-9+/=]+)\)", resp_win.text)
+        decoded_script = base64.b64decode("".join(chunks)).decode("utf-8")
+        assert "icacls" in decoded_script
+        assert "NT SERVICE\\RadegastAgent" in decoded_script
+        assert 'f"{vsa_account}:(R,W)"' in decoded_script
+        assert 'f"{vsa_account}:(OI)(CI)M"' in decoded_script
+        config_b64_match = re.search(r'config_b64 = "([A-Za-z0-9+/=]+)"', decoded_script)
+        assert config_b64_match is not None
+        decoded_config = base64.b64decode(config_b64_match.group(1)).decode("utf-8")
+        assert "integration_group = 'NT SERVICE\\RadegastAgent'" in decoded_config
+        assert "integration_rules_directory = 'C:\\Program Files\\Radegast\\agent\\rules'" in decoded_config
+        assert 'directory = "C:\\\\Program Files\\\\Radegast\\\\agent\\\\logs"' in decoded_config
+        assert 'filename = "alerts.json"' in decoded_config
+        assert 'filename = "rustinel.log"' in decoded_config
 
 
 @pytest.mark.asyncio

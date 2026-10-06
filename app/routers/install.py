@@ -126,6 +126,7 @@ async def get_install_script(
     agent_send_severity: bool | None = Query(None, alias="agent-send-severity"),
     agent_send_rule_id: bool | None = Query(None, alias="agent-send-rule-id"),
     agent_healthcheck: bool | None = Query(None, alias="agent-healthcheck"),
+    agent_init_wait_seconds: int | None = Query(None, alias="agent-init-wait-seconds"),
 ):
     os_name = os_param.lower()
     if os_name not in ("linux", "windows", "mac"):
@@ -173,6 +174,15 @@ async def get_install_script(
         for k in ("agent_healthcheck", "agent-healthcheck", "agent healthcheck"):
             if k in query:
                 agent_healthcheck = _parse_bool(query[k])
+                break
+
+    if agent_init_wait_seconds is None:
+        for k in ("agent_init_wait_seconds", "agent-init-wait-seconds", "agent init wait seconds"):
+            if k in query:
+                try:
+                    agent_init_wait_seconds = int(query[k])
+                except (ValueError, TypeError):
+                    pass
                 break
 
     if rustinel_autoupdate is None:
@@ -226,6 +236,8 @@ async def get_install_script(
             extra_linux_env.append(f"Environment=RADEGAST_AGENT_SEND_RULE_ID={'true' if agent_send_rule_id else 'false'}")
         if agent_healthcheck is not None:
             extra_linux_env.append(f"Environment=RADEGAST_AGENT_HEALTHCHECK={'true' if agent_healthcheck else 'false'}")
+        if agent_init_wait_seconds is not None:
+            extra_linux_env.append(f"Environment=RADEGAST_AGENT_INIT_WAIT_SECONDS={agent_init_wait_seconds}")
         if agent_autoupdate is True:
             extra_linux_env.append("Environment=HOME=/opt/radegast/home")
             extra_linux_env.append("Environment=UV_TOOL_DIR=/opt/radegast/home/.local/share/uv/tools")
@@ -285,6 +297,8 @@ async def get_install_script(
             extra_windows_env.append(
                 f'\n      <env name="RADEGAST_AGENT_HEALTHCHECK" value="{"true" if agent_healthcheck else "false"}" />'
             )
+        if agent_init_wait_seconds is not None:
+            extra_windows_env.append(f'\n      <env name="RADEGAST_AGENT_INIT_WAIT_SECONDS" value="{agent_init_wait_seconds}" />')
         if agent_autoupdate is False:
             extra_windows_env.append('\n      <env name="RADEGAST_AGENT_AUTOUPDATE" value="false" />')
         extra_env_xml = "".join(extra_windows_env)
@@ -361,6 +375,8 @@ async def get_install_script(
             extra_mac_env.append(
                 f"        <key>RADEGAST_AGENT_HEALTHCHECK</key>\n        <string>{'true' if agent_healthcheck else 'false'}</string>"
             )
+        if agent_init_wait_seconds is not None:
+            extra_mac_env.append(f"        <key>RADEGAST_AGENT_INIT_WAIT_SECONDS</key>\n        <string>{agent_init_wait_seconds}</string>")
         if agent_autoupdate is True:
             extra_mac_env.append("        <key>HOME</key>\n        <string>/Library/Radegast/home</string>")
             extra_mac_env.append("        <key>UV_TOOL_DIR</key>\n        <string>/Library/Radegast/home/.local/share/uv/tools</string>")

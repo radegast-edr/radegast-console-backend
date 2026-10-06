@@ -111,17 +111,17 @@ if exist "%INSTALL_SCRIPT%" del "%INSTALL_SCRIPT%"
 echo.
 
 echo Running installation script...
-(
-    del /f /q "%~f0" 2>nul
-    "%PYTHON_EXE%" "%INSTALL_SCRIPT%"
-    if errorlevel 1 (
-        echo ERROR: Installation script failed.
-    ) else (
-        echo.
-        echo Installation completed successfully!
-    )
-    del "%INSTALL_SCRIPT%" 2>nul
-    del "%INSTALL_B64%" 2>nul
+"%PYTHON_EXE%" "%INSTALL_SCRIPT%"
+set "INSTALL_EXIT_CODE=%ERRORLEVEL%"
+if not "%INSTALL_EXIT_CODE%"=="0" (
+    echo ERROR: Installation script failed.
+) else (
     echo.
-    pause
+    echo Installation completed successfully!
 )
+rem Keep this batch file: cmd.exe still needs it until execution finishes.
+if exist "%INSTALL_SCRIPT%" del "%INSTALL_SCRIPT%" 2>nul
+if exist "%INSTALL_B64%" del "%INSTALL_B64%" 2>nul
+echo.
+pause
+exit /b %INSTALL_EXIT_CODE%

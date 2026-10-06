@@ -1,4 +1,5 @@
 import base64
+import ctypes
 import os
 import platform
 import shutil
@@ -20,12 +21,17 @@ def run_cmd(cmd, check=True, show_output=False):
         print(f"WARNING/ERROR executing {' '.join(cmd)}: {e}")
 
 
+def secure_installation_ownership(radegast_dir):
+    # Delegated config access requires trusted owners on every parent directory.
+    # Use the Administrators SID so this also works on localized Windows hosts.
+    subprocess.run(["icacls", str(radegast_dir), "/setowner", "*S-1-5-32-544", "/T", "/Q"], check=True)
+
+
 def main():
     print("=== Starting Radegast EDR Agent & Rustinel Windows Installation ===")
 
     # Check for administrative privileges and elevate if needed
     try:
-        import ctypes
         is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
     except Exception:
         is_admin = False
@@ -57,6 +63,8 @@ def main():
     agent_home_dir = agent_dir / "home"
     agent_service_dir = agent_dir / "service"
     rules_dir = agent_dir / "rules"
+    sigma_dir = rules_dir / "sigma"
+    yara_dir = rules_dir / "yara"
     ioc_dir = rules_dir / "ioc"
     logs_dir = agent_dir / "logs"
     state_dir = agent_dir / "state"
@@ -101,9 +109,23 @@ def main():
     # 2. Setup Directories
     print(f"Creating specialized application directory trees under {radegast_dir}...")
     dirs_to_create = [
-        radegast_dir, tools_dir,
-        agent_dir, agent_service_dir, rules_dir, ioc_dir, logs_dir, state_dir, cache_dir, agent_home_dir,
-        rustinel_dir, rustinel_core_dir, rustinel_service_dir, updater_dir, updater_service_dir
+        radegast_dir,
+        tools_dir,
+        agent_dir,
+        agent_service_dir,
+        rules_dir,
+        sigma_dir,
+        yara_dir,
+        ioc_dir,
+        logs_dir,
+        state_dir,
+        cache_dir,
+        agent_home_dir,
+        rustinel_dir,
+        rustinel_core_dir,
+        rustinel_service_dir,
+        updater_dir,
+        updater_service_dir,
     ]
     for d in dirs_to_create:
         d.mkdir(parents=True, exist_ok=True)
@@ -134,17 +156,18 @@ def main():
     last_error = None
     urls_to_try = [
         download_url,
-        f"https://console-api.radegast.app/api/v1/device/agent/download?os=windows&arch={arch}{{ rustinel_version_query | default('') }}"
+        f"https://console-api.radegast.app/api/v1/device/agent/download?os=windows&arch={arch}{{ rustinel_version_query | default('') }}",
     ]
     for url in urls_to_try:
         try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})  # noqa: S310
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
             import ssl
-            ssl_context = ssl._create_unverified_context() if hasattr(ssl, '_create_unverified_context') else None  # noqa: S323
-            with urllib.request.urlopen(req, context=ssl_context) as response, open(zip_path, 'wb') as out_file:  # noqa: S310
+
+            ssl_context = ssl._create_unverified_context() if hasattr(ssl, "_create_unverified_context") else None
+            with urllib.request.urlopen(req, context=ssl_context) as response, open(zip_path, "wb") as out_file:
                 out_file.write(response.read())
 
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
                 zip_ref.extractall(rustinel_core_dir)
             if zip_path.exists():
                 zip_path.unlink()
@@ -155,7 +178,7 @@ def main():
             if zip_path.exists():
                 try:
                     zip_path.unlink()
-                except Exception:  # noqa: S110
+                except Exception:
                     pass
             print(f"INFO: Failed to download/extract from {url}: {e}", file=sys.stderr)
 
@@ -195,20 +218,15 @@ def main():
     env["UV_CACHE_DIR"] = str(cache_dir)
     env["UV_PYTHON"] = str(python_exe_path)
 
-    subprocess.run(
-        [str(uv_exe), "tool", "install", "--upgrade", "--force", "{{ agent_package }}"],
-        check=True,
-        env=env,
-        cwd=agent_home_dir
-    )
+    subprocess.run([str(uv_exe), "tool", "install", "--upgrade", "--force", "{{ agent_package }}"], check=True, env=env, cwd=agent_home_dir)
     agent_exe = tool_bin_dir / "radegast-edr-agent.exe"
 
     # 6. Download WinSW and Setup Service XMLs
     print("Downloading WinSW Wrapper...")
     winsw_bin = tools_dir / "winsw.exe"
     try:
-        req = urllib.request.Request(winsw_url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, context=ssl_context) as response, open(winsw_bin, 'wb') as out_file:
+        req = urllib.request.Request(winsw_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, context=ssl_context) as response, open(winsw_bin, "wb") as out_file:
             out_file.write(response.read())
     except Exception as e:
         print(f"ERROR: Failed to download WinSW: {e}", file=sys.stderr)
@@ -238,7 +256,7 @@ def main():
 
     # Setup auto-updater service if updater binary is present
     updater_exe = rustinel_core_dir / "rustinel-updater.exe"
-    rustinel_autoupdate = {{ rustinel_autoupdate_updater_py | default("True") }}
+    rustinel_autoupdate = {{rustinel_autoupdate_updater_py | default("True")}}
 
     if updater_exe.exists() and rustinel_autoupdate:
         print("Setting up Rustinel auto-updater service...")
@@ -265,13 +283,9 @@ def main():
     service_path = f"{python_dir}\\Scripts;{os.environ.get('PATH', '')}"
 
     init_wait = os.environ.get("RADEGAST_AGENT_INIT_WAIT_SECONDS")
-    init_wait_xml = (
-        f'\n      <env name="RADEGAST_AGENT_INIT_WAIT_SECONDS" value="{init_wait}" />'
-        if init_wait is not None
-        else ""
-    )
+    init_wait_xml = f'\n      <env name="RADEGAST_AGENT_INIT_WAIT_SECONDS" value="{init_wait}" />' if init_wait is not None else ""
 
-    agent_autoupdate = {{ agent_autoupdate_py | default("False") }}
+    agent_autoupdate = {{agent_autoupdate_py | default("False")}}
     autoupdate_xml = (
         f'\n      <env name="UV_CACHE_DIR" value="{cache_dir}" />'
         f'\n      <env name="UV_TOOL_DIR" value="{agent_tools_dir}" />'
@@ -291,8 +305,10 @@ def main():
       <workingdirectory>{agent_home_dir}</workingdirectory>
       <env name="PYTHONUNBUFFERED" value="1" />
       <env name="PATH" value="{service_path}" />
-      <env name="LOCALAPPDATA" value="{agent_dir}" />
-      <env name="APPDATA" value="{agent_dir}" />
+      <env name="USERPROFILE" value="{agent_home_dir}" />
+      <env name="HOME" value="{agent_home_dir}" />
+      <env name="LOCALAPPDATA" value="{agent_home_dir}" />
+      <env name="APPDATA" value="{agent_home_dir}" />
       <env name="RADEGAST_AGENT_BACKEND_URL" value="{backend_url}/api/v1" />
       <env name="RADEGAST_AGENT_DEVICE_TOKEN" value="{token}" />
       <env name="RADEGAST_AGENT_RUSTINEL_BINARY" value="{rustinel_core_dir}\\rustinel.exe" />
@@ -323,30 +339,64 @@ def main():
 
     # 9. Unblock Files
     print("Clearing Mark of the Web attributes from all files...")
-    subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command",
-                    f"Get-ChildItem -Path '{radegast_dir}' -Recurse | Unblock-File"], check=True)
+    subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command", f"Get-ChildItem -Path '{radegast_dir}' -Recurse | Unblock-File"],
+        check=True,
+    )
 
     # 10. Apply Strict NTFS ACLs via icacls
     print("Securing directories with strict layout isolation...")
     vsa_account = r"NT SERVICE\RadegastAgent"
 
+    # Include existing files and directories when repairing an older installation.
+    # Ownership errors are fatal; continuing would leave Rustinel unable to start.
+    secure_installation_ownership(radegast_dir)
+
     # A. Lock root directory exclusively to Administrators and SYSTEM
-    run_cmd(["icacls", str(radegast_dir), "/inheritance:r", "/grant:r", "Administrators:(OI)(CI)F", "/grant:r",
-             "SYSTEM:(OI)(CI)F"], show_output=True)
+    run_cmd(
+        ["icacls", str(radegast_dir), "/inheritance:r", "/grant:r", "Administrators:(OI)(CI)F", "/grant:r", "SYSTEM:(OI)(CI)F"],
+        show_output=True,
+    )
 
     # B.Grant the VSA traverse/read rights to the root folder ONLY (No inheritance)
     # Leaving out (OI)(CI) means this rule applies ONLY to the Radegast folder itself.
     # This allows the agent to resolve paths like \Radegast\rustinel\... without being blocked at the root.
     run_cmd(["icacls", str(radegast_dir), "/grant:r", f"{vsa_account}:RX"], show_output=True)
 
-    # C. Grant Full Control exclusively to the requested Agent directory ecosystem
-    run_cmd(["icacls", str(agent_dir), "/grant:r", f"{vsa_account}:(OI)(CI)F", "/T", "/Q"], show_output=True)
+    # C. Grant VSA traverse/read rights to the agent directory ONLY (No inheritance)
+    # Rustinel verifies that parent directories of config.toml do not grant replace/delete-child access to unprivileged accounts.
+    run_cmd(["icacls", str(agent_dir), "/grant:r", f"{vsa_account}:RX"], show_output=True)
 
-    # D. Grant Read & Execute (RX) to the Rustinel folder tree AND force it recursively (/T)
+    # D. Grant config.toml read/write access to the VSA account
+    config_file = agent_dir / "config.toml"
+    if config_file.exists():
+        run_cmd(["icacls", str(config_file), "/grant:r", f"{vsa_account}:(R,W)"], show_output=True)
+
+    # E. Secure rules directory with isolated inheritance and delegated modify access
+    run_cmd(
+        ["icacls", str(rules_dir), "/inheritance:r", "/grant:r", "Administrators:(OI)(CI)F", "/grant:r", "SYSTEM:(OI)(CI)F", "/grant:r", f"{vsa_account}:(OI)(CI)M"],
+        show_output=True,
+    )
+    run_cmd(["icacls", str(rules_dir), "/grant:r", f"{vsa_account}:(OI)(CI)M", "/T", "/Q"], show_output=True)
+
+    # F. Grant Full Control to logs directory (for Rustinel logs & agent service wrapper logs)
+    if logs_dir.exists():
+        run_cmd(["icacls", str(logs_dir), "/grant:r", f"{vsa_account}:(OI)(CI)F", "/T", "/Q"], show_output=True)
+
+    # G. Grant Full Control to agent service directory so WinSW wrapper can manage its service lifecycle
+    if agent_service_dir.exists():
+        run_cmd(["icacls", str(agent_service_dir), "/grant:r", f"{vsa_account}:(OI)(CI)F", "/T", "/Q"], show_output=True)
+
+    # H. Grant Full Control exclusively to internal agent working subdirectories
+    for d in [agent_home_dir, state_dir, cache_dir, agent_tools_dir]:
+        if d.exists():
+            run_cmd(["icacls", str(d), "/grant:r", f"{vsa_account}:(OI)(CI)F", "/T", "/Q"], show_output=True)
+
+    # I. Grant Read & Execute (RX) to the Rustinel folder tree AND force it recursively (/T)
     # The /T flag ensures that the *already extracted* rustinel.exe binary instantly receives the RX permission.
     run_cmd(["icacls", str(rustinel_dir), "/grant:r", f"{vsa_account}:(OI)(CI)RX", "/T", "/Q"], show_output=True)
 
-    # Secure global Python directory context to Read & Execute only for the VSA account
+    # J. Secure global Python directory context to Read & Execute only for the VSA account
     if python_dir.exists():
         run_cmd(["icacls", str(python_dir), "/reset", "/T", "/Q"], show_output=True)
         run_cmd(["icacls", str(python_dir), "/grant:r", f"{vsa_account}:(OI)(CI)RX", "/T", "/Q"], show_output=True)
@@ -374,7 +424,7 @@ def main():
         "taskkill /f /im rustinel.exe >nul 2>&1\r\n"
         "reg delete HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Radegast /f >nul 2>&1\r\n"
         "echo === Removing Files ===\r\n"
-        f'start /b "" cmd /c "timeout /t 3 >nul & rmdir /s /q "{radegast_dir}" >nul 2>&1"\r\n'
+        f'start /b "" cmd /c "%SystemRoot%\\System32\\timeout.exe /t 3 /nobreak >nul 2>&1 || ping 127.0.0.1 -n 4 >nul & rmdir /s /q "{radegast_dir}" >nul 2>&1"\r\n'
     )
     uninstall_bat.write_text(uninstall_content, encoding="utf-8")
 

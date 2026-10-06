@@ -24,19 +24,22 @@ echo "Stopping rustinel service..."
 systemctl stop rustinel
 echo "Disabling rustinel service..."
 systemctl disable rustinel
-echo "Deleting radegast-agent user and home directory..."
-userdel -r radegast-agent
+echo "Deleting radegast-agent user and group..."
+userdel -r radegast-agent 2>/dev/null || true
+groupdel radegast-agent 2>/dev/null || true
 echo "Removing radegast-agent and rustinel systemd service files..."
 rm -f /etc/systemd/system/radegast-agent.service
 rm -f /etc/systemd/system/rustinel.service
+rm -f /etc/systemd/system/rustinel-updater.service
 echo "Reloading systemd daemon..."
 systemctl daemon-reload
 echo "Deleting radegast and rustinel files..."
 rm -rf /opt/radegast
+rm -rf /etc/rustinel
 echo "Purging journal logs for radegast-agent and rustinel..."
 journalctl --rotate
 journalctl --vacuum-time=1s --unit=radegast-agent
 journalctl --vacuum-time=1s --unit=rustinel
 echo "Purging log files for radegast-agent and rustinel..."
-rm -f /var/log/rustinel
+rm -rf /var/log/rustinel
 echo "Uninstallation complete."

@@ -137,20 +137,26 @@ if ! command -v pkg-config >/dev/null 2>&1 || [ -z "$OPENSSL_PREFIX" ] || [ ! -d
         echo "Installing pkg-config and openssl@3 using Homebrew ($BREW_BIN)..."
         if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
             USER_HOME=$(get_user_home "$SUDO_USER")
-            sudo -u "$SUDO_USER" -H env \
-                HOME="$USER_HOME" \
-                USER="$SUDO_USER" \
-                LOGNAME="$SUDO_USER" \
-                PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
-                HOMEBREW_CACHE="$USER_HOME/Library/Caches/Homebrew" \
-                HOMEBREW_LOGS="$USER_HOME/Library/Logs/Homebrew" \
-                HOMEBREW_TEMP="/tmp/homebrew-$SUDO_USER" \
-                HOMEBREW_NO_ANALYTICS=1 \
-                HOMEBREW_NO_AUTO_UPDATE=1 \
-                HOMEBREW_NO_INSTALL_CLEANUP=1 \
-                "$BREW_BIN" install pkg-config openssl@3 || true
+            (
+                cd "$USER_HOME" 2>/dev/null || cd /tmp || true
+                sudo -u "$SUDO_USER" -H env \
+                    HOME="$USER_HOME" \
+                    USER="$SUDO_USER" \
+                    LOGNAME="$SUDO_USER" \
+                    PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+                    HOMEBREW_CACHE="$USER_HOME/Library/Caches/Homebrew" \
+                    HOMEBREW_LOGS="$USER_HOME/Library/Logs/Homebrew" \
+                    HOMEBREW_TEMP="/tmp/homebrew-$SUDO_USER" \
+                    HOMEBREW_NO_ANALYTICS=1 \
+                    HOMEBREW_NO_AUTO_UPDATE=1 \
+                    HOMEBREW_NO_INSTALL_CLEANUP=1 \
+                    "$BREW_BIN" install pkg-config openssl@3 || true
+            )
         else
-            HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 "$BREW_BIN" install pkg-config openssl@3 || true
+            (
+                cd /tmp || true
+                HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 "$BREW_BIN" install pkg-config openssl@3 || true
+            )
         fi
     fi
 fi
@@ -184,8 +190,26 @@ else
     fi
 fi
 
-# 2. Create _radegast system user (macOS convention for service accounts)
-echo "Creating _radegast system user..."
+# 2. Create _radegast system group and user (macOS convention for service accounts)
+echo "Creating _radegast system group and user..."
+if ! dscl . -read /Groups/_radegast >/dev/null 2>&1; then
+    LAST_GID=$(dscl . -list /Groups PrimaryGroupID 2>/dev/null | awk '$2 < 500 {print $2}' | sort -n | tail -1)
+    if [ -z "$LAST_GID" ]; then
+        NEW_GID=450
+    else
+        NEW_GID=$((LAST_GID + 1))
+    fi
+    dscl . -create /Groups/_radegast
+    dscl . -create /Groups/_radegast PrimaryGroupID "$NEW_GID"
+    dscl . -create /Groups/_radegast RealName "Radegast EDR Group"
+    dscl . -create /Groups/_radegast Password "*"
+fi
+
+RADEGAST_GID=$(dscl . -read /Groups/_radegast PrimaryGroupID 2>/dev/null | awk '{print $2}')
+if [ -z "$RADEGAST_GID" ]; then
+    RADEGAST_GID=450
+fi
+
 if ! dscl . -read /Users/_radegast >/dev/null 2>&1; then
     # Find available UID under 500
     LAST_UID=$(dscl . -list /Users UniqueID 2>/dev/null | awk '$2 < 500 {print $2}' | sort -n | tail -1)
@@ -198,13 +222,15 @@ if ! dscl . -read /Users/_radegast >/dev/null 2>&1; then
     dscl . -create /Users/_radegast UserShell /bin/zsh
     dscl . -create /Users/_radegast RealName "Radegast EDR Agent"
     dscl . -create /Users/_radegast UniqueID "$NEW_UID"
-    dscl . -create /Users/_radegast PrimaryGroupID 20
+    dscl . -create /Users/_radegast PrimaryGroupID "$RADEGAST_GID"
     dscl . -create /Users/_radegast NFSHomeDirectory /Library/Radegast/home
     dscl . -create /Users/_radegast IsHidden 1
 else
     echo "User _radegast already exists."
     dscl . -create /Users/_radegast UserShell /bin/zsh 2>/dev/null || true
+    dscl . -create /Users/_radegast PrimaryGroupID "$RADEGAST_GID" 2>/dev/null || true
 fi
+dscl . -append /Groups/_radegast GroupMembership _radegast 2>/dev/null || true
 
 # 3. Create directory layout with appropriate permissions
 RADEGAST_DIR="/Library/Radegast"
@@ -232,19 +258,59 @@ touch "$LOG_DIR"/alerts.json
 touch "$LOG_DIR"/rustinel-updater-stdout.log
 touch "$LOG_DIR"/rustinel-updater-stderr.log
 
-chown -R _radegast:wheel "$LOG_DIR" 2>/dev/null || chown -R _radegast:staff "$LOG_DIR" 2>/dev/null || chown -R _radegast "$LOG_DIR"
-chmod 775 "$LOG_DIR"
-chmod 664 "$LOG_DIR"/*.log "$LOG_DIR"/alerts.json 2>/dev/null || true
+chown root:_radegast "$LOG_DIR"
+chmod 2750 "$LOG_DIR"
+chown _radegast:_radegast "$LOG_DIR"/radegast-agent-*.log 2>/dev/null || true
+chmod 640 "$LOG_DIR"/radegast-agent-*.log 2>/dev/null || true
+chown root:_radegast "$LOG_DIR"/rustinel*.log "$LOG_DIR"/alerts.json* 2>/dev/null || true
+chmod 640 "$LOG_DIR"/rustinel*.log "$LOG_DIR"/alerts.json* 2>/dev/null || true
 
-chown -R _radegast:wheel "$RADEGAST_DIR"/etc
-chmod -R 775 "$RADEGAST_DIR"/etc
-chmod 640 "$RADEGAST_DIR"/etc/rules/ioc/*.txt
+chown root:_radegast "$RADEGAST_DIR"/etc
+chmod 750 "$RADEGAST_DIR"/etc
+chown -R root:_radegast "$RADEGAST_DIR"/etc/rules
+chmod -R g+rwX,o-rwx "$RADEGAST_DIR"/etc/rules
+find "$RADEGAST_DIR"/etc/rules -type d -exec chmod 2770 {} +
+chmod 660 "$RADEGAST_DIR"/etc/rules/ioc/*.txt 2>/dev/null || true
 
-chown -R _radegast:staff "$RADEGAST_DIR"/home 2>/dev/null || chown -R _radegast "$RADEGAST_DIR"/home
+mkdir -p "$RADEGAST_DIR"/home/.config "$RADEGAST_DIR"/home/.local/bin "$RADEGAST_DIR"/home/.local/share "$RADEGAST_DIR"/home/.cache
+chown -R _radegast:_radegast "$RADEGAST_DIR"/home 2>/dev/null || chown -R _radegast "$RADEGAST_DIR"/home
 chmod 700 "$RADEGAST_DIR"/home
 
-chown -R _radegast:staff "$RADEGAST_DIR"/state 2>/dev/null || chown -R _radegast "$RADEGAST_DIR"/state
+mkdir -p "$RADEGAST_DIR"/state
+chown -R _radegast:_radegast "$RADEGAST_DIR"/state 2>/dev/null || chown -R _radegast "$RADEGAST_DIR"/state
 chmod 700 "$RADEGAST_DIR"/state
+
+# Run commands in a strictly isolated environment for _radegast
+run_as_agent() {
+    (
+        cd /Library/Radegast/home 2>/dev/null || cd /tmp || exit 1
+        sudo -u _radegast -H env -i \
+            HOME=/Library/Radegast/home \
+            USER=_radegast \
+            LOGNAME=_radegast \
+            PATH="/Library/Radegast/home/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+            XDG_CONFIG_HOME=/Library/Radegast/home/.config \
+            XDG_DATA_HOME=/Library/Radegast/home/.local/share \
+            XDG_CACHE_HOME=/Library/Radegast/home/.cache \
+            XDG_STATE_HOME=/Library/Radegast/home/.local/state \
+            UV_TOOL_DIR=/Library/Radegast/home/.local/share/uv/tools \
+            UV_TOOL_BIN_DIR=/Library/Radegast/home/.local/bin \
+            UV_CACHE_DIR=/Library/Radegast/home/.cache/uv \
+            ${OPENSSL_DIR:+OPENSSL_DIR="$OPENSSL_DIR"} \
+            ${OPENSSL_INCLUDE_DIR:+OPENSSL_INCLUDE_DIR="$OPENSSL_INCLUDE_DIR"} \
+            ${OPENSSL_LIB_DIR:+OPENSSL_LIB_DIR="$OPENSSL_LIB_DIR"} \
+            ${PKG_CONFIG_PATH:+PKG_CONFIG_PATH="$PKG_CONFIG_PATH"} \
+            ${LDFLAGS:+LDFLAGS="$LDFLAGS"} \
+            ${CPPFLAGS:+CPPFLAGS="$CPPFLAGS"} \
+            ${HTTP_PROXY:+HTTP_PROXY="$HTTP_PROXY"} \
+            ${HTTPS_PROXY:+HTTPS_PROXY="$HTTPS_PROXY"} \
+            ${NO_PROXY:+NO_PROXY="$NO_PROXY"} \
+            ${http_proxy:+http_proxy="$http_proxy"} \
+            ${https_proxy:+https_proxy="$https_proxy"} \
+            ${no_proxy:+no_proxy="$no_proxy"} \
+            "$@"
+    )
+}
 
 # 4. Check/Install uv for _radegast user (never use system-wide uv)
 echo "Checking if uv is installed for _radegast user..."
@@ -263,7 +329,7 @@ get_uv_path() {
 UV_BIN=$(get_uv_path || true)
 if [ -z "$UV_BIN" ]; then
     echo "uv is not installed for _radegast, installing..."
-    curl -LsSf https://astral.sh/uv/install.sh | sudo -u _radegast -H env HOME=/Library/Radegast/home sh
+    run_as_agent sh -c "curl -LsSf https://astral.sh/uv/install.sh | sh"
     UV_BIN=$(get_uv_path || true)
     if [ -z "$UV_BIN" ]; then
         echo "ERROR: Failed to install uv for _radegast." >&2
@@ -271,32 +337,13 @@ if [ -z "$UV_BIN" ]; then
     fi
 else
     echo "uv is already installed for _radegast at: $UV_BIN"
-    sudo -u _radegast -H env HOME=/Library/Radegast/home "$UV_BIN" self update || echo "Update not available or failed"
+    run_as_agent "$UV_BIN" self update || echo "Update not available or failed"
 fi
 
 # 5. Install Python runtime and radegast-agent via uv
 echo "Installing Python runtime and radegast-agent via uv..."
-sudo -u _radegast -H env \
-    HOME=/Library/Radegast/home \
-    PATH="/Library/Radegast/home/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH" \
-    OPENSSL_DIR="${OPENSSL_DIR:-}" \
-    OPENSSL_INCLUDE_DIR="${OPENSSL_INCLUDE_DIR:-}" \
-    OPENSSL_LIB_DIR="${OPENSSL_LIB_DIR:-}" \
-    PKG_CONFIG_PATH="$PKG_CONFIG_PATH" \
-    LDFLAGS="${LDFLAGS:-}" \
-    CPPFLAGS="${CPPFLAGS:-}" \
-    "$UV_BIN" python install 3.13
-
-sudo -u _radegast -H env \
-    HOME=/Library/Radegast/home \
-    PATH="/Library/Radegast/home/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH" \
-    OPENSSL_DIR="${OPENSSL_DIR:-}" \
-    OPENSSL_INCLUDE_DIR="${OPENSSL_INCLUDE_DIR:-}" \
-    OPENSSL_LIB_DIR="${OPENSSL_LIB_DIR:-}" \
-    PKG_CONFIG_PATH="$PKG_CONFIG_PATH" \
-    LDFLAGS="${LDFLAGS:-}" \
-    CPPFLAGS="${CPPFLAGS:-}" \
-    "$UV_BIN" tool install --python 3.13 --upgrade {{ agent_package }}
+run_as_agent "$UV_BIN" python install 3.13
+run_as_agent "$UV_BIN" tool install --python 3.13 --upgrade {{ agent_package }}
 
 # Verify agent executable exists
 if [ ! -f "/Library/Radegast/home/.local/bin/radegast-edr-agent" ]; then
@@ -375,8 +422,8 @@ echo "Writing configuration files..."
 cat << 'EOF' > "$RADEGAST_DIR"/etc/config.toml
 {{ config_content }}
 EOF
-chown _radegast:wheel "$RADEGAST_DIR"/etc/config.toml
-chmod 640 "$RADEGAST_DIR"/etc/config.toml
+chown root:_radegast "$RADEGAST_DIR"/etc/config.toml
+chmod 660 "$RADEGAST_DIR"/etc/config.toml
 
 echo "Writing uninstall script..."
 cat << 'EOF' > "$RADEGAST_DIR"/uninstall.sh
@@ -406,6 +453,9 @@ rm -f /Library/LaunchDaemons/app.radegast.rustinel-updater.plist
 
 if dscl . -read /Users/_radegast >/dev/null 2>&1; then
     dscl . -delete /Users/_radegast || true
+fi
+if dscl . -read /Groups/_radegast >/dev/null 2>&1; then
+    dscl . -delete /Groups/_radegast || true
 fi
 
 rm -rf /Library/Radegast

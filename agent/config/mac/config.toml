@@ -1,6 +1,11 @@
 # Rustinel Configuration File for macOS
 # This file is optional - the agent will use defaults if not present
 
+# Security: Allow the _radegast user to edit this config and read logs
+[security]
+integration_group = "_radegast"
+integration_rules_directory = "/Library/Radegast/etc/rules"
+
 # 1. Feature Toggles & Rules
 [scanner]
 sigma_enabled = true
@@ -24,14 +29,14 @@ debounce_ms = 2000          # poll cadence is max(debounce_ms, 2000)
 [logging]
 level = "info"              # trace, debug, info, warn, error
 directory = "/Library/Logs/Radegast"
-filename = "/Library/Logs/Radegast/rustinel.log"
+filename = "rustinel.log"
 console_output = true       # If true, duplicate logs to stdout (dev mode)
 
 # 3. Security Alerts (The Detection Output)
 #    Writes to: {directory}/{filename}.<date>
 [alerts]
 directory = "/Library/Logs/Radegast"
-filename = "/Library/Logs/Radegast/alerts.json"    # Will contain newline-delimited JSON (NDJSON)
+filename = "alerts.json"    # Will contain newline-delimited JSON (NDJSON)
 match_debug = "off"         # off | summary | full (attach match details to alerts.json)
 
 # 4. Active Response (Optional Prevention)

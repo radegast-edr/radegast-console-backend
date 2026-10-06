@@ -1,6 +1,11 @@
 # Rustinel Configuration File for Windows
 # This file is optional - the agent will use defaults if not present
 
+# Security: Allow the RadegastAgent service account to edit this config and update rules
+[security]
+integration_group = 'NT SERVICE\RadegastAgent'
+integration_rules_directory = 'C:\Program Files\Radegast\agent\rules'
+
 # 1. Feature Toggles & Rules
 [scanner]
 sigma_enabled = true
@@ -26,15 +31,15 @@ debounce_ms = 2000          # poll cadence is max(debounce_ms, 2000)
 #    Writes to: {directory}/{filename}.<date>
 [logging]
 level = "info"              # trace, debug, info, warn, error
-directory = "logs"
-filename = "C:\\Program Files\\Radegast\\agent\\logs\\rustinel.log"
+directory = "C:\\Program Files\\Radegast\\agent\\logs"
+filename = "rustinel.log"
 console_output = true       # If true, duplicate logs to stdout (dev mode)
 
 # 3. Security Alerts (The Detection Output)
 #    Writes to: {directory}/{filename}.<date>
 [alerts]
-directory = "logs"
-filename = "C:\\Program Files\\Radegast\\agent\\logs\\alerts.json"    # Will contain newline-delimited JSON (NDJSON)
+directory = "C:\\Program Files\\Radegast\\agent\\logs"
+filename = "alerts.json"    # Will contain newline-delimited JSON (NDJSON)
 match_debug = "off"         # off | summary | full (attach match details to alerts.json)
 
 # 4. Active Response (Optional Prevention)

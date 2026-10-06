@@ -101,7 +101,7 @@ unfixable = []
 known-first-party = ["app"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101", "S105", "S106", "S108", "ARG"]  # Allow assert, hardcoded test passwords, temp paths, and unused arguments in tests
+"tests/*" = ["S101", "S105", "S106", "S108", "S603", "S607", "ARG"]  # Allow assert, hardcoded test passwords, temp paths, subprocess, and unused arguments in tests
 "app/config.py" = ["S105", "S108"]  # Allow hardcoded password and temp file in config
 "app/main.py" = ["ASYNC240"]  # Allow Path.mkdir in lifespan (startup code)
 "app/routers/install.py" = ["ASYNC240"]  # Allow Path.resolve/is_relative_to (synchronous path checks)

@@ -1,6 +1,11 @@
 # Rustinel Configuration File
 # This file is optional - the agent will use defaults if not present
 
+# Security: Allow the radegast-agent user to edit this config and read logs
+[security]
+integration_group = "radegast-agent"
+integration_rules_directory = "/etc/rustinel/rules"
+
 # 1. Feature Toggles & Rules
 [scanner]
 sigma_enabled = true
@@ -38,15 +43,15 @@ debounce_ms = 2000          # poll cadence is max(debounce_ms, 2000)
 level = "info"              # trace, debug, info, warn, error
 # Optional target-aware filter (takes precedence over level when set)
 # filter = "info,engine=info,scanner=info,ioc=info,rustinel::normalizer=info"
-directory = "logs"
-filename = "/var/log/rustinel/rustinel.log"
+directory = "/var/log/rustinel"
+filename = "rustinel.log"
 console_output = true       # If true, duplicate logs to stdout (dev mode)
 
 # 3. Security Alerts (The Detection Output)
 #    Writes to: {directory}/{filename}.<date>
 [alerts]
-directory = "logs"
-filename = "/var/log/rustinel/alerts.json"    # Will contain newline-delimited JSON (NDJSON)
+directory = "/var/log/rustinel"
+filename = "alerts.json"    # Will contain newline-delimited JSON (NDJSON)
 match_debug = "off"         # off | summary | full (attach match details to alerts.json)
 
 # 4. Active Response (Optional Prevention)

@@ -71,7 +71,7 @@ def test_command(env):
     if env.get("AGENT_SOURCE"):
         command += ["--agent-source", env["AGENT_SOURCE"]]
     if env["TEST_OS"] != "windows":
-        command = ["sudo", "env", f"PATH={env['PATH']}", "GITHUB_ACTIONS=true", *command]
+        command = ["sudo", "env", f"PATH={env['PATH']}", "GITHUB_ACTIONS=true", "UV_PYTHON=3.12", *command]
     return command
 
 

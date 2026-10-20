@@ -62,7 +62,7 @@ runs:
       shell: bash
       env:
         BACKEND_DIR: ${{ steps.prepare.outputs.backend-dir }}
-      run: uv sync --frozen --project "$BACKEND_DIR"
+      run: uv sync --frozen --project "$BACKEND_DIR" --python 3.12
     - name: Run real-device integration test
       id: test
       shell: bash

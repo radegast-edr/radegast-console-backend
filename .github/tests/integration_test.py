@@ -179,6 +179,7 @@ class BackendManager:
         env["RADEGAST_RELEASES_DIR"] = str(self.releases_dir)
         if self.agent_package is not None:
             env["RADEGAST_AGENT_PACKAGE"] = self.agent_package
+        env["UV_PYTHON"] = "3.12"
 
         uv_bin = shutil.which("uv") or "uv"
 

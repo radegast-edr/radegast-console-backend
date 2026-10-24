@@ -586,6 +586,13 @@ def verify_services_running(os_name: str) -> None:
                 raise RuntimeError(f"macOS service {label!r} is not running; see diagnostics.")
 
 
+def normalize_agent_version(version: str | None) -> str | None:
+    """Normalize agent version for comparison, stripping agent runtime prefixes (e.g. 'python ')."""
+    if not version:
+        return None
+    return version.removeprefix("python ").strip()
+
+
 def verify_healthcheck_alert(
     base_url: str,
     session_cookie: str,
@@ -609,7 +616,9 @@ def verify_healthcheck_alert(
                 if resp.status_code == 200:
                     device = resp.json()
                     reported_version = device.get("agent_version")
-                    if expected_agent_version and reported_version and reported_version != expected_agent_version:
+                    reported_clean = normalize_agent_version(reported_version)
+                    expected_clean = normalize_agent_version(expected_agent_version)
+                    if expected_clean and reported_clean and reported_clean != expected_clean:
                         raise RuntimeError(f"Service reported agent {reported_version}; expected source agent {expected_agent_version}")
                     is_healthy = device.get("healthy")
                     logger.info(
@@ -617,7 +626,7 @@ def verify_healthcheck_alert(
                         is_healthy,
                         device.get("last_seen"),
                     )
-                    if is_healthy is True and (expected_agent_version is None or reported_version == expected_agent_version):
+                    if is_healthy is True and (expected_clean is None or reported_clean == expected_clean):
                         logger.info("Healthcheck alert received and confirmed! Device is HEALTHY.")
                         return True
                     elif is_healthy is False:

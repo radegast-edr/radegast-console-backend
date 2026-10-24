@@ -123,3 +123,16 @@ def test_pypi_service_version_cannot_satisfy_source_healthcheck(monkeypatch):
     monkeypatch.setattr(runner.httpx, "Client", lambda **kwargs: client_type(transport=transport, **kwargs))
     with pytest.raises(RuntimeError, match="expected source agent"):
         runner.verify_healthcheck_alert("http://backend/api/v1", "session", 1, expected_agent_version="1.0.1+integration.checkout")
+
+
+def test_python_prefixed_version_satisfies_source_healthcheck(monkeypatch):
+    monkeypatch.syspath_prepend(str(SCRIPTS))
+    runner_spec = importlib.util.spec_from_file_location("source_healthcheck_runner", SCRIPTS / "integration_test.py")
+    runner = importlib.util.module_from_spec(runner_spec)
+    runner_spec.loader.exec_module(runner)
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, json={"healthy": True, "agent_version": "python 1.0.1+integration.checkout"})
+    )
+    client_type = httpx.Client
+    monkeypatch.setattr(runner.httpx, "Client", lambda **kwargs: client_type(transport=transport, **kwargs))
+    assert runner.verify_healthcheck_alert("http://backend/api/v1", "session", 1, expected_agent_version="1.0.1+integration.checkout")

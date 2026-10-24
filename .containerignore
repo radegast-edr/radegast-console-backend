@@ -24,17 +24,23 @@ web/build/
 **/.env.*
 !**/.env.example
 
-# IDE / Tool configuration
 .idea/
 .vscode/
 .run/
 .git/
+**/.git/
 .gitignore
 .gitmodules
 .antigravitycli/
+.github/
+.ruff_cache/
 
-# Agent install scripts and release binaries — not needed in the image build context
+# Test assets
+test-assets/
+
+# Agent release binaries — not needed in the image build context
 agent/release/
+agent/releases/
 
 # Local data and temp files
 uploads/
@@ -48,4 +54,4 @@ app/web_build/
 app/agent_config/
 docs/
 infra/
-.pem
+*.pem

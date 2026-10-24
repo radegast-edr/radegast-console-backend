@@ -1,0 +1,94 @@
+name: Socket Fix
+on:
+  schedule:
+    - cron: '11 8 * * *'
+    - cron: '22 20 * * *'
+  workflow_dispatch:
+    inputs:
+      min_severity:
+        description: Minimum advisory severity to fix
+        type: choice
+        options: [low, medium, high, critical]
+        default: low
+
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  socket-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        id: app-token
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout repo
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "26"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          npm config set min-release-age 4 --location=user
+          npm install --global socket
+
+      # Dry run: list fixable advisories without applying fixes or opening PRs
+      - name: Compute available fixes
+        shell: bash
+        env:
+          SOCKET_CLI_API_TOKEN: ${{ secrets.SOCKET_CLI_API_TOKEN }}
+        run: |
+          socket fix --all --no-apply-fixes --output-file socket-fixes.json
+          cat socket-fixes.json
+
+      # socket fix has no severity option, so look each advisory up on GitHub
+      - name: Filter fixes by severity
+        id: filter
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          MIN_SEVERITY: ${{ inputs.min_severity || 'low' }}
+        run: |
+          rank() {
+            case "$1" in
+              low) echo 1 ;; medium) echo 2 ;; high) echo 3 ;; critical) echo 4 ;; *) echo 0 ;;
+            esac
+          }
+          min=$(rank "${MIN_SEVERITY:-low}")
+          [ "$min" -eq 0 ] && min=3
+          ids=()
+          for id in $(jq -r '.fixes | keys[]' socket-fixes.json); do
+            if ! sev=$(gh api "/advisories/$id" --jq .severity); then
+              echo "::warning::Could not look up severity for $id, assuming low"
+              sev="low"
+            fi
+            if [ "$(rank "$sev")" -ge "$min" ]; then
+              echo "$id: $sev -> fix"
+              ids+=("$id")
+            else
+              echo "$id: $sev -> below $MIN_SEVERITY, skip"
+            fi
+          done
+          echo "ids=$(IFS=,; echo "${ids[*]}")" >> "$GITHUB_OUTPUT"
+
+      - name: Run Socket Fix CLI
+        if: steps.filter.outputs.ids != ''
+        env:
+          SOCKET_CLI_GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          SOCKET_CLI_GIT_USER_EMAIL: socket-fix[bot]@users.noreply.github.com
+          SOCKET_CLI_GIT_USER_NAME: socket-fix[bot]
+          SOCKET_CLI_API_TOKEN: ${{ secrets.SOCKET_CLI_API_TOKEN }}
+          FIX_IDS: ${{ steps.filter.outputs.ids }}
+        # --autopilot enables auto-merge on each PR; it merges once required checks pass
+        run: socket fix --id "$FIX_IDS" --autopilot

@@ -1,0 +1,123 @@
+name: 'Socket Fix'
+description: 'Automatically find and fix dependency vulnerabilities with Socket CLI'
+
+inputs:
+  socket-api-token:
+    description: 'Socket API Token'
+    required: true
+  github-token:
+    description: 'GitHub token with contents:write and pull-requests:write permissions'
+    required: false
+    default: ''
+  min-severity:
+    description: 'Minimum advisory severity to fix (low, medium, high, critical)'
+    required: false
+    default: 'low'
+  autopilot:
+    description: 'Enable auto-merge for pull requests that Socket opens'
+    required: false
+    default: 'true'
+  git-user-name:
+    description: 'Git user name for commits'
+    required: false
+    default: 'socket-fix[bot]'
+  git-user-email:
+    description: 'Git user email for commits'
+    required: false
+    default: 'socket-fix[bot]@users.noreply.github.com'
+  node-version:
+    description: 'Node.js version to install'
+    required: false
+    default: '26'
+  project-dir:
+    description: 'Directory of the project to scan and fix'
+    required: false
+    default: '.'
+
+outputs:
+  fix-ids:
+    description: 'Comma-separated advisory IDs that were targeted for fixes'
+    value: ${{ steps.filter.outputs.ids }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        npm config set min-release-age 4 --location=user
+        npm install --global socket
+
+    # Dry run: list fixable advisories without applying fixes or opening PRs
+    - name: Compute available fixes
+      shell: bash
+      working-directory: ${{ inputs.project-dir }}
+      env:
+        SOCKET_CLI_API_TOKEN: ${{ inputs.socket-api-token }}
+      run: |
+        socket fix --all --no-apply-fixes --output-file socket-fixes.json
+        if [ -f socket-fixes.json ]; then
+          cat socket-fixes.json
+        else
+          echo "No socket-fixes.json generated (no fixable advisories found)."
+        fi
+
+    # socket fix has no severity option, so look each advisory up on GitHub
+    - name: Filter fixes by severity
+      id: filter
+      shell: bash
+      working-directory: ${{ inputs.project-dir }}
+      env:
+        GH_TOKEN: ${{ inputs.github-token || github.token }}
+        MIN_SEVERITY: ${{ inputs.min-severity }}
+      run: |
+        rank() {
+          case "$1" in
+            low) echo 1 ;; medium) echo 2 ;; high) echo 3 ;; critical) echo 4 ;; *) echo 0 ;;
+          esac
+        }
+        min=$(rank "${MIN_SEVERITY:-low}")
+        [ "$min" -eq 0 ] && min=3
+        ids=()
+        if [ -f socket-fixes.json ]; then
+          for id in $(jq -r '.fixes // {} | keys[]' socket-fixes.json 2>/dev/null); do
+            if ! sev=$(gh api "/advisories/$id" --jq .severity 2>/dev/null); then
+              echo "::warning::Could not look up severity for $id, assuming low"
+              sev="low"
+            fi
+            if [ "$(rank "$sev")" -ge "$min" ]; then
+              echo "$id: $sev -> fix"
+              ids+=("$id")
+            else
+              echo "$id: $sev -> below $MIN_SEVERITY, skip"
+            fi
+          done
+        fi
+        echo "ids=$(IFS=,; echo "${ids[*]}")" >> "$GITHUB_OUTPUT"
+        rm -f socket-fixes.json
+
+    - name: Run Socket Fix CLI
+      if: steps.filter.outputs.ids != ''
+      shell: bash
+      working-directory: ${{ inputs.project-dir }}
+      env:
+        SOCKET_CLI_GITHUB_TOKEN: ${{ inputs.github-token || github.token }}
+        SOCKET_CLI_GIT_USER_EMAIL: ${{ inputs.git-user-email }}
+        SOCKET_CLI_GIT_USER_NAME: ${{ inputs.git-user-name }}
+        SOCKET_CLI_API_TOKEN: ${{ inputs.socket-api-token }}
+        FIX_IDS: ${{ steps.filter.outputs.ids }}
+        AUTOPILOT: ${{ inputs.autopilot }}
+      run: |
+        ARGS=()
+        if [ "$AUTOPILOT" = "true" ]; then
+          ARGS+=(--autopilot)
+        fi
+        socket fix --id "$FIX_IDS" "${ARGS[@]}"

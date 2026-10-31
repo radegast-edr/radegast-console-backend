@@ -16,7 +16,7 @@ from app.models.device import Device
 from app.models.user import User
 from app.schemas.user import MfaVerifyRequest, UserLogin
 from app.services.auth import verify_signed_token
-from app.utils import ensure_utc, utc_now
+from app.utils import ensure_utc, get_client_ip, utc_now
 
 
 def mfa_level_value(level: str) -> int:
@@ -250,7 +250,7 @@ async def get_current_device(
 ) -> Device:
     if session.scope != "device":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Device session required")
-    result = await db.execute(select(Device).where(Device.id == session.id))
+    result = await db.execute(select(Device).where(Device.id == session.id, Device.deleted_at.is_(None)))
     device = result.scalar_one_or_none()
     if not device:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Device not found")
@@ -280,14 +280,6 @@ RequireMaintainer = Depends(require_role("maintainer"))
 RequireAdmin = Depends(require_role("admin"))
 
 
-def _client_ip(request: Request) -> str:
-    for header in ("cf-connecting-ip", "x-real-ip", "x-forwarded-for"):
-        val = request.headers.get(header)
-        if val:
-            return val.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
-
-
 def check_rate_limit(request: Request, key: str, limit: int, window: float):
     rate_limits = request.app.state.rate_limits
 
@@ -304,19 +296,19 @@ def check_rate_limit(request: Request, key: str, limit: int, window: float):
 
 
 async def rate_limit_login(request: Request, data: UserLogin):
-    ip = _client_ip(request)
+    ip = get_client_ip(request)
     check_rate_limit(request, f"login:ip:{ip}", limit=5, window=30)
     check_rate_limit(request, f"login:email:{data.email}", limit=5, window=30)
 
 
 async def rate_limit_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
-    ip = _client_ip(request)
+    ip = get_client_ip(request)
     check_rate_limit(request, f"login:ip:{ip}", limit=5, window=30)
     check_rate_limit(request, f"login:email:{form_data.username}", limit=5, window=30)
 
 
 async def rate_limit_mfa(request: Request, data: MfaVerifyRequest):
-    ip = _client_ip(request)
+    ip = get_client_ip(request)
     check_rate_limit(request, f"mfa:ip:{ip}", limit=5, window=30)
 
     token_data = verify_signed_token(data.mfa_token, salt="mfa-login", max_age=300)
@@ -328,6 +320,6 @@ async def rate_limit_mfa(request: Request, data: MfaVerifyRequest):
 
 
 async def rate_limit_mfa_otp(request: Request, user: User = Depends(get_current_user)):
-    ip = _client_ip(request)
+    ip = get_client_ip(request)
     check_rate_limit(request, f"mfa_setup:ip:{ip}", limit=5, window=30)
     check_rate_limit(request, f"mfa_setup:user:{user.id}", limit=5, window=30)

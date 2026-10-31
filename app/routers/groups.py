@@ -113,6 +113,7 @@ def _group_detail(group: DeviceGroup, invitations: list[TeamInvitation] | None =
                 "total_space_used": d.total_space_used or 0,
             }
             for d in group.devices
+            if d.deleted_at is None
         ],
         "exclusions": [
             {
@@ -322,7 +323,7 @@ async def add_device_to_group(
     result = await db.execute(
         select(Device)
         .options(selectinload(Device.groups).selectinload(DeviceGroup.teams).selectinload(Team.users))
-        .where(Device.id == device_id)
+        .where(Device.id == device_id, Device.deleted_at.is_(None))
     )
     device = result.scalar_one_or_none()
     if not device:
@@ -372,7 +373,9 @@ async def remove_device_from_group(
     if not await _user_has_admin(group, user, db):
         raise HTTPException(status_code=403, detail="No admin permission")
 
-    result = await db.execute(select(Device).options(selectinload(Device.groups)).where(Device.id == device_id))
+    result = await db.execute(
+        select(Device).options(selectinload(Device.groups)).where(Device.id == device_id, Device.deleted_at.is_(None))
+    )
     device = result.scalar_one_or_none()
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")

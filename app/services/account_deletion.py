@@ -101,7 +101,10 @@ async def check_user_can_be_deleted(user_id: int, db: AsyncSession) -> list[str]
         result_devices = await db.execute(
             select(Device)
             .options(selectinload(Device.groups).selectinload(DeviceGroup.teams))
-            .where(Device.groups.any(DeviceGroup.teams.any(Team.id.in_(user_team_ids))))
+            .where(
+                Device.groups.any(DeviceGroup.teams.any(Team.id.in_(user_team_ids))),
+                Device.deleted_at.is_(None),
+            )
         )
         devices = result_devices.scalars().all()
 

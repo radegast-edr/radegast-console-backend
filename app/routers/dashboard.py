@@ -82,7 +82,7 @@ async def get_dashboard_data(
     devices_dict = {}
     for g in groups_dict.values():
         for d in g.devices:
-            if d.id not in devices_dict:
+            if d.deleted_at is None and d.id not in devices_dict:
                 devices_dict[d.id] = d
 
     devices_mapped = [
@@ -107,30 +107,33 @@ async def get_dashboard_data(
         team_devs = set()
         for g in team.groups:
             for d in g.devices:
-                team_devs.add(d.id)
+                if d.deleted_at is None:
+                    team_devs.add(d.id)
         team_device_counts[team.id] = len(team_devs)
 
     # Group device counts
     group_device_counts = {}
     for g in groups_dict.values():
-        group_device_counts[g.id] = len(g.devices)
+        group_device_counts[g.id] = len([d for d in g.devices if d.deleted_at is None])
 
     # Mappings
     device_groups_map = {}
     for g in groups_dict.values():
         for d in g.devices:
-            if d.id not in device_groups_map:
-                device_groups_map[d.id] = []
-            device_groups_map[d.id].append(g.name)
+            if d.deleted_at is None:
+                if d.id not in device_groups_map:
+                    device_groups_map[d.id] = []
+                device_groups_map[d.id].append(g.name)
 
     device_teams_map = {}
     for team in teams_list:
         for g in team.groups:
             for d in g.devices:
-                if d.id not in device_teams_map:
-                    device_teams_map[d.id] = []
-                if team.name not in device_teams_map[d.id]:
-                    device_teams_map[d.id].append(team.name)
+                if d.deleted_at is None:
+                    if d.id not in device_teams_map:
+                        device_teams_map[d.id] = []
+                    if team.name not in device_teams_map[d.id]:
+                        device_teams_map[d.id].append(team.name)
 
     # 3. Fetch latest 1000 logs for visible devices
     visible_device_ids = list(devices_dict.keys())

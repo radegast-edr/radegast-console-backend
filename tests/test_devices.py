@@ -142,6 +142,9 @@ class TestDeviceDeletion:
         resp = await auth_client.delete(f"/devices/{device_id}")
         assert resp.status_code == 200
 
+        resp = await auth_client.get(f"/devices/{device_id}")
+        assert resp.status_code == 404
+
     async def test_delete_nonexistent_device(self, auth_client: AsyncClient):
         resp = await auth_client.delete("/devices/99999")
         assert resp.status_code == 404

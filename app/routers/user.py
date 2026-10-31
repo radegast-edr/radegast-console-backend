@@ -69,22 +69,13 @@ from app.services.email import (
     send_recovery_used_notification,
     send_severity_changed_email,
 )
-from app.utils import ensure_utc, utc_now
+from app.utils import ensure_utc, get_client_ip, utc_now
+
+_client_ip = get_client_ip
 
 SECURE_COOKIE = settings.environment != "dev"
 
 router = APIRouter(prefix="/user", tags=["user"])
-
-
-def _client_ip(request: Request) -> str:
-    """Return the real client IP, checking CF-Connecting-IP, X-Real-IP, and X-Forwarded-For first."""
-    if "cf-connecting-ip" in request.headers:
-        return request.headers["cf-connecting-ip"]
-    if "x-real-ip" in request.headers:
-        return request.headers["x-real-ip"]
-    if "x-forwarded-for" in request.headers:
-        return request.headers["x-forwarded-for"].split(",")[0].strip()
-    return request.client.host if request.client else "127.0.0.1"
 
 
 def _normalize_origin(origin: str) -> str | None:
@@ -180,7 +171,7 @@ async def setup_keys(
     await db.commit()
 
     if user.notify_new_keys:
-        background_tasks.add_task(send_new_keys_notification, user.email, "primary", _client_ip(request))
+        background_tasks.add_task(send_new_keys_notification, user.email, "primary", get_client_ip(request))
 
     return KeySetupResponse(message="Keys set up successfully")
 
@@ -212,7 +203,7 @@ async def setup_secondary_key(
     await db.commit()
 
     if user.notify_new_keys:
-        background_tasks.add_task(send_new_keys_notification, user.email, "secondary", _client_ip(request))
+        background_tasks.add_task(send_new_keys_notification, user.email, "secondary", get_client_ip(request))
 
     return KeySetupResponse(message="Secondary key added successfully")
 
@@ -300,7 +291,7 @@ async def add_user_key(
     await db.commit()
 
     if user.notify_new_keys:
-        background_tasks.add_task(send_new_keys_notification, user.email, key_type, _client_ip(request))
+        background_tasks.add_task(send_new_keys_notification, user.email, key_type, get_client_ip(request))
 
     return KeySetupResponse(message="Key added successfully")
 
@@ -344,7 +335,7 @@ async def recover_keys(
         raise HTTPException(status_code=404, detail="No recovery keys found")
 
     if user.notify_recovery_used:
-        background_tasks.add_task(send_recovery_used_notification, user.email, _client_ip(request))
+        background_tasks.add_task(send_recovery_used_notification, user.email, get_client_ip(request))
 
     return [
         KeyRecoverResponse(
@@ -578,7 +569,7 @@ async def complete_key_transfer(
     await db.commit()
 
     if user.notify_keys_transferred:
-        background_tasks.add_task(send_keys_transferred_notification, user.email, _client_ip(request))
+        background_tasks.add_task(send_keys_transferred_notification, user.email, get_client_ip(request))
 
     return {"message": "Transfer completed"}
 

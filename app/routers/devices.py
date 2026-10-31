@@ -88,7 +88,8 @@ async def list_devices(
     for team in teams:
         for group in team.groups:
             for device in group.devices:
-                devices.add(device)
+                if device.deleted_at is None:
+                    devices.add(device)
 
     return [
         DeviceResponse(
@@ -158,7 +159,7 @@ async def get_device(
     result = await db.execute(
         select(Device)
         .options(selectinload(Device.groups).selectinload(DeviceGroup.teams).selectinload(Team.users))
-        .where(Device.id == device_id)
+        .where(Device.id == device_id, Device.deleted_at.is_(None))
     )
     device = result.scalar_one_or_none()
     if not device:
@@ -218,7 +219,9 @@ async def remove_device_from_group(
     if not has_access:
         raise HTTPException(status_code=403, detail="No admin permission on any team for this group")
 
-    result = await db.execute(select(Device).options(selectinload(Device.groups)).where(Device.id == device_id))
+    result = await db.execute(
+        select(Device).options(selectinload(Device.groups)).where(Device.id == device_id, Device.deleted_at.is_(None))
+    )
     device = result.scalar_one_or_none()
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
@@ -261,7 +264,7 @@ async def add_device_to_group(
     result = await db.execute(
         select(Device)
         .options(selectinload(Device.groups).selectinload(DeviceGroup.teams).selectinload(Team.users))
-        .where(Device.id == device_id)
+        .where(Device.id == device_id, Device.deleted_at.is_(None))
     )
     device = result.scalar_one_or_none()
     if not device:
@@ -288,7 +291,7 @@ async def rename_device(
     result = await db.execute(
         select(Device)
         .options(selectinload(Device.groups).selectinload(DeviceGroup.teams).selectinload(Team.users))
-        .where(Device.id == device_id)
+        .where(Device.id == device_id, Device.deleted_at.is_(None))
     )
     device = result.scalar_one_or_none()
     if not device:
@@ -364,7 +367,7 @@ async def reinstall_device(
     result = await db.execute(
         select(Device)
         .options(selectinload(Device.groups).selectinload(DeviceGroup.teams).selectinload(Team.users))
-        .where(Device.id == device_id)
+        .where(Device.id == device_id, Device.deleted_at.is_(None))
     )
     device = result.scalar_one_or_none()
     if not device:
@@ -392,7 +395,7 @@ async def delete_device(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Device).where(Device.id == device_id))
+    result = await db.execute(select(Device).where(Device.id == device_id, Device.deleted_at.is_(None)))
     device = result.scalar_one_or_none()
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
@@ -400,6 +403,6 @@ async def delete_device(
     if not await has_device_admin_permission(device_id, user.id, db):
         raise HTTPException(status_code=403, detail="No admin permission")
 
-    await db.delete(device)
+    device.deleted_at = utc_now()
     await db.commit()
     return {"message": "Device deleted"}

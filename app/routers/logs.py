@@ -201,7 +201,8 @@ async def mark_all_logs_seen(
     for team in teams:
         for group in team.groups:
             for device in group.devices:
-                visible_device_ids.add(device.id)
+                if device.deleted_at is None:
+                    visible_device_ids.add(device.id)
 
     if not visible_device_ids:
         return {"message": "No logs to mark as seen"}
@@ -469,7 +470,8 @@ async def get_log_device_keys_for_triage(
     for team in teams:
         for group in team.groups:
             for device in group.devices:
-                visible_device_ids.add(device.id)
+                if device.deleted_at is None:
+                    visible_device_ids.add(device.id)
 
     if log.device_id not in visible_device_ids:
         raise HTTPException(status_code=403, detail="No log permission for this device")

@@ -488,7 +488,8 @@ async def list_team_devices(
     seen: dict[int, Device] = {}
     for g in groups:
         for d in g.devices:
-            seen[d.id] = d
+            if d.deleted_at is None:
+                seen[d.id] = d
     return [
         DeviceResponse(
             id=d.id,

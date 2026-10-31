@@ -25,6 +25,8 @@ from app.services.auth import create_signed_token
 settings.enable_email_worker = False
 # Disable space usage worker for tests
 settings.enable_space_usage_worker = False
+# Disable device deletion worker for tests
+settings.enable_device_deletion_worker = False
 # Disable secure cookies for tests
 auth_router.SECURE_COOKIE = False
 user_router.SECURE_COOKIE = False

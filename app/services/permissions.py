@@ -91,7 +91,9 @@ async def get_team_members_transitive(team_id: int, db: AsyncSession) -> set[int
 async def has_device_admin_permission(device_id: int, user_id: int, db: AsyncSession) -> bool:
     """Check transitively if the user has admin permission on the device (by checking its groups/teams)."""
     result = await db.execute(
-        select(Device).options(selectinload(Device.groups).selectinload(DeviceGroup.teams)).where(Device.id == device_id)
+        select(Device)
+        .options(selectinload(Device.groups).selectinload(DeviceGroup.teams))
+        .where(Device.id == device_id, Device.deleted_at.is_(None))
     )
     device = result.scalar_one_or_none()
     if not device:
@@ -146,7 +148,7 @@ async def get_device_encryption_keys_list(device_id: int, db: AsyncSession) -> l
     result = await db.execute(
         select(Device)
         .options(selectinload(Device.groups).selectinload(DeviceGroup.teams).selectinload(Team.users))
-        .where(Device.id == device_id)
+        .where(Device.id == device_id, Device.deleted_at.is_(None))
     )
     device = result.scalar_one_or_none()
     if not device:

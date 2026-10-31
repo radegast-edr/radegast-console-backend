@@ -22,6 +22,7 @@ class Device(Base):
     rustinel_version: Mapped[str | None] = mapped_column(String(255), nullable=True)
     os: Mapped[str | None] = mapped_column(String(50), nullable=True)
     total_space_used: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None, index=True)
 
     groups = relationship("DeviceGroup", secondary=device_group_devices, back_populates="devices")
     logs = relationship("Log", back_populates="device", cascade="all, delete-orphan")

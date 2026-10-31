@@ -43,7 +43,8 @@ async def get_visible_device_ids(user: User, db: AsyncSession) -> set[int]:
     for team in teams:
         for group in team.groups:
             for device in group.devices:
-                visible_device_ids.add(device.id)
+                if device.deleted_at is None:
+                    visible_device_ids.add(device.id)
     return visible_device_ids
 
 

@@ -60,20 +60,13 @@ from app.services.email import (
     send_verification_email,
 )
 from app.services.permissions import mark_team_groups_refresh
-from app.utils import ensure_utc, utc_now
+from app.utils import ensure_utc, get_client_ip, utc_now
+
+_client_ip = get_client_ip
 
 SECURE_COOKIE = settings.environment != "dev"
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-
-def _client_ip(request: Request) -> str:
-    """Return the real client IP, checking CF-Connecting-IP, X-Real-IP, and X-Forwarded-For first."""
-    for header in ("cf-connecting-ip", "x-real-ip", "x-forwarded-for"):
-        val = request.headers.get(header)
-        if val:
-            return val.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
 
 
 def _normalize_origin(origin: str) -> str | None:
@@ -153,7 +146,7 @@ async def _verify_turnstile(token: str | None, remote_ip: str) -> None:
 
 @router.post("/register", response_model=UserResponse)
 async def register(data: UserRegister, request: Request, db: AsyncSession = Depends(get_db)):
-    ip = _client_ip(request)
+    ip = get_client_ip(request)
     await _verify_turnstile(data.turnstile_token, ip)
     existing: User | None = (await db.execute(select(User).where(User.email == data.email))).scalar_one_or_none()
     if existing:
@@ -331,7 +324,7 @@ async def login(
         background_tasks.add_task(send_account_deletion_cancelled_email, user.email)
 
     if user.notify_login:
-        background_tasks.add_task(send_login_notification, user.email, _client_ip(request))
+        background_tasks.add_task(send_login_notification, user.email, get_client_ip(request))
 
     await db.commit()
     return {"message": "Login successful", "user_id": user.id, "deletion_cancelled": deletion_cancelled}
@@ -347,7 +340,7 @@ async def logout(response: Response):
 @router.post("/device/login")
 async def device_login(data: DeviceLogin, response: Response, db: AsyncSession = Depends(get_db)):
     token_hash = hash_token(data.token)
-    result = await db.execute(select(Device).where(Device.token == token_hash))
+    result = await db.execute(select(Device).where(Device.token == token_hash, Device.deleted_at.is_(None)))
     device = result.scalar_one_or_none()
     if not device:
         raise HTTPException(status_code=401, detail="Invalid device token")
@@ -550,7 +543,7 @@ async def mfa_verify(
         background_tasks.add_task(send_account_deletion_cancelled_email, user.email)
 
     if user.notify_login:
-        background_tasks.add_task(send_login_notification, user.email, _client_ip(request))
+        background_tasks.add_task(send_login_notification, user.email, get_client_ip(request))
 
     await db.commit()
     return {"message": "Login successful", "user_id": user.id, "deletion_cancelled": deletion_cancelled}
@@ -570,7 +563,7 @@ async def request_password_reset(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    ip = _client_ip(request)
+    ip = get_client_ip(request)
     await _verify_turnstile(data.turnstile_token, ip)
 
     # Rate limit: IP and Email
@@ -593,7 +586,7 @@ async def confirm_password_reset(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    ip = _client_ip(request)
+    ip = get_client_ip(request)
     check_rate_limit(request, f"password_reset_confirm:ip:{ip}", limit=1, window=180)
 
     token_data = verify_signed_token(data.token, salt="password-reset", max_age=3600)

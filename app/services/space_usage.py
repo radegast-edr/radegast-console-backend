@@ -27,6 +27,7 @@ async def compute_device_group_space_usage(session: AsyncSession) -> None:
             func.coalesce(func.sum(Device.total_space_used), 0),
         )
         .join(Device, Device.id == device_group_devices.c.device_id)
+        .where(Device.deleted_at.is_(None))
         .group_by(device_group_devices.c.device_group_id)
     )
     group_usage_map = dict(res.all())
@@ -79,6 +80,7 @@ async def compute_team_space_usage(session: AsyncSession) -> None:
 
         res_devices = await session.execute(
             select(func.coalesce(func.sum(Device.total_space_used), 0)).where(
+                Device.deleted_at.is_(None),
                 Device.id.in_(
                     select(device_group_devices.c.device_id)
                     .join(
@@ -86,7 +88,7 @@ async def compute_team_space_usage(session: AsyncSession) -> None:
                         team_device_groups.c.device_group_id == device_group_devices.c.device_group_id,
                     )
                     .where(team_device_groups.c.team_id.in_(family_team_ids))
-                )
+                ),
             )
         )
         team_usage = int(res_devices.scalar() or 0)
@@ -135,6 +137,7 @@ async def compute_user_space_usage(session: AsyncSession) -> None:
 
         res_user_devices = await session.execute(
             select(func.coalesce(func.sum(Device.total_space_used), 0)).where(
+                Device.deleted_at.is_(None),
                 Device.id.in_(
                     select(device_group_devices.c.device_id)
                     .join(
@@ -142,7 +145,7 @@ async def compute_user_space_usage(session: AsyncSession) -> None:
                         team_device_groups.c.device_group_id == device_group_devices.c.device_group_id,
                     )
                     .where(team_device_groups.c.team_id.in_(user_family_team_ids))
-                )
+                ),
             )
         )
         user_usage = int(res_user_devices.scalar() or 0)

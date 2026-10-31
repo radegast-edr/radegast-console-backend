@@ -34,6 +34,7 @@ from app.routers import (
 )
 from app.schemas.health import HealthResponse
 from app.services.account_deletion import process_account_deletions_loop
+from app.services.device_deletion import process_deleted_devices_loop
 from app.services.email import process_email_queue_loop
 from app.services.space_usage import process_space_usage_loop
 
@@ -50,11 +51,14 @@ async def lifespan(_app: FastAPI):
     email_task = None
     deletion_task = None
     space_task = None
+    device_deletion_task = None
     if settings.enable_email_worker:
         email_task = asyncio.create_task(process_email_queue_loop())
         deletion_task = asyncio.create_task(process_account_deletions_loop())
     if settings.enable_space_usage_worker:
         space_task = asyncio.create_task(process_space_usage_loop())
+    if settings.enable_device_deletion_worker:
+        device_deletion_task = asyncio.create_task(process_deleted_devices_loop())
 
     try:
         yield
@@ -75,6 +79,12 @@ async def lifespan(_app: FastAPI):
             space_task.cancel()
             try:
                 await space_task
+            except asyncio.CancelledError:
+                pass
+        if device_deletion_task:
+            device_deletion_task.cancel()
+            try:
+                await device_deletion_task
             except asyncio.CancelledError:
                 pass
 

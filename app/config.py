@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     account_deletion_grace_days: int = 14
     enable_space_usage_worker: bool = True
     space_usage_interval_minutes: int = 15
+    enable_device_deletion_worker: bool = True
+    device_deletion_interval_minutes: int = 15
 
     model_config = {"env_prefix": "radegast_"}
 

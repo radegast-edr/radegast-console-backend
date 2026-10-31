@@ -126,7 +126,7 @@ async def list_all_devices(
     db: AsyncSession = Depends(get_db),
 ):
     _require_admin(user)
-    result = await db.execute(select(Device))
+    result = await db.execute(select(Device).where(Device.deleted_at.is_(None)))
     return result.scalars().all()
 
 
@@ -137,12 +137,12 @@ async def admin_delete_device(
     db: AsyncSession = Depends(get_db),
 ):
     _require_admin(user)
-    result = await db.execute(select(Device).where(Device.id == device_id))
+    result = await db.execute(select(Device).where(Device.id == device_id, Device.deleted_at.is_(None)))
     device = result.scalar_one_or_none()
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
 
-    await db.delete(device)
+    device.deleted_at = utc_now()
     await db.commit()
     return {"message": "Device deleted"}
 
@@ -215,7 +215,7 @@ def _build_alert_stat_clauses(
     alert_resolution: list[str] | None,
 ) -> list:
     """Return a list of SQLAlchemy WHERE clauses shared by all alert-stat queries."""
-    clauses: list = []
+    clauses: list = [Log.device_id.in_(select(Device.id).where(Device.deleted_at.is_(None)))]
     if from_time:
         clauses.append(Log.time >= ensure_utc(from_time).replace(tzinfo=None))
     if to_time:
@@ -334,7 +334,15 @@ async def get_admin_alert_rule_ids(
     db: AsyncSession = Depends(get_db),
 ):
     _require_admin(user)
-    result = await db.execute(select(Log.rule_id).where(Log.rule_id.isnot(None)).distinct().order_by(Log.rule_id))
+    result = await db.execute(
+        select(Log.rule_id)
+        .where(
+            Log.rule_id.isnot(None),
+            Log.device_id.in_(select(Device.id).where(Device.deleted_at.is_(None))),
+        )
+        .distinct()
+        .order_by(Log.rule_id)
+    )
     return [row[0] for row in result.all()]
 
 
@@ -379,7 +387,7 @@ async def get_admin_device_filter_options(
 ):
     _require_admin(user)
 
-    result = await db.execute(select(Device))
+    result = await db.execute(select(Device).where(Device.deleted_at.is_(None)))
     devices = result.scalars().all()
 
     agent_versions: set[str] = set()
@@ -414,7 +422,7 @@ async def get_admin_device_stats(
 ):
     _require_admin(user)
 
-    result = await db.execute(select(Device))
+    result = await db.execute(select(Device).where(Device.deleted_at.is_(None)))
     devices = result.scalars().all()
 
     agent_distribution = {}

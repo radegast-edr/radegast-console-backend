@@ -117,7 +117,7 @@ async def find_and_cache_triggered_rule(
     result = await db.execute(
         select(Device)
         .options(selectinload(Device.groups).selectinload(DeviceGroup.packs).selectinload(PackEnabled.pack_version))
-        .where(Device.id == device.id)
+        .where(Device.id == device.id, Device.deleted_at.is_(None))
     )
     dev = result.scalar_one_or_none()
     if dev is None:

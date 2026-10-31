@@ -319,12 +319,16 @@ async def send_email_direct(to: str, subject: str, html_body: str, email_type: s
     If you no longer wish to receive {pref_name.lower()}, you can
     <a href="{unsubscribe_url}" style="color: #0066cc; text-decoration: none;">unsubscribe here</a>.
 </div>"""
-        if "</body>" in html_body:
-            html_body = html_body.replace("</body>", f"{footer_html}</body>")
-        elif "</BODY>" in html_body:
-            html_body = html_body.replace("</BODY>", f"{footer_html}</BODY>")
-        else:
-            html_body += footer_html
+        footer_pattern = r"margin-top:\s*40px;\s*padding-top:\s*20px;\s*border-top:\s*1px solid #eee;"
+        if not re.search(footer_pattern, html_body, re.IGNORECASE):
+            if "</body>" in html_body:
+                parts = html_body.rsplit("</body>", 1)
+                html_body = f"{footer_html}</body>".join(parts)
+            elif "</BODY>" in html_body:
+                parts = html_body.rsplit("</BODY>", 1)
+                html_body = f"{footer_html}</BODY>".join(parts)
+            else:
+                html_body += footer_html
 
     msg = MIMEText(html_body, "html")
     msg["From"] = settings.smtp_from
@@ -644,14 +648,65 @@ async def send_password_reset_email(email: str, new_password: str):
     await send_email(email, "Your Radegast EDR password has been reset", html, email_type="verify")
 
 
+ALERT_CRITICALITY_ORDER = {
+    LogSeverity.critical.value: 5,
+    LogSeverity.high.value: 4,
+    LogSeverity.medium.value: 3,
+    LogSeverity.low.value: 2,
+    LogSeverity.informational.value: 1,
+}
+
+
+def get_alert_criticality(email: QueuedEmail) -> int:
+    """Extract criticality score for an alert email. Higher value means higher criticality."""
+    subject = email.subject or ""
+    # Check [SEVERITY] in subject (e.g. New Alert [HIGH] ...)
+    match = re.search(r"\[(critical|high|medium|low|informational)\]", subject, re.IGNORECASE)
+    if match:
+        return ALERT_CRITICALITY_ORDER.get(match.group(1).lower(), 0)
+
+    # Check html_body for Severity: <strong>...</strong> or [SEVERITY]
+    body = email.html_body or ""
+    match = re.search(r"Severity:\s*<strong>\s*(critical|high|medium|low|informational)\s*</strong>", body, re.IGNORECASE)
+    if match:
+        return ALERT_CRITICALITY_ORDER.get(match.group(1).lower(), 0)
+
+    match = re.search(r"\[(critical|high|medium|low|informational)\]", body, re.IGNORECASE)
+    if match:
+        return ALERT_CRITICALITY_ORDER.get(match.group(1).lower(), 0)
+
+    # Fallback to word boundary in subject
+    match = re.search(r"\b(critical|high|medium|low|informational)\b", subject, re.IGNORECASE)
+    if match:
+        return ALERT_CRITICALITY_ORDER.get(match.group(1).lower(), 0)
+
+    return 0
+
+
+def is_alert_notification(email_type: str, emails: list[QueuedEmail]) -> bool:
+    """Determine whether a batch of emails is about device alerts."""
+    if email_type in ("device_log", "alert", "alerts"):
+        return True
+    return any(get_alert_criticality(e) > 0 for e in emails)
+
+
 def combine_html_bodies(html_bodies: list[str]) -> str:
     extracted_bodies = []
     for html in html_bodies:
-        match = re.search(r"<body>(.*?)</body>", html, re.DOTALL | re.IGNORECASE)
+        match = re.search(r"<body[^>]*>(.*?)</body>", html, re.DOTALL | re.IGNORECASE)
         if match:
-            extracted_bodies.append(match.group(1).strip())
+            content = match.group(1).strip()
         else:
-            extracted_bodies.append(html.strip())
+            content = html.strip()
+
+        # Remove any existing unsubscribe footer from the extracted content to avoid duplication
+        content = re.sub(
+            r'<div style="margin-top: 40px;\s*padding-top: 20px;\s*border-top: 1px solid #eee;.*?</div>',
+            "",
+            content,
+            flags=re.DOTALL | re.IGNORECASE,
+        ).strip()
+        extracted_bodies.append(content)
 
     divider = '<hr style="border: 0; border-top: 1px solid #ccc; margin: 30px 0;" />'
     combined_content = divider.join(extracted_bodies)
@@ -698,9 +753,8 @@ async def process_email_queue():
                 )
                 session.add(state)
 
-            oldest_email = emails[0]
-            oldest_created = oldest_email.created_at
-            oldest_created = ensure_utc(oldest_created)
+            oldest_email = min(emails, key=lambda e: ensure_utc(e.created_at))
+            oldest_created = ensure_utc(oldest_email.created_at)
 
             if state.last_sent_at is not None:
                 last_sent_utc = ensure_utc(state.last_sent_at)
@@ -717,6 +771,9 @@ async def process_email_queue():
 
             if now - oldest_created >= debounce_limit:
                 event_count = len(emails)
+
+                if is_alert_notification(email_type, emails):
+                    emails.sort(key=get_alert_criticality, reverse=True)
 
                 next_index = state.sent_count + 1
                 if next_index < len(intervals):
@@ -738,7 +795,8 @@ async def process_email_queue():
                     header_html = ""
 
                 if event_count > 1:
-                    subject = f"[Bulk] {emails[0].subject}"
+                    clean_subject = re.sub(r"^(\[(BULK|Bulk)\](\s*\[x\d+\])?\s*)+", "", emails[0].subject)
+                    subject = f"[BULK] [x{event_count}] {clean_subject}"
                 else:
                     subject = emails[0].subject
                 html_bodies = [e.html_body for e in emails]
@@ -746,9 +804,9 @@ async def process_email_queue():
 
                 body_tag = '<body style="font-family: sans-serif; padding: 20px; line-height: 1.6; color: #333;">'
                 if body_tag in combined_body:
-                    combined_body = combined_body.replace(body_tag, f"{body_tag}{header_html}")
+                    combined_body = combined_body.replace(body_tag, f"{body_tag}{header_html}", 1)
                 elif "<body>" in combined_body:
-                    combined_body = combined_body.replace("<body>", f"<body>{header_html}")
+                    combined_body = combined_body.replace("<body>", f"<body>{header_html}", 1)
                 else:
                     combined_body = header_html + combined_body
 

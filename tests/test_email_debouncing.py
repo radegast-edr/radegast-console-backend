@@ -7,9 +7,13 @@ from sqlalchemy import select
 from app.config import settings
 from app.models.email_bulk_state import EmailBulkState
 from app.models.queued_email import QueuedEmail
+from app.models.user import User, UserRole
 from app.services.email import (
+    combine_html_bodies,
     process_email_queue,
+    send_device_log_notification,
     send_login_notification,
+    send_release_uploaded_notification,
     send_verification_email,
 )
 
@@ -102,7 +106,7 @@ async def test_bulk_email_grouping_and_combining(db_session):
             mock_direct.assert_called_once()
             to_email, subject, html_body, *_rest = mock_direct.call_args[0]
             assert to_email == "bulk@example.com"
-            assert subject.startswith("[Bulk]")
+            assert subject.startswith("[BULK] [x3]")
             assert "New Login Alert" in subject
             assert "192.168.1.1" in html_body
             assert "192.168.1.2" in html_body
@@ -176,7 +180,7 @@ async def test_email_bulking_progression_headers_and_limit(db_session):
                 mock_direct.assert_called_once()
                 to_email, subject, html_body, *_rest = mock_direct.call_args[0]
                 assert to_email == "test_bulk@example.com"
-                assert "[Bulk]" not in subject
+                assert "[BULK]" not in subject and "[Bulk]" not in subject
                 assert f"10.0.0.{i}" in html_body
                 # Check next interval text in the body
                 if i + 1 < len(intervals):
@@ -291,9 +295,9 @@ async def test_bulk_subject_prefix_depends_on_count(db_session):
             mock_direct.assert_called_once()
             to_email, subject, _html_body, *_rest = mock_direct.call_args[0]
             assert to_email == "single@example.com"
-            assert "[Bulk]" not in subject
+            assert "[BULK]" not in subject and "[Bulk]" not in subject
 
-        # 2. Multiple emails in queue -> [Bulk] prefix
+        # 2. Multiple emails in queue -> [BULK] [x<num>] prefix
         with patch("app.services.email.send_email_direct", new_callable=AsyncMock) as mock_direct:
             await send_login_notification("multi@example.com", "192.168.1.1")
             await send_login_notification("multi@example.com", "192.168.1.2")
@@ -308,7 +312,185 @@ async def test_bulk_subject_prefix_depends_on_count(db_session):
             mock_direct.assert_called_once()
             to_email, subject, _html_body, *_rest = mock_direct.call_args[0]
             assert to_email == "multi@example.com"
-            assert subject.startswith("[Bulk]")
+            assert subject.startswith("[BULK] [x2]")
 
     finally:
         settings.email_debounce_seconds = original_debounce
+
+
+@pytest.mark.asyncio
+async def test_upload_release_bulk_email_single_footer(db_session):
+    """Test that multiple uploaded release emails combined in bulk include the footer only once."""
+    original_debounce = settings.email_debounce_seconds
+    settings.email_debounce_seconds = 180
+
+    try:
+        # Create an admin user with notify_admin_notifications enabled
+        admin_user = User(
+            email="admin_release@example.com",
+            role=UserRole.admin,
+            notify_admin_notifications=True,
+            password="fakehash",
+        )
+        db_session.add(admin_user)
+        await db_session.commit()
+
+        # Queue 3 release upload notifications for this admin
+        await send_release_uploaded_notification("1.0.0", "linux", "amd64", "uploader@example.com")
+        await send_release_uploaded_notification("1.1.0", "windows", "amd64", "uploader@example.com")
+        await send_release_uploaded_notification("1.2.0", "mac", "amd64", "uploader@example.com")
+
+        # Verify they are queued
+        result = await db_session.execute(select(QueuedEmail).where(QueuedEmail.email_to == "admin_release@example.com"))
+        queued = result.scalars().all()
+        assert len(queued) == 3
+
+        # Expire debounce
+        for q in queued:
+            q.created_at = datetime.now(tz=UTC) - timedelta(minutes=4)
+        await db_session.commit()
+
+        # Process email queue with smtp_host enabled
+        orig_smtp_host = settings.smtp_host
+        settings.smtp_host = "smtp.example.com"
+        try:
+            with patch("app.services.email.aiosmtplib.send", new_callable=AsyncMock) as mock_send:
+                await process_email_queue()
+
+                mock_send.assert_called_once()
+                msg = mock_send.call_args[0][0]
+                to_email = msg["To"]
+                subject = msg["Subject"]
+                final_html = msg.get_payload(decode=True).decode("utf-8")
+
+                assert to_email == "admin_release@example.com"
+                assert subject.startswith("[BULK] [x3]")
+                assert "[Radegast EDR] New Rustinel Release Uploaded" in subject
+                assert "1.0.0" in final_html
+                assert "1.1.0" in final_html
+                assert "1.2.0" in final_html
+
+                # Check footer only appears once in the entire email
+                assert final_html.count("unsubscribe here") == 1
+                assert final_html.count("If you no longer wish to receive admin notifications") == 1
+                # Check closing body tag appears only once
+                assert final_html.lower().count("</body>") == 1
+        finally:
+            settings.smtp_host = orig_smtp_host
+    finally:
+        settings.email_debounce_seconds = original_debounce
+
+
+@pytest.mark.asyncio
+async def test_bulk_alerts_sorted_by_criticality(db_session):
+    """Test that alert bulk emails sort alerts by criticality: critical -> high -> medium -> low -> informational."""
+    original_debounce = settings.email_debounce_seconds
+    settings.email_debounce_seconds = 180
+
+    try:
+        user_email = "sec_analyst@example.com"
+        # Queue alerts in non-critical order: low, informational, critical, medium, high
+        await send_device_log_notification(user_email, "device-low", 1, severity="low")
+        await send_device_log_notification(user_email, "device-info", 2, severity="informational")
+        await send_device_log_notification(user_email, "device-crit", 3, severity="critical")
+        await send_device_log_notification(user_email, "device-med", 4, severity="medium")
+        await send_device_log_notification(user_email, "device-high", 5, severity="high")
+
+        result = await db_session.execute(select(QueuedEmail).where(QueuedEmail.email_to == user_email))
+        queued = result.scalars().all()
+        assert len(queued) == 5
+
+        # Expire debounce
+        for q in queued:
+            q.created_at = datetime.now(tz=UTC) - timedelta(minutes=4)
+        await db_session.commit()
+
+        with patch("app.services.email.send_email_direct", new_callable=AsyncMock) as mock_direct:
+            await process_email_queue()
+
+            mock_direct.assert_called_once()
+            to_email, subject, html_body, *_rest = mock_direct.call_args[0]
+            assert to_email == user_email
+            # Subject should feature the most critical alert
+            assert subject.startswith("[BULK] [x5]")
+            assert "New Alert [CRITICAL] from device-crit" in subject
+
+            # Check order of appearance in html_body
+            pos_crit = html_body.find("device-crit")
+            pos_high = html_body.find("device-high")
+            pos_med = html_body.find("device-med")
+            pos_low = html_body.find("device-low")
+            pos_info = html_body.find("device-info")
+
+            assert pos_crit != -1
+            assert pos_high != -1
+            assert pos_med != -1
+            assert pos_low != -1
+            assert pos_info != -1
+
+            assert pos_crit < pos_high < pos_med < pos_low < pos_info
+    finally:
+        settings.email_debounce_seconds = original_debounce
+
+
+@pytest.mark.asyncio
+async def test_bulk_alerts_stable_order_same_criticality(db_session):
+    """Test that alerts with the same criticality maintain stable chronological order."""
+    original_debounce = settings.email_debounce_seconds
+    settings.email_debounce_seconds = 180
+
+    try:
+        user_email = "stable_test@example.com"
+        # Queue first high, then critical, then second high
+        await send_device_log_notification(user_email, "device-high-1", 10, severity="high")
+        await send_device_log_notification(user_email, "device-crit", 11, severity="critical")
+        await send_device_log_notification(user_email, "device-high-2", 12, severity="high")
+
+        result = await db_session.execute(select(QueuedEmail).where(QueuedEmail.email_to == user_email))
+        queued = result.scalars().all()
+        assert len(queued) == 3
+
+        for q in queued:
+            q.created_at = datetime.now(tz=UTC) - timedelta(minutes=4)
+        await db_session.commit()
+
+        with patch("app.services.email.send_email_direct", new_callable=AsyncMock) as mock_direct:
+            await process_email_queue()
+
+            mock_direct.assert_called_once()
+            _to_email, subject, html_body, *_rest = mock_direct.call_args[0]
+            assert subject.startswith("[BULK] [x3]")
+            assert "New Alert [CRITICAL]" in subject
+
+            pos_crit = html_body.find("device-crit")
+            pos_high_1 = html_body.find("device-high-1")
+            pos_high_2 = html_body.find("device-high-2")
+
+            assert pos_crit < pos_high_1 < pos_high_2
+    finally:
+        settings.email_debounce_seconds = original_debounce
+
+
+def test_combine_html_bodies_strips_body_tags_and_duplicate_footers():
+    """Unit test combine_html_bodies to ensure body tags with attributes and duplicate footers are stripped."""
+    part1 = """<html>
+<body style="font-family: sans-serif; padding: 20px;">
+<h2>Event 1</h2>
+<div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center;">
+    Unsubscribe footer
+</div>
+</body>
+</html>"""
+    part2 = """<html>
+<body>
+<h2>Event 2</h2>
+</body>
+</html>"""
+
+    combined = combine_html_bodies([part1, part2])
+    assert combined.lower().count("<body") == 1
+    assert combined.lower().count("</body>") == 1
+    assert "Unsubscribe footer" not in combined
+    assert "Event 1" in combined
+    assert "Event 2" in combined
+    assert '<hr style="border: 0; border-top: 1px solid #ccc; margin: 30px 0;" />' in combined

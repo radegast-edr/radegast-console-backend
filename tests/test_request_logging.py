@@ -50,3 +50,29 @@ async def test_request_logging_includes_session_label(client, scope, session_id,
     finally:
         if hasattr(app.state, "request_log_messages"):
             delattr(app.state, "request_log_messages")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "headers,expected",
+    [
+        ({"CF-Connecting-IP": "203.0.113.7"}, "203.0.113.7"),
+        ({"X-Forwarded-For": "198.51.100.4, 10.89.0.2"}, "198.51.100.4"),
+        ({}, None),
+    ],
+)
+async def test_request_logging_uses_proxy_headers(client, headers, expected):
+    app.state.request_log_messages = []
+
+    try:
+        resp = await client.get("/api/v1/health", headers=headers)
+        assert resp.status_code == 200
+
+        message = app.state.request_log_messages[-1]
+        if expected:
+            assert message.startswith(f"{expected}:")
+        else:
+            assert not message.startswith(("203.0.113.7", "198.51.100.4"))
+    finally:
+        if hasattr(app.state, "request_log_messages"):
+            delattr(app.state, "request_log_messages")

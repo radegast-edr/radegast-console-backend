@@ -6,6 +6,7 @@ from starlette.requests import Request
 
 from app.config import settings
 from app.middleware.session import parse_session_cookie
+from app.utils import get_client_ip
 
 logger = logging.getLogger("radegast.access")
 logger.setLevel(logging.INFO)
@@ -30,7 +31,7 @@ def get_request_session_label(request: Request) -> str:
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        client_host = request.client.host if request.client else "unknown"
+        client_host = get_client_ip(request)
         client_port = request.client.port if request.client else 0
         http_version = request.scope.get("http_version", "1.1")
         session_label = get_request_session_label(request)

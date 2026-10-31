@@ -78,11 +78,15 @@ When making API requests, include your API key in the Authorization header:
 
 ```bash
 # Example using curl
-curl -X GET "https://your-radegast-server.com/api/v1/logs" \
+curl -X GET "https://your-radegast-server.com/api/v1/logs/" \
   -H "Authorization: Bearer rg_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 ```
 
 **Note**: All API keys start with `rg_` followed by 32 characters.
+
+You can see the full API at [https://console-api.radegast.app/docs#/](https://console-api.radegast.app/docs#/) (or at `/docs` on your self-hosted instance).
+
+**Note**: The FastAPI docs are missing some endpoints (e.g. `/logs`). Refer to this guide and the scopes below for endpoints and usage not listed in the interactive documentation.
 
 ### Understanding Scopes
 

@@ -202,3 +202,8 @@ All settings are controlled via environment variables prefixed with `RADEGAST_` 
 | `RADEGAST_PACK_MAX_SIZE_MB_ADMIN`        | N        | _(none)_                            | Maximum pack zip size in MB for admin accounts. Falls back to `RADEGAST_PACK_MAX_SIZE_MB` if unset.                                                |
 | `RADEGAST_AGENT_PACKAGE`                 | N        | `radegast-edr-agent`                | Target package/source from which the agent should be installed via `uv` (e.g., package name or directory/git path)                                 |
 | `RADEGAST_ACCOUNT_DELETION_GRACE_DAYS`   | N        | `14`                                | Number of days after confirmation before an account is permanently deleted. Logging in during this period cancels the deletion.                    |
+
+
+## AI Usage Disclosure
+
+The code in this repository was heavily assisted by using GenAI tools. However, every commit is 100 % human made and reviewed. We know that this is a repository for security tool and for that reason we take the code security very seriously, including following all security best-practices during local development.

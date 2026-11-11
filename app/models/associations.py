@@ -32,6 +32,19 @@ device_group_devices = Table(
 )
 
 
+exclusion_device_groups = Table(
+    "exclusion_device_groups",
+    Base.metadata,
+    Column("exclusion_id", ForeignKey("exclusions.id", ondelete="CASCADE"), primary_key=True),
+    Column(
+        "device_group_id",
+        ForeignKey("device_groups.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    ),
+)
+
+
 pack_teams = Table(
     "pack_teams",
     Base.metadata,

@@ -141,15 +141,17 @@ def seed_database(db_path: Path):
             await session.execute(team_device_groups.insert().values(team_id=infra_team.id, device_group_id=prod_group.id))
 
             # Exclusions
+            # The backup exclusion is shared by both groups (reusable exclusions)
             excl1 = Exclusion(
-                device_group_id=prod_group.id,
+                device_groups=[prod_group, dev_group],
                 name="Ignore Scheduled Backup Cron",
                 description="Suppress alerts from periodic backup script",
                 jsonata_query="process.executable = '/usr/bin/rsync'",
                 exclusion_type="hard",
+                updated_by_user_id=admin_user.id,
             )
             excl2 = Exclusion(
-                device_group_id=prod_group.id,
+                device_groups=[prod_group],
                 name="Allow Local Test Runner",
                 description="Downgrade test runners to informational",
                 jsonata_query="process.command_line ~> /pytest/",

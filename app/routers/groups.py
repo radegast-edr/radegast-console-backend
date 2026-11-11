@@ -9,6 +9,7 @@ from app.dependencies import get_current_user
 from app.models.associations import team_device_groups
 from app.models.device import Device
 from app.models.device_group import DeviceGroup
+from app.models.exclusion import Exclusion
 from app.models.team import Team
 from app.models.team_invitation import TeamInvitation
 from app.models.user import User
@@ -24,6 +25,7 @@ from app.schemas.team import (
     TeamResponse,
 )
 from app.services.email import send_group_response_changed_notification
+from app.services.exclusions import ExclusionAccess, build_responses, detach_group_exclusions
 from app.services.permissions import (
     get_group_recipient_public_keys,
     get_team_members_transitive,
@@ -115,20 +117,8 @@ def _group_detail(group: DeviceGroup, invitations: list[TeamInvitation] | None =
             for d in group.devices
             if d.deleted_at is None
         ],
-        "exclusions": [
-            {
-                "id": e.id,
-                "device_group_id": e.device_group_id,
-                "name": e.name,
-                "description": e.description,
-                "jsonata_query": e.jsonata_query,
-                "created_at": e.created_at,
-                "alert_id": e.alert_id,
-                "exclusion_type": e.exclusion_type,
-                "encrypted": e.encrypted,
-            }
-            for e in group.exclusions
-        ],
+        # Filled in by the caller (needs async permission checks), see get_group.
+        "exclusions": [],
         "prevention_allowlists": [
             {
                 "id": p.id,
@@ -207,7 +197,8 @@ async def get_group(
         .options(
             selectinload(DeviceGroup.teams).selectinload(Team.users),
             selectinload(DeviceGroup.devices),
-            selectinload(DeviceGroup.exclusions),
+            selectinload(DeviceGroup.exclusions).selectinload(Exclusion.device_groups).selectinload(DeviceGroup.teams),
+            selectinload(DeviceGroup.exclusions).selectinload(Exclusion.updated_by),
             selectinload(DeviceGroup.prevention_allowlists),
         )
         .where(DeviceGroup.id == group_id)
@@ -232,6 +223,8 @@ async def get_group(
 
     has_pack_write = await has_group_pack_write_permission(group.id, user.id, db)
     detail_dict = _group_detail(group, invitations)
+    exclusions = sorted(group.exclusions, key=lambda e: e.id)
+    detail_dict["exclusions"] = await build_responses(exclusions, ExclusionAccess(user, db), context_group_id=group.id)
     detail_dict["user_has_pack_write"] = has_pack_write
     detail_dict["user_has_admin"] = await has_group_admin_permission(group.id, user.id, db)
     return detail_dict
@@ -454,6 +447,7 @@ async def delete_group(
     if not await _user_has_admin(group, user, db):
         raise HTTPException(status_code=403, detail="No admin permission")
 
+    await detach_group_exclusions(group.id, db, actor_user_id=user.id)
     await db.delete(group)
     await db.commit()
     return {"message": "Group deleted successfully"}

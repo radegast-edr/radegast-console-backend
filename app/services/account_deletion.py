@@ -16,6 +16,7 @@ from app.models.pack_enabled import PackEnabled
 from app.models.queued_email import QueuedEmail
 from app.models.team import Team
 from app.models.user import User
+from app.services.exclusions import detach_group_exclusions
 from app.services.packs import delete_pack_files
 from app.services.permissions import (
     get_team_members_transitive,
@@ -291,8 +292,10 @@ async def perform_user_deletion(user_id: int, db: AsyncSession) -> None:
     for device in devices_to_delete:
         await db.delete(device)
 
-    # Execute deletion of orphaned groups (cascades exclusions and pack_enabled)
+    # Execute deletion of orphaned groups (cascades pack_enabled). Exclusions only used by
+    # the deleted group are removed; exclusions shared with other groups only lose the link.
     for group in groups_to_delete:
+        await detach_group_exclusions(group.id, db, actor_user_id=None)
         await db.delete(group)
 
     # Execute deletion of solo teams

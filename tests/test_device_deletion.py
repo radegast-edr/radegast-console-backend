@@ -2,10 +2,10 @@ from datetime import UTC, datetime
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.associations import device_group_devices
+from app.models.associations import device_group_devices, exclusion_device_groups
 from app.models.device import Device
 from app.models.exclusion import Exclusion
 from app.models.log import Log, LogSeen, LogSeverity
@@ -186,12 +186,13 @@ class TestDeviceDeletionWorker:
 
         # Add Exclusion linked to log2
         exc = Exclusion(
-            device_group_id=group_id,
             name="Exclusion linked to log",
             jsonata_query="$alert = true",
             alert_id=log2.id,
         )
         db_session.add(exc)
+        await db_session.flush()
+        await db_session.execute(insert(exclusion_device_groups).values(exclusion_id=exc.id, device_group_id=group_id))
         await db_session.commit()
 
         # Soft delete device

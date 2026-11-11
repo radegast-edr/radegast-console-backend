@@ -244,7 +244,7 @@ When a device belongs to multiple groups:
 - **Group Name**: Must be unique. Use clear, descriptive names.
 - **Device Membership**: A device can belong to multiple groups simultaneously.
 - **Team Access**: All teams that own a group can access all devices in that group.
-- **Exclusions**: Exclusions are applied at the group level and affect all devices in the group.
+- **Exclusions**: Exclusions are applied at the group level and affect all devices in the group. One exclusion can be applied to several groups; see the [Exclusions Guide](exclusions.md).
 - **Detection Packs**: Packs are typically assigned to teams, which then apply to all groups owned by those teams.
 
 **Tip**: Organize groups by purpose: "Web Servers", "Database Servers", "Workstations", "Cloud Instances"

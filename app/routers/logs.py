@@ -64,12 +64,15 @@ def _make_triggered_rule(pack_version_rule: PackVersionRule | None) -> Triggered
 def _make_log_response(log: Log, seen: bool, pack_version_rule: PackVersionRule | None = None) -> LogResponse:
     excluded_by_val = None
     if log.exclusion is not None:
+        # The exclusion can be applied to several groups: report the one this log's device belongs to.
+        device_group_ids = {g.id for g in log.device.groups} if log.device is not None else set()
+        group = next(
+            (g for g in sorted(log.exclusion.device_groups, key=lambda g: g.id) if g.id in device_group_ids),
+            None,
+        )
         excluded_by_val = ExclusionRefResponse(
             id=log.exclusion.id,
-            group=ExclusionGroupResponse(
-                id=log.exclusion.device_group.id,
-                name=log.exclusion.device_group.name,
-            ),
+            group=ExclusionGroupResponse(id=group.id, name=group.name) if group is not None else None,
         )
     return LogResponse(
         id=log.id,
@@ -113,7 +116,13 @@ async def submit_log(
     )
 
     if data.excluded_by is not None:
-        result = await db.execute(select(Exclusion).where(Exclusion.id == data.excluded_by))
+        # Only accept exclusions that are applied to one of this device's groups
+        result = await db.execute(
+            select(Exclusion).where(
+                Exclusion.id == data.excluded_by,
+                Exclusion.device_groups.any(DeviceGroup.devices.any(Device.id == device.id)),
+            )
+        )
         exclusion = result.scalar_one_or_none()
         if exclusion:
             if exclusion.exclusion_type == "soft":
@@ -174,7 +183,8 @@ async def submit_log(
         select(Log)
         .options(
             selectinload(Log.pack_version_rule).selectinload(PackVersionRule.pack_version).selectinload(PackVersion.pack),
-            selectinload(Log.exclusion).selectinload(Exclusion.device_group),
+            selectinload(Log.exclusion).selectinload(Exclusion.device_groups),
+            selectinload(Log.device).selectinload(Device.groups),
         )
         .where(Log.id == log.id)
     )
@@ -331,7 +341,8 @@ async def list_logs(
     query = (
         query.options(
             selectinload(Log.pack_version_rule).selectinload(PackVersionRule.pack_version).selectinload(PackVersion.pack),
-            selectinload(Log.exclusion).selectinload(Exclusion.device_group),
+            selectinload(Log.exclusion).selectinload(Exclusion.device_groups),
+            selectinload(Log.device).selectinload(Device.groups),
         )
         .order_by(Log.time.desc())
         .offset(offset)
@@ -361,7 +372,8 @@ async def resolve_log(
         select(Log)
         .options(
             selectinload(Log.pack_version_rule).selectinload(PackVersionRule.pack_version).selectinload(PackVersion.pack),
-            selectinload(Log.exclusion).selectinload(Exclusion.device_group),
+            selectinload(Log.exclusion).selectinload(Exclusion.device_groups),
+            selectinload(Log.device).selectinload(Device.groups),
         )
         .where(Log.id == log_id)
     )
@@ -394,7 +406,8 @@ async def resolve_log(
         select(Log)
         .options(
             selectinload(Log.pack_version_rule).selectinload(PackVersionRule.pack_version).selectinload(PackVersion.pack),
-            selectinload(Log.exclusion).selectinload(Exclusion.device_group),
+            selectinload(Log.exclusion).selectinload(Exclusion.device_groups),
+            selectinload(Log.device).selectinload(Device.groups),
         )
         .where(Log.id == log_id)
     )
@@ -494,7 +507,8 @@ async def get_log(
         select(Log)
         .options(
             selectinload(Log.pack_version_rule).selectinload(PackVersionRule.pack_version).selectinload(PackVersion.pack),
-            selectinload(Log.exclusion).selectinload(Exclusion.device_group),
+            selectinload(Log.exclusion).selectinload(Exclusion.device_groups),
+            selectinload(Log.device).selectinload(Device.groups),
         )
         .where(Log.id == log_id)
     )

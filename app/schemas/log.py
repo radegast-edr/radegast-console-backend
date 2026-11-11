@@ -50,7 +50,8 @@ class ExclusionGroupResponse(BaseModel):
 
 class ExclusionRefResponse(BaseModel):
     id: int
-    group: ExclusionGroupResponse
+    # The group of the log's device the exclusion is applied to (None if it no longer is).
+    group: ExclusionGroupResponse | None = None
 
 
 class LogResponse(BaseModel):

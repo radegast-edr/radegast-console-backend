@@ -2,7 +2,7 @@ from sqlalchemy import BigInteger, Boolean, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.models.associations import device_group_devices, team_device_groups
+from app.models.associations import device_group_devices, exclusion_device_groups, team_device_groups
 
 
 class DeviceGroup(Base):
@@ -20,5 +20,5 @@ class DeviceGroup(Base):
     devices = relationship("Device", secondary=device_group_devices, back_populates="groups")
     teams = relationship("Team", secondary=team_device_groups, back_populates="groups")
     packs = relationship("PackEnabled", back_populates="device_group", cascade="all, delete-orphan")
-    exclusions = relationship("Exclusion", back_populates="device_group", cascade="all, delete-orphan")
+    exclusions = relationship("Exclusion", secondary=exclusion_device_groups, back_populates="device_groups")
     prevention_allowlists = relationship("PreventionAllowlist", back_populates="device_group", cascade="all, delete-orphan")

@@ -1,5 +1,5 @@
 from app.models.api_key import APIKey
-from app.models.associations import device_group_devices, team_device_groups, team_users
+from app.models.associations import device_group_devices, exclusion_device_groups, team_device_groups, team_users
 from app.models.device import Device
 from app.models.device_group import DeviceGroup
 from app.models.email_bulk_state import EmailBulkState
@@ -40,6 +40,7 @@ __all__ = [
     "TeamInvitation",
     "User",
     "device_group_devices",
+    "exclusion_device_groups",
     "team_device_groups",
     "team_users",
 ]

@@ -27,6 +27,7 @@ If your goal is to stop Active Response from killing a critical daemon without b
 - **False Positive Reduction**: Eliminate known-safe events from your alerts
 - **Custom Filtering**: Create precise exclusion rules using JSONata query syntax
 - **Group-Specific**: Apply different exclusions to different device groups
+- **Reusable**: Define an exclusion once and apply it to as many device groups as you need
 - **Improved Signal-to-Noise**: Focus your team's attention on real threats
 - **Flexible Rules**: Define exclusions based on any field in the event data
 
@@ -42,14 +43,15 @@ If your goal is to stop Active Response from killing a critical daemon without b
 
 ### Understanding the Exclusions List
 
-The Exclusions page shows:
+The Exclusions page lists every exclusion once, even when it is applied to several device groups:
 
-- **Name**: Descriptive name for the exclusion rule
-- **Device Group**: Which device group this exclusion applies to
-- **Description**: Brief explanation of what this exclusion does
-- **Query**: The JSONata expression that defines the exclusion pattern
-- **Created**: When the exclusion was created
-- **Actions**: Buttons to view details, edit, or delete the exclusion
+- **Name** and **Description**: What the exclusion does and why it exists
+- **Device Groups**: The groups the exclusion is applied to. Groups you do not have access to are shown as a count (for example `+2 other`)
+- **Type**: Hard or soft exclusion
+- **JSONata Query**: The expression that defines the exclusion pattern
+- **Source Alert**: The alert the exclusion was created from, if any
+- **Last Change**: What was last changed (created, edited, applied to or removed from a group), by whom and when
+- **Actions**: Apply to another group, edit, or delete the exclusion
 
 ### Creating a New Exclusion
 
@@ -60,8 +62,9 @@ The Exclusions page shows:
 1. Navigate to the Exclusions page or to a specific device group
 2. Click **"Create Exclusion"** or **"Add Exclusion"**
 3. In the creation form:
-   - **Device Group**: Select which device group this exclusion applies to
-     - The exclusion will only affect devices in this group
+   - **Device Groups**: Select one or more device groups this exclusion applies to
+     - The exclusion only affects devices in the selected groups
+     - When created from a device group's page, it is applied to that group
    - **Name**: Enter a descriptive name (e.g., "Ignore Scheduled Scans", "Allow Development Tools")
    - **Description**: Explain what events this exclusion filters out
    - **JSONata Query**: Enter the JSONata expression that matches events to exclude
@@ -70,7 +73,7 @@ The Exclusions page shows:
      - **Soft Exclusion**: Downgrade matching events to informational severity.
 4. Click **"Create Exclusion"**
 
-**Note**: You need pack write permissions on the selected device group's teams to create exclusions.
+**Note**: You need pack write permissions on every selected device group to create exclusions.
 
 ### JSONata Query Basics
 
@@ -140,24 +143,64 @@ Before saving an exclusion, test it to ensure it matches what you expect:
    - All matching criteria
    - Option to test the query against recent events
 
+### Applying an Exclusion to More Device Groups
+
+An exclusion can be reused in several device groups. Changes to it apply to every group it is applied to.
+
+1. On the **Exclusions** page, click the **+** (Apply to another group) button of the exclusion
+2. Select the device group
+3. Click **"Apply"**
+
+Alternatively, open a device group, click **"Apply Existing"** in the Exclusions section and select one of the exclusions from your other groups.
+
+**Note**: You need pack write permission on the target device group.
+
+### Removing an Exclusion from a Device Group
+
+- On the **Exclusions** page, click the **x** next to the group name, or
+- On the device group page, click **x** next to a shared exclusion (**"Remove from this group"**)
+
+The exclusion stays applied to its other groups. Removing an exclusion from its **last** group deletes it.
+
+**Note**: You need pack write permission on the device group you remove it from.
+
 ### Editing an Exclusion
 
-1. Click on the exclusion
-2. Click **"Edit"** or the edit icon
-3. Modify any of these fields:
+1. Click the edit icon of the exclusion
+2. Modify any of these fields:
    - Name
    - Description
    - JSONata query
-4. Click **"Save Changes"**
+   - Exclusion type
+3. Click **"Update Exclusion"**
+
+The change applies to **every** device group the exclusion is applied to, and the exclusion keeps its identity, so alerts that were excluded by it stay linked to it.
+
+**Note**: Editing requires pack write permission on **all** device groups the exclusion is applied to. This prevents a team from changing the behavior of devices in groups it does not control. If you only control some of the groups, you can still remove the exclusion from your groups and create your own version.
 
 **Tip**: Always test your edited query before saving to ensure it still works as expected.
 
+If someone else changed the exclusion while you were editing it, saving fails with a message asking you to reload; the list is refreshed so you can re-apply your change.
+
 ### Deleting an Exclusion
 
-1. Click on the exclusion
-2. Click the **"Delete"** button
-3. Confirm the deletion
-4. The exclusion will be immediately removed and will no longer filter events
+1. Click the delete icon of the exclusion on the **Exclusions** page
+2. Confirm the deletion
+3. The exclusion is removed from **all** device groups and no longer filters events
+
+**Note**: Deleting requires pack write permission on all device groups the exclusion is applied to.
+
+### Last Change
+
+Every exclusion shows its most recent change: whether it was created, edited, applied to a group or removed from a group, which user made the change and when. Exclusions created before this feature existed are shown as *Created before change tracking*.
+
+### Encryption of Exclusions
+
+When end-to-end encryption is available, the name, query and description of an exclusion are encrypted in your browser for the key of **every device group it is applied to**. Only members and devices of those groups can read it; the server only stores the encrypted value.
+
+- An exclusion is encrypted when all selected groups have encryption keys set up and all their agents run **python 0.5.0** or newer. Otherwise it is stored unencrypted and marked **Unencrypted**.
+- An encrypted exclusion can only be applied to groups that meet the same requirements.
+- When an encrypted exclusion is applied to or removed from a group, your browser re-encrypts it for the new set of groups, so a removed group can no longer read it.
 
 ### Bulk Exclusion Management
 
@@ -174,7 +217,7 @@ You can manage exclusions for a specific device group:
 ## Tips & Validations
 
 - **Query Syntax**: JSONata queries must be valid. Invalid queries will be rejected.
-- **Group Scope**: Exclusions only apply to the device group they're assigned to.
+- **Group Scope**: Exclusions only apply to the device groups they're applied to.
 - **Order of Operations**: Exclusions are applied before alerts are generated, not after.
 - **Performance**: Complex queries may impact agent performance. Keep queries as simple as possible.
 - **Security**: Be careful not to exclude legitimate security events. Review exclusion patterns regularly.
@@ -194,14 +237,19 @@ You can manage exclusions for a specific device group:
 
 ### Can't create an exclusion
 
-- **Permission denied**: You need pack write permissions on the device group's teams
+- **Permission denied**: You need pack write permissions on every selected device group
 - **Invalid query**: The JSONata query may have syntax errors
 - **Missing group**: You may not have selected a device group
 - **Form validation**: All required fields (group, name, query) must be filled
 
+### Can't edit an exclusion
+
+- **Shared with other groups**: Editing requires pack write permission on all groups the exclusion is applied to. Groups you cannot access are shown as `+N other`
+- **Changed by someone else**: Reload the page and apply your change again
+
 ### Exclusion not working
 
-- **Wrong group**: The exclusion may be assigned to a different group than the device
+- **Wrong group**: The exclusion may be applied to a different group than the device
 - **Query error**: The JSONata query may not match the expected event format
 - **Syntax error**: Check the query for syntax errors
 - **Case sensitivity**: JSONata is case-sensitive by default. Use $lowercase() or $uppercase() if needed.
@@ -215,7 +263,7 @@ You can manage exclusions for a specific device group:
 
 ### Can't delete an exclusion
 
-- **Permission denied**: You need pack write permissions on the exclusion's device group
+- **Permission denied**: Deleting requires pack write permissions on all of the exclusion's device groups. You can still remove it from your own groups
 - **Exclusion not found**: The exclusion may have already been deleted
 - **Group access**: You may not have access to the device group the exclusion belongs to
 

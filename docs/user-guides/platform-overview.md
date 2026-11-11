@@ -62,7 +62,7 @@ Your security policies:
 ### Exclusions
 Reduce noise from known-safe activities:
 - **Custom Filters**: Create JSONata queries to exclude specific event patterns
-- **Group-Specific**: Apply exclusions to specific device groups
+- **Group-Specific**: Apply exclusions to specific device groups, and reuse one exclusion across several groups
 - **False Positive Management**: Prevent alert fatigue from expected behaviors
 
 ## How It Works

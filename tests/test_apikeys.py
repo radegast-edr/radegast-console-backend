@@ -290,3 +290,78 @@ class TestAPIKeys:
         resp = await client.get("/releases/2.1.0/linux/amd64/download", headers={"Authorization": f"Bearer {admin_key_no_releases}"})
         assert resp.status_code == 403
         assert "API key does not have 'read' permission for scope 'releases'" in resp.json()["detail"]
+
+    async def test_user_scope_allows_encryption_key_management(
+        self, client: AsyncClient, auth_client: AsyncClient, db_session: AsyncSession
+    ):
+        result = await db_session.execute(select(User).where(User.email == "test@example.com"))
+        user = result.scalar_one()
+        user.api_keys_enabled = True
+        await db_session.commit()
+
+        # 1. Create API key with user scope (read, create, delete)
+        resp = await auth_client.post(
+            "/apikeys/",
+            json={
+                "name": "User Keys Management Key",
+                "scopes": {"devices": [], "teams": [], "groups": [], "packs": [], "logs": [], "releases": [], "user": ["read", "create", "delete"]},
+            },
+        )
+        assert resp.status_code == 200
+        api_key = resp.json()["key"]
+        headers = {"Authorization": f"Bearer {api_key}"}
+
+        # 2. Create encryption key via API
+        resp = await client.post(
+            "/user/keys",
+            json={"public_key": "age1testapikey00000000000000000000000000000000000000000000000000", "name": "Created via API"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["message"] == "Key added successfully"
+
+        # 3. List encryption keys via API
+        resp = await client.get("/user/keys", headers=headers)
+        assert resp.status_code == 200
+        keys = resp.json()
+        created_key = next((k for k in keys if k["name"] == "Created via API"), None)
+        assert created_key is not None
+        key_id = created_key["id"]
+
+        # 4. Delete the encryption key via API
+        resp = await client.delete(f"/user/keys/{key_id}", headers=headers)
+        assert resp.status_code == 200
+        assert resp.json()["message"] == "Key deleted successfully"
+
+    async def test_user_scope_permission_enforcement(
+        self, client: AsyncClient, auth_client: AsyncClient, db_session: AsyncSession
+    ):
+        result = await db_session.execute(select(User).where(User.email == "test@example.com"))
+        user = result.scalar_one()
+        user.api_keys_enabled = True
+        await db_session.commit()
+
+        # Create API key with read-only user scope
+        resp = await auth_client.post(
+            "/apikeys/",
+            json={
+                "name": "User Read Only Key",
+                "scopes": {"devices": [], "teams": [], "groups": [], "packs": [], "logs": [], "releases": [], "user": ["read"]},
+            },
+        )
+        assert resp.status_code == 200
+        api_key = resp.json()["key"]
+        headers = {"Authorization": f"Bearer {api_key}"}
+
+        # Read should succeed
+        resp = await client.get("/user/keys", headers=headers)
+        assert resp.status_code == 200
+
+        # Create should fail with 403
+        resp = await client.post(
+            "/user/keys",
+            json={"public_key": "age1testapikey11111111111111111111111111111111111111111111111111", "name": "Fails"},
+            headers=headers,
+        )
+        assert resp.status_code == 403
+        assert "API key does not have 'create' permission for scope 'user'" in resp.json()["detail"]

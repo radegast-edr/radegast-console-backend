@@ -449,8 +449,7 @@ class TestKeyTransfer:
 
 
 @pytest.mark.asyncio
-@pytest.mark.asyncio
-class TestKeySecondary:
+class TestAddKey:
     async def _setup_main_key(self, client):
         main_pub, _main_priv = generate_age_keypair()
         rec_pub, rec_priv = generate_age_keypair()
@@ -466,51 +465,31 @@ class TestKeySecondary:
         )
         return main_pub
 
-    async def test_setup_secondary_key(self, auth_client: AsyncClient):
+    async def test_add_key_succeeds(self, auth_client: AsyncClient):
         await self._setup_main_key(auth_client)
 
-        sec_pub, _sec_priv = generate_age_keypair()
-        _rec_pub, rec_priv = generate_age_keypair()
-        recovery_key_hex = secrets.token_bytes(32).hex()
-        encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
+        new_pub, _new_priv = generate_age_keypair()
         resp = await auth_client.post(
-            "/user/keys/secondary",
-            json={"public_key": sec_pub, "encrypted_private_key": encrypted_priv},
+            "/user/keys",
+            json={"public_key": new_pub, "name": "Work Laptop"},
         )
         assert resp.status_code == 200
-        assert resp.json()["message"] == "Secondary key added successfully"
+        assert resp.json()["message"] == "Key added successfully"
 
-    async def test_setup_secondary_without_main_fails(self, auth_client: AsyncClient):
-        sec_pub, _sec_priv = generate_age_keypair()
-        _rec_pub, rec_priv = generate_age_keypair()
-        recovery_key_hex = secrets.token_bytes(32).hex()
-        encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
+    async def test_add_duplicate_key_fails(self, auth_client: AsyncClient):
+        main_pub = await self._setup_main_key(auth_client)
         resp = await auth_client.post(
-            "/user/keys/secondary",
-            json={"public_key": sec_pub, "encrypted_private_key": encrypted_priv},
+            "/user/keys",
+            json={"public_key": main_pub, "name": "Duplicate Key"},
         )
         assert resp.status_code == 400
+        assert "Public key already exists" in resp.json()["detail"]
 
-    async def test_setup_secondary_duplicate_fails(self, auth_client: AsyncClient):
-        await self._setup_main_key(auth_client)
-
-        sec_pub, _sec_priv = generate_age_keypair()
-        _rec_pub, rec_priv = generate_age_keypair()
-        recovery_key_hex = secrets.token_bytes(32).hex()
-        encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
-        payload = {"public_key": sec_pub, "encrypted_private_key": encrypted_priv}
-        await auth_client.post("/user/keys/secondary", json=payload)
-        resp = await auth_client.post("/user/keys/secondary", json=payload)
-        assert resp.status_code == 400
-
-    async def test_secondary_key_unauthenticated(self, client: AsyncClient):
-        sec_pub, _sec_priv = generate_age_keypair()
-        _rec_pub, rec_priv = generate_age_keypair()
-        recovery_key_hex = secrets.token_bytes(32).hex()
-        encrypted_priv = helper_aes_encrypt(rec_priv, recovery_key_hex)
+    async def test_add_key_unauthenticated(self, client: AsyncClient):
+        new_pub, _new_priv = generate_age_keypair()
         resp = await client.post(
-            "/user/keys/secondary",
-            json={"public_key": sec_pub, "encrypted_private_key": encrypted_priv},
+            "/user/keys",
+            json={"public_key": new_pub},
         )
         assert resp.status_code == 401
 
@@ -551,21 +530,6 @@ class TestDeleteKeys:
         del_resp = await auth_client.delete(f"/user/keys/{recovery_key['id']}")
         assert del_resp.status_code == 400
         assert "At least one recovery key must always exist" in del_resp.json()["detail"]
-
-    async def test_delete_all_keys_fails_when_keys_exist(self, auth_client: AsyncClient):
-        await self._setup_main_key(auth_client)
-        resp = await auth_client.delete("/user/keys")
-        assert resp.status_code == 400
-        assert "At least one recovery key must always exist" in resp.json()["detail"]
-
-    async def test_delete_keys_empty(self, auth_client: AsyncClient):
-        # Deleting when no keys should succeed (no-op)
-        resp = await auth_client.delete("/user/keys")
-        assert resp.status_code == 200
-
-    async def test_delete_keys_unauthenticated(self, client: AsyncClient):
-        resp = await client.delete("/user/keys")
-        assert resp.status_code == 401
 
 
 @pytest.mark.asyncio

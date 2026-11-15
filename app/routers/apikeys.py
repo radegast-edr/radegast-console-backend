@@ -62,6 +62,7 @@ async def create_api_key(
         "packs": data.scopes.packs,
         "logs": data.scopes.logs,
         "releases": data.scopes.releases,
+        "user": data.scopes.user,
     }
 
     db_key = APIKey(

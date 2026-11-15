@@ -111,7 +111,7 @@ class TestNewKeysNotification:
         subjects = [call.args[1] for call in mock_send.call_args_list]
         assert any("New Encryption Keys" in s for s in subjects)
 
-    async def test_setup_secondary_key_sends_notification(self, client: AsyncClient):
+    async def test_add_key_sends_notification(self, client: AsyncClient):
         email = "seckey_on@example.com"
         password = "Password123!"
         await _register_and_verify(client, email, password)
@@ -120,8 +120,8 @@ class TestNewKeysNotification:
 
         with patch("app.services.email.send_email", new_callable=AsyncMock) as mock_send:
             await client.post(
-                "/user/keys/secondary",
-                json={"public_key": "age1sec", "encrypted_private_key": "enc-sec"},
+                "/user/keys",
+                json={"public_key": "age1sec", "name": "Work Laptop"},
             )
 
         subjects = [call.args[1] for call in mock_send.call_args_list]

@@ -32,7 +32,6 @@ from app.schemas.user import (
     ChangePasswordRequest,
     ExtendedEdrSettings,
     KeyRecoverResponse,
-    KeySecondarySetupRequest,
     KeySetupRequest,
     KeySetupResponse,
     KeyTransferCompleteRequest,
@@ -174,58 +173,6 @@ async def setup_keys(
         background_tasks.add_task(send_new_keys_notification, user.email, "primary", get_client_ip(request))
 
     return KeySetupResponse(message="Keys set up successfully")
-
-
-@router.post("/keys/secondary", response_model=KeySetupResponse)
-async def setup_secondary_key(
-    data: KeySecondarySetupRequest,
-    request: Request,
-    background_tasks: BackgroundTasks,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Add a secondary key alongside the user's existing main keypair (e.g. on a new device)."""
-    result = await db.execute(select(PublicKey).where(PublicKey.user_id == user.id, PublicKey.key_type == "regular"))
-    if not result.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="No primary key found; use /keys/setup first")
-
-    dup = await db.execute(select(PublicKey).where(PublicKey.user_id == user.id, PublicKey.key_type == "secondary"))
-    if dup.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Secondary key already exists")
-
-    key = PublicKey(
-        public_key=data.public_key,
-        private_key=data.encrypted_private_key,
-        key_type="secondary",
-        user_id=user.id,
-    )
-    db.add(key)
-    await db.commit()
-
-    if user.notify_new_keys:
-        background_tasks.add_task(send_new_keys_notification, user.email, "secondary", get_client_ip(request))
-
-    return KeySetupResponse(message="Secondary key added successfully")
-
-
-@router.delete("/keys")
-async def delete_all_keys(
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Delete all keys for the current user (fresh-start before re-setup)."""
-    result = await db.execute(select(PublicKey).where(PublicKey.user_id == user.id))
-    keys = result.scalars().all()
-    recovery_keys = [k for k in keys if k.private_key is not None]
-    if len(recovery_keys) > 0:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot delete keys. At least one recovery key must always exist.",
-        )
-    for key in keys:
-        await db.delete(key)
-    await db.commit()
-    return {"message": "All keys deleted"}
 
 
 @router.get("/public-keys-by-email", response_model=list[str])

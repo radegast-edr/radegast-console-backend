@@ -102,13 +102,6 @@ class KeyTransferCompleteRequest(BaseModel):
     encrypted_private_key: str  # main private key AGE-encrypted for receiver's ephemeral key
 
 
-class KeySecondarySetupRequest(BaseModel):
-    """Add a secondary (recovery) keypair alongside the existing main keypair."""
-
-    public_key: str
-    encrypted_private_key: str  # private key AGE-encrypted with the matching recovery key
-
-
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str

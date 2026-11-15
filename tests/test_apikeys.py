@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -5,6 +6,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.api_key import APIKey
 from app.models.user import User
 
 
@@ -304,7 +306,15 @@ class TestAPIKeys:
             "/apikeys/",
             json={
                 "name": "User Keys Management Key",
-                "scopes": {"devices": [], "teams": [], "groups": [], "packs": [], "logs": [], "releases": [], "user": ["read", "create", "delete"]},
+                "scopes": {
+                    "devices": [],
+                    "teams": [],
+                    "groups": [],
+                    "packs": [],
+                    "logs": [],
+                    "releases": [],
+                    "user": ["read", "create", "delete"],
+                },
             },
         )
         assert resp.status_code == 200
@@ -333,9 +343,7 @@ class TestAPIKeys:
         assert resp.status_code == 200
         assert resp.json()["message"] == "Key deleted successfully"
 
-    async def test_user_scope_permission_enforcement(
-        self, client: AsyncClient, auth_client: AsyncClient, db_session: AsyncSession
-    ):
+    async def test_user_scope_permission_enforcement(self, client: AsyncClient, auth_client: AsyncClient, db_session: AsyncSession):
         result = await db_session.execute(select(User).where(User.email == "test@example.com"))
         user = result.scalar_one()
         user.api_keys_enabled = True
@@ -365,3 +373,56 @@ class TestAPIKeys:
         )
         assert resp.status_code == 403
         assert "API key does not have 'create' permission for scope 'user'" in resp.json()["detail"]
+
+    async def test_api_key_expiration_naive_and_aware(self, client: AsyncClient, auth_client: AsyncClient, db_session: AsyncSession):
+        result = await db_session.execute(select(User).where(User.email == "test@example.com"))
+        user = result.scalar_one()
+        user.api_keys_enabled = True
+        await db_session.commit()
+
+        # 1. Create an API key that expires in the past with offset-naive datetime
+        resp = await auth_client.post(
+            "/apikeys/",
+            json={"name": "Expired Naive Key", "scopes": {"devices": ["read"]}},
+        )
+        assert resp.status_code == 200
+        raw_key = resp.json()["key"]
+        key_id = resp.json()["id"]
+
+        # Directly update the database to set a naive past datetime
+        naive_past = datetime.now().replace(tzinfo=None) - timedelta(hours=1)
+        db_key_result = await db_session.execute(select(APIKey).where(APIKey.id == key_id))
+        db_key = db_key_result.scalar_one()
+        db_key.expires_at = naive_past
+        await db_session.commit()
+
+        # Authenticating with this key should return 401 "API key has expired" without TypeError
+        headers = {"Authorization": f"Bearer {raw_key}"}
+        resp = await client.get("/devices/", headers=headers)
+        assert resp.status_code == 401
+        assert resp.json()["detail"] == "API key has expired"
+
+        # 2. Update to a naive future datetime -> should succeed
+        naive_future = datetime.now().replace(tzinfo=None) + timedelta(hours=1)
+        db_key.expires_at = naive_future
+        await db_session.commit()
+
+        resp = await client.get("/devices/", headers=headers)
+        assert resp.status_code == 200
+
+        # 3. Update to an offset-aware past datetime -> should return 401 "API key has expired"
+        aware_past = datetime.now(UTC) - timedelta(hours=1)
+        db_key.expires_at = aware_past
+        await db_session.commit()
+
+        resp = await client.get("/devices/", headers=headers)
+        assert resp.status_code == 401
+        assert resp.json()["detail"] == "API key has expired"
+
+        # 4. Update to an offset-aware future datetime -> should succeed
+        aware_future = datetime.now(UTC) + timedelta(hours=1)
+        db_key.expires_at = aware_future
+        await db_session.commit()
+
+        resp = await client.get("/devices/", headers=headers)
+        assert resp.status_code == 200

@@ -141,7 +141,7 @@ async def get_session_api_key(request: Request, db: AsyncSession) -> SessionData
             detail="API keys are disabled for this user",
         )
 
-    if key_record.expires_at and key_record.expires_at < utc_now():
+    if key_record.expires_at and ensure_utc(key_record.expires_at) < utc_now():
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key has expired")
 
     return SessionData(

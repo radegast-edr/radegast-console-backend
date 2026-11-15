@@ -77,11 +77,11 @@ Include the API key in the `Authorization` header of each HTTP request:
 
 ```bash
 # Example curl request
-curl -X GET "https://your-radegast-server.com/api/v1/logs/" \
+curl -X GET "https://console-api.radegast.app/api/v1/logs/" \
   -H "Authorization: Bearer rg_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 ```
 
-To review interactive API endpoints, open `https://<console-url>/docs`.
+To review interactive API endpoints, open `https://console-api.radegast.app/docs`.
 
 ## Permission Scopes Reference
 
@@ -270,8 +270,8 @@ print(f"Private key saved to {output_file}")
 Make the script executable and run it:
 
 ```bash
+unset HISTFILE  # Make sure your API key and recovery key are not saved in shell history
 export RADEGAST_API_KEY="rg_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-export RADEGAST_RECOVERY_KEY="your_64_character_hex_recovery_key"
 chmod +x recover_key.py
 ./recover_key.py
 ```

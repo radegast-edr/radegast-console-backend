@@ -1,163 +1,128 @@
 # Device Installation
 
-## Feature Overview
+## Overview
 
-Installing the Radegast agent on your endpoints is the critical step that enables security monitoring. The agent collects system events, applies detection rules, and sends encrypted logs to the Radegast backend for your review. This guide provides OS-specific instructions for installing and configuring the agent.
+You must install the Radegast agent on each endpoint to enable security monitoring. The agent records system events, applies detection rules, and sends encrypted logs to the Radegast backend. This document provides installation instructions for Linux, Windows, and macOS endpoints.
 
-## Step-by-Step Guide
+## Prerequisites
 
-### Prerequisites
+Before you install the agent, make sure that:
 
-Before installing the agent:
+1. You created a device in the Radegast Console.
+2. The endpoint meets the minimum system requirements:
+   - **Linux**: Kernel 4.18 or later, glibc 2.31 or later, x86_64 or ARM64.
+   - **Windows**: Windows 10, Windows 11, or Windows Server 2019 or later, x86_64.
+   - **macOS**: macOS 11 or later, Apple Silicon (M1/M2/M3) or Intel.
+3. The endpoint can connect to the Radegast backend URL through HTTPS (port 443).
+4. You have administrator or `root` permissions on the endpoint.
 
-1. You have created a device in the Radegast Console
-2. Your endpoint meets the minimum requirements:
-   - **Linux**: Kernel 4.18+, glibc 2.31+, x86_64 or ARM64
-   - **Windows**: Windows 10/11 or Windows Server 2019+, x86_64
-   - **macOS**: macOS 11+, Apple Silicon (M1/M2) or Intel
-3. Your endpoint has network connectivity to the Radegast backend URL
-4. You have administrative/sudo access on the endpoint
-
-### Linux Installation
+## Linux Installation
 
 ![Device Setup and Installation](../_static/screenshots/device-detail.png)
 
-1. In the Radegast Console, go to **Devices**
-2. Click on your device, or go to the Install page
-3. Select **Linux** as the OS
-4. Select your architecture (**amd64** for Intel/AMD, **arm64** for ARM)
-5. Copy the **single-line installation command** provided
-6. Run the command on your Linux endpoint as root
+1. Open the Radegast Console and click **Devices**.
+2. Select your device from the list.
+3. Select **Linux** as the operating system.
+4. Select the system architecture (**amd64** for Intel/AMD, or **arm64** for ARM).
+5. Copy the installation command.
+6. Run the command as `root` on your Linux endpoint.
 
-The command will automatically:
-- Install required dependencies
-- Download and install the latest agent from the [Releases catalog](../_static/screenshots/releases-list.png)
-- Configure the agent with your token
-- Set up systemd services
-- Start the agent automatically
+The command executes a script that performs these tasks:
+- Installs necessary dependencies.
+- Downloads the latest agent from the [Releases catalog](../_static/screenshots/releases-list.png).
+- Configures the agent with your device token.
+- Configures and starts the `systemd` service.
 
+## Windows Installation
 
-### Windows Installation
+1. Open the Radegast Console and click **Devices**.
+2. Select your device from the list.
+3. Select **Windows** as the operating system.
+4. Select **amd64** as the architecture.
+5. Copy the PowerShell installation command.
+6. Open an elevated PowerShell prompt (Run as Administrator) on the Windows endpoint.
+7. Paste and run the command.
 
-#### Automatic Installation (Recommended)
+The installation script performs these tasks:
+- Downloads and installs the agent files.
+- Registers the **Radegast EDR Agent** Windows service.
+- Sets the service startup type to **Automatic**.
+- Starts the agent service.
 
-1. In the Radegast Console, select **Windows** as the OS
-2. Select **amd64** as the architecture
-3. Copy the **single-line installation command** (PowerShell) provided
-4. Run the command on your Windows endpoint as Administrator
+To verify the service manually:
+1. Open Windows Services (`services.msc`).
+2. Locate **Radegast EDR Agent**.
+3. Make sure the service status is **Running**.
 
-The command will automatically:
-- Download and install the agent
-- Configure the service
-- Start the agent automatically
+## macOS Installation
 
-1. **Verify the service**:
-   - Open Services (services.msc)
-   - Look for **Radegast EDR Agent** service
-   - Ensure it's running and set to **Automatic** startup
+1. Open the Radegast Console and click **Devices**.
+2. Select your device from the list.
+3. Select **macOS** as the operating system.
+4. Copy the installation command.
+5. Open Terminal on the macOS endpoint and run the command as `root`.
 
+The script performs these tasks:
+- Installs an isolated Python runtime and dependencies.
+- Downloads the agent and signed Rustinel binary.
+- Configures the agent with your device token.
+- Configures launchd daemons (`app.radegast.agent` and `io.rustinel.daemon`).
+- Starts the services.
 
-### macOS Installation (Experimental)
+### Grant Full Disk Access on macOS
 
-1. In the Radegast Console, select **macOS** as the OS
-2. Copy the **single-line installation command** provided
-3. Run the command on your macOS endpoint as root
+After installation, grant Full Disk Access to Rustinel:
 
-- Install isolated `uv` and managed Python runtime (with `pkg-config` support for native extensions)
-- Download and install the latest agent (runs as `_radegast`)
-- Download the signed Rustinel binary from console releases (runs as root)
-- Configure the agent with your token
-- Set up launchd daemons (`app.radegast.agent` and `io.rustinel.daemon`)
-- Start the agent automatically
+1. Open **System Settings**.
+2. Go to **Privacy & Security** and select **Full Disk Access**.
+3. Enable access for `/Library/Radegast/rustinel/Rustinel.app` (or `/Library/Radegast/rustinel/rustinel`).
+4. Restart the daemon:
+   ```bash
+   sudo launchctl kickstart -k system/io.rustinel.daemon
+   ```
 
-#### Post-Install: Grant Full Disk Access
+## Post-Installation Tasks
 
-After installation, you must grant Full Disk Access to Rustinel for telemetry collection:
+1. **Check Device Status**:
+   - Open **Devices** in the Radegast Console.
+   - Make sure the device displays an **Online** status badge.
+2. **Assign Detection Packs**:
+   - Assign detection packs to your device groups.
+   - The agent downloads the rules on the next polling interval.
 
-1. Open **System Settings** -> **Privacy & Security** -> **Full Disk Access**
-2. Grant access to `/Library/Radegast/rustinel/Rustinel.app` (or `/Library/Radegast/rustinel/rustinel`)
-3. Restart the Rustinel daemon: `sudo launchctl kickstart -k system/io.rustinel.daemon`
+## Operational Requirements and Guidelines
 
-
-### Post-Installation Steps
-
-1. **Verify in Console**:
-   - Go to **Devices** in the Radegast Console
-   - The status indicator shows online
-
-2. **Configure Detection Packs** (optional):
-   - Assign appropriate detection packs to your device's groups
-   - This customizes what the agent monitors for
-
-
-## Tips & Validations
-
-- **Token Security**: Never commit your device token to version control or share it publicly
-- **File Permissions**: Configuration files should be readable only by the agent user (chmod 600)
-- **Network Requirements**: The agent requires outbound HTTPS access to your Radegast backend
-- **Port Requirements**: Outbound port 443 (HTTPS) must be open
-- **Disk Space**: Ensure at least 100MB of free disk space for agent operations
-- **Memory**: The agent typically uses 50-100MB of RAM
-- **CPU**: Minimal CPU usage, but detection rules may increase resource consumption
-
-**Tip**: Use the automatic installation commands whenever possible - they handle most configuration automatically.
-
-**Tip**: Test your configuration in a non-production environment first.
-
-**Tip**: Monitor the agent's local logs for any errors during startup. Log locations vary by OS and configuration.
-
-**Tip**: If you need to change the device token after installation, update the config file and restart the agent service.
+- **Token Security**: Store device tokens in a secure credential manager. Do not commit tokens to public repositories.
+- **File Permissions**: Restrict agent configuration file permissions to the agent user (`chmod 600`).
+- **Network Access**: Endpoints must make outbound HTTPS connections on port 443 to the backend.
+- **Disk Space**: Maintain at least 100 MB of free disk space for agent operations.
+- **Memory Usage**: The agent typically uses 50 MB to 100 MB of RAM.
 
 ## Troubleshooting
 
-### Agent fails to start
+### Agent Fails to Start
 
-- **Check logs**: Look at the agent's log file for error messages
-- **Verify token**: Ensure the device token in the config file is correct
-- **Check permissions**: The agent may need permission to read its config file or write to log directories
-- **Missing dependencies**: On Linux, ensure required libraries (libssl) are installed
-- **Corrupted download**: Re-download the agent binary
+- **Examine Logs**: Check local agent log files for error messages.
+- **Check Token**: Make sure the device token in the configuration file matches the console token.
+- **Verify Permissions**: Make sure the agent user has read access to configuration files and write access to log directories.
+- **Missing Libraries**: On Linux, make sure necessary shared libraries (such as `libssl`) are installed.
 
-### Agent starts but can't connect
+### Agent Cannot Connect to Backend
 
-- **Verify URL**: Ensure the backend_url in config.toml is correct
-- **Network connectivity**: Test if the endpoint can reach the backend with curl or similar
-- **Firewall**: Check that outbound HTTPS (port 443) is allowed
-- **Proxy**: If behind a proxy, you may need to configure proxy settings
-- **DNS**: Ensure DNS resolution is working on the endpoint
+- **Verify URL**: Make sure the `backend_url` in the configuration file is correct.
+- **Test Connectivity**: Run `curl -k https://<backend-url>/api/v1/health` from the endpoint.
+- **Check Firewall**: Make sure outbound HTTPS connections on port 443 are allowed.
+- **Check Proxy**: Configure proxy settings if the endpoint is behind an enterprise proxy.
+- **Check DNS**: Make sure the endpoint can resolve the backend host name.
 
-### Device shows as offline in Console
+### Device Shows Offline in Console
 
-- **Service not running**: Check that the agent service is actually running
-- **Token mismatch**: The token in the config may not match what's in the database
-- **Time synchronization**: Ensure the endpoint's clock is synchronized with NTP
-- **Backend URL**: Verify the URL doesn't have a trailing slash
-- **Certificate issues**: If using self-signed certs, you may need to configure the agent to trust them
+- **Check Service**: Make sure the agent system service is running.
+- **Synchronize Clock**: Make sure NTP synchronizes the endpoint system clock.
+- **Token Invalidation**: If the device was re-registered, update the endpoint with the new token.
 
-### High CPU or Memory usage
+### Logs Do Not Appear in Console
 
-- **Check for crashes**: The agent may be in a crash loop - check logs
-- **Reduce detection rules**: If using many detection packs, consider reducing the complexity
-- **Update agent**: Ensure you're running the latest version
-- **Resource limits**: The agent may need resource limits adjusted in its service configuration
-
-### Logs aren't appearing in Console
-
-- **Agent not connected**: Verify the agent is online in the Devices list
-- **Encryption issues**: Ensure your public/private key pair is properly configured
-- **Permission issues**: Your user may not have permission to view logs from this device's groups
-- **Filtering**: Check if the logs are being filtered out by your alert preferences
-
-### "Invalid token" error
-
-- **Token already used**: Each token can only be used once
-- **Token expired**: If the device was reinstalled in the Console, the old token is invalid
-- **Copied incorrectly**: Ensure the entire token was copied without spaces or line breaks
-- **Character issues**: Some characters may be confused (0/O, l/1, etc.)
-
-### Installation script fails
-
-- **Missing dependencies**: The script may require curl, wget, or other tools
-- **Permission denied**: Run the script as administrator/root
-- **Unsupported OS**: Verify your OS and architecture are supported
-- **Network issues**: The script needs internet access to download the agent
+- **Verify Online Status**: Make sure the device shows an **Online** status badge.
+- **Verify Encryption Keys**: Make sure you have the corresponding private key in your browser.
+- **Check Team Permissions**: Make sure your team has read permissions for the device group.

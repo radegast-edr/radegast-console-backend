@@ -1,234 +1,137 @@
 # Exclusions
 
-## Feature Overview
+## Overview
 
-Exclusions allow you to filter out specific security events that you know are safe or expected, reducing alert fatigue and false positives. Using JSONata query expressions, you can define precise patterns to exclude from triggering alerts, helping your team focus on genuine security threats.
+Exclusions filter known benign events to reduce alert noise and false positives. You write exclusion expressions with JSONata syntax to match and suppress specific event patterns. This document explains how to configure, test, and manage exclusions.
 
-### Hard vs. Soft Exclusions (Extended EDR Only)
+## Exclusion Types (Extended EDR Mode)
 
-When Extended EDR is enabled, you can choose between two different exclusion behaviors:
+When you enable Extended EDR mode, you can select between two exclusion behaviors:
 
-- **Hard Exclusion** (Default): The agent filters matching events completely. These events are never sent to the console database, preventing any console visibility.
-- **Soft Exclusion**: The events are still sent to the console database, but their severity is automatically downgraded to `informational`, and they are visually marked with an `Excluded` badge in the threat triage view. This preserves visibility and queryability of these events for threat hunting without causing alert fatigue.
+- **Hard Exclusion** (Default): The agent suppresses matching events completely. The agent never sends these events to the console database.
+- **Soft Exclusion**: The agent sends matching events to the console database. The system downgrades their severity to `informational` and marks them with an `Excluded` badge. This keeps the events searchable in Hunt Mode without creating alert noise.
 
-### Exclusions vs. Prevention Allowlist
+## Exclusions Compared to the Prevention Allowlist
 
-It is important to distinguish between **Detection Exclusions** and the **[Prevention Allowlist](groups.md#prevention-allowlist)**:
+Do not confuse Detection Exclusions with the **[Prevention Allowlist](groups.md#prevention-allowlist)**:
 
-- **Detection Exclusions** (this guide) modify the *alerting pipeline* using JSONata queries. They determine whether an alert is generated and sent to the console (Hard Exclusion silences the alert; Soft Exclusion downgrades it to informational).
-- **Prevention Allowlists** modify the *prevention pipeline* of Active Response. They exempt specific path prefixes or process images (such as `sshd` or databases) from being terminated while **preserving full alert generation and console visibility**.
+- **Detection Exclusions**: Modify alert generation with JSONata queries. Hard exclusions drop alerts. Soft exclusions downgrade alerts to informational.
+- **Prevention Allowlists**: Modify automated process termination in Active Response. The system continues to generate alerts, but the agent does not kill the process.
 
 :::{tip}
-If your goal is to stop Active Response from killing a critical daemon without blinding your team to potential abuse of that daemon, configure a **[Prevention Allowlist](groups.md#prevention-allowlist)** entry on the Device Group rather than an exclusion.
+If you want to prevent Active Response from killing a critical service without hiding alerts, configure a **[Prevention Allowlist](groups.md#prevention-allowlist)** entry instead of an exclusion.
 :::
 
-## What Value Does This Feature Add?
+## View Exclusions
 
-- **False Positive Reduction**: Eliminate known-safe events from your alerts
-- **Custom Filtering**: Create precise exclusion rules using JSONata query syntax
-- **Group-Specific**: Apply different exclusions to different device groups
-- **Improved Signal-to-Noise**: Focus your team's attention on real threats
-- **Flexible Rules**: Define exclusions based on any field in the event data
+1. Log in to the Radegast Console.
+2. Click **Exclusions** in the main navigation menu, or open a specific device group.
+3. The page displays all active exclusion rules.
 
-## Step-by-Step Guide
+The exclusions table displays:
+- **Name**: Name of the exclusion rule.
+- **Device Group**: Group that applies this exclusion.
+- **Description**: Explanation of the filtered behavior.
+- **Query**: JSONata expression that matches events.
+- **Actions**: Buttons to inspect details, edit, or delete the exclusion.
 
-### Accessing Exclusions
-
-1. Log in to your Radegast Console
-2. Click **"Exclusions"** in the main navigation menu
-3. The Exclusions page will display all exclusion rules you have permission to view
-
-**Alternative Access**: You can also manage exclusions from within a specific device group's details page.
-
-### Understanding the Exclusions List
-
-The Exclusions page shows:
-
-- **Name**: Descriptive name for the exclusion rule
-- **Device Group**: Which device group this exclusion applies to
-- **Description**: Brief explanation of what this exclusion does
-- **Query**: The JSONata expression that defines the exclusion pattern
-- **Created**: When the exclusion was created
-- **Actions**: Buttons to view details, edit, or delete the exclusion
-
-### Creating a New Exclusion
+## Create an Exclusion
 
 ![Device Group Exclusions Management](../_static/screenshots/group-detail.png)
 
-#### Steps
+1. Go to **Exclusions** and click **Create Exclusion**.
+2. Complete the form:
+   - **Device Group**: Select the target group. The rule applies only to endpoints in this group.
+   - **Name**: Enter a descriptive name (for example, `Ignore Nightly Backup Scans`).
+   - **Description**: Explain why this exclusion is necessary.
+   - **JSONata Query**: Enter the JSONata query that matches target events.
+   - **Exclusion Type** (Extended EDR mode): Select **Hard Exclusion** or **Soft Exclusion**.
+3. Click **Create Exclusion**.
 
-1. Navigate to the Exclusions page or to a specific device group
-2. Click **"Create Exclusion"** or **"Add Exclusion"**
-3. In the creation form:
-   - **Device Group**: Select which device group this exclusion applies to
-     - The exclusion will only affect devices in this group
-   - **Name**: Enter a descriptive name (e.g., "Ignore Scheduled Scans", "Allow Development Tools")
-   - **Description**: Explain what events this exclusion filters out
-   - **JSONata Query**: Enter the JSONata expression that matches events to exclude
-   - **Exclusion Type** (Extended EDR only): Select the exclusion behavior from the dropdown:
-     - **Hard Exclusion**: Completely filter out matching events on the agent.
-     - **Soft Exclusion**: Downgrade matching events to informational severity.
-4. Click **"Create Exclusion"**
+:::{note}
+You must have pack write permissions on the teams that own the device group.
+:::
 
-**Note**: You need pack write permissions on the selected device group's teams to create exclusions.
+## JSONata Query Patterns
 
-### JSONata Query Basics
+JSONata evaluates JSON event data. Use these common query patterns:
 
-JSONata is a powerful query language for JSON data. Here are some common patterns for exclusions:
+### Exact Value Matching
 
-#### Simple Field Matching
 ```javascript
 // Exclude events where process_name equals "backup-agent"
 process_name = "backup-agent"
 
-// Exclude events from specific user
+// Exclude events from a specific service user
 user = "service-account"
 
-// Exclude events with specific severity
+// Exclude events with informational severity
 severity = "informational"
 ```
 
-#### Pattern Matching
+### Pattern and String Functions
+
 ```javascript
 // Exclude events where process_name contains "scan"
 $contains(process_name, "scan")
 
-// Exclude events where path starts with "/tmp/"
+// Exclude events where the path starts with "/tmp/"
 $startsWith(path, "/tmp/")
 
-// Exclude events matching a regex pattern
+// Exclude events matching a regular expression
 $match(process_name, /^backup-/)
 ```
 
-#### Multiple Conditions
+### Compound Conditions
+
 ```javascript
-// Exclude events where user is "backup" AND path contains "/var/"
-user = "backup" and $contains(path, "/var/")
+// Exclude events matching user AND directory path
+user = "backup" and $contains(path, "/var/log/")
 
-// Exclude events where process is in a list of known-safe processes
-process_name ~> ["backup", "monitoring", "cron"]
-
-// Exclude events with multiple severity levels
-severity ~> ["informational", "low"]
+// Exclude events matching any process in an array
+process_name in ["backup", "monitoring", "cron"]
 ```
 
-#### Nested Field Access
+### Nested Field References
+
 ```javascript
-// Exclude based on nested field
+// Exclude based on a nested event attribute
 event.details.action = "read"
-
-// Exclude based on array contents
-$some(settings.permissions, permission = "admin")
 ```
 
-### Testing Your Query
+## Test an Exclusion Query
 
-Before saving an exclusion, test it to ensure it matches what you expect:
+Test your query before saving:
 
-1. In the exclusion creation form, look for a **"Test Query"** or **"Preview"** button
-2. This will show you recent events that would be excluded by your query
-3. Verify that only the intended events are matched
-4. Adjust your query if needed
+1. Click **Test Query** in the exclusion form.
+2. The preview displays recent events that match your expression.
+3. Verify that the query matches only expected benign events.
+4. Adjust the query if unexpected events match.
 
-### Viewing Exclusion Details
+## Edit an Exclusion
 
-1. Click on an exclusion in the list
-2. The details panel shows:
-   - Complete JSONata query
-   - Which device group it applies to
-   - Creation timestamp
-   - All matching criteria
-   - Option to test the query against recent events
+1. Select the exclusion from the list.
+2. Click **Edit**.
+3. Modify the name, description, or JSONata query expression.
+4. Click **Save Changes**.
 
-### Editing an Exclusion
+## Delete an Exclusion
 
-1. Click on the exclusion
-2. Click **"Edit"** or the edit icon
-3. Modify any of these fields:
-   - Name
-   - Description
-   - JSONata query
-4. Click **"Save Changes"**
-
-**Tip**: Always test your edited query before saving to ensure it still works as expected.
-
-### Deleting an Exclusion
-
-1. Click on the exclusion
-2. Click the **"Delete"** button
-3. Confirm the deletion
-4. The exclusion will be immediately removed and will no longer filter events
-
-### Bulk Exclusion Management
-
-You can manage exclusions for a specific device group:
-
-1. Go to **Groups** page
-2. Click on the device group
-3. Scroll to the **Exclusions** section
-4. Here you can:
-   - View all exclusions for this group
-   - Create new exclusions specifically for this group
-   - Edit or delete existing exclusions
-
-## Tips & Validations
-
-- **Query Syntax**: JSONata queries must be valid. Invalid queries will be rejected.
-- **Group Scope**: Exclusions only apply to the device group they're assigned to.
-- **Order of Operations**: Exclusions are applied before alerts are generated, not after.
-- **Performance**: Complex queries may impact agent performance. Keep queries as simple as possible.
-- **Security**: Be careful not to exclude legitimate security events. Review exclusion patterns regularly.
-- **Audit**: Maintain documentation of why each exclusion exists.
-
-**Tip**: Start with broad exclusions for known-safe categories, then add more specific ones as needed.
-
-**Tip**: Use the description field to document WHY the exclusion exists (e.g., "Ignore nightly backup process - generates false positives").
-
-**Tip**: Test exclusions during low-traffic periods first to ensure they work as expected.
-
-**Tip**: Review your exclusions periodically to ensure they're still appropriate.
-
-**Tip**: Consider creating a "Default Exclusions" group that all new devices are added to, containing common false positive patterns.
+1. Select the exclusion from the list.
+2. Click **Delete**.
+3. Confirm the deletion.
+4. The system removes the exclusion immediately. Endpoints resume processing matching events.
 
 ## Troubleshooting
 
-### Can't create an exclusion
+### Cannot Create an Exclusion
 
-- **Permission denied**: You need pack write permissions on the device group's teams
-- **Invalid query**: The JSONata query may have syntax errors
-- **Missing group**: You may not have selected a device group
-- **Form validation**: All required fields (group, name, query) must be filled
+- **Syntax Error**: Validate your JSONata expression syntax.
+- **Permissions**: Make sure you have pack write permissions on the device group's managing teams.
+- **Missing Fields**: Complete all required fields in the form.
 
-### Exclusion not working
+### Exclusion Does Not Filter Events
 
-- **Wrong group**: The exclusion may be assigned to a different group than the device
-- **Query error**: The JSONata query may not match the expected event format
-- **Syntax error**: Check the query for syntax errors
-- **Case sensitivity**: JSONata is case-sensitive by default. Use $lowercase() or $uppercase() if needed.
-- **Event structure**: The event fields may be different than you expect. Test with real event data.
-
-### Can't see any exclusions
-
-- **No exclusions**: Your organization may not have any exclusions created yet
-- **Permission issue**: You need pack read permissions on teams that own device groups with exclusions
-- **Group access**: You may not have access to any device groups with exclusions
-
-### Can't delete an exclusion
-
-- **Permission denied**: You need pack write permissions on the exclusion's device group
-- **Exclusion not found**: The exclusion may have already been deleted
-- **Group access**: You may not have access to the device group the exclusion belongs to
-
-### Too many events being excluded
-
-- **Query too broad**: The exclusion query may be matching more than intended
-- **Test first**: Always test queries before saving to see what they match
-- **Start specific**: Start with very specific queries and broaden as needed
-- **Review regularly**: Check exclusion statistics to see how many events are being filtered
-
-### Events that should be excluded aren't
-
-- **Wrong group**: The device may not be in the group with the exclusion
-- **Query mismatch**: The event data may not match your query structure
-- **Timing**: The exclusion may have been created after the events were already processed
-- **Syntax**: There may be a subtle syntax issue in your query
+- **Wrong Group**: Verify that the affected endpoint belongs to the group where the exclusion is defined.
+- **Case Sensitivity**: JSONata expressions are case-sensitive. Use `$lowercase(process_name)` for case-insensitive comparisons.
+- **Event Schema**: Inspect the raw event JSON to make sure field names match your query.

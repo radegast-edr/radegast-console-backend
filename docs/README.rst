@@ -1,86 +1,88 @@
 Radegast EDR — Backend
 =======================
 
-Radegast EDR is a lightweight, privacy-focused Endpoint Detection and Response platform **perfect for smaller teams, home labbers, and families**. With complete end-to-end encryption (E2EE) using age encryption, your log data remains private and secure — even from the server itself. **No custom infrastructure is required**: the built-in SQLite database and self-contained deployment make it easy to get started without complex setup. You don't need to host any custom infrastructure if you don't want to.
+Radegast EDR is an Endpoint Detection and Response (EDR) platform designed for small teams and independent labs. The platform uses age end-to-end encryption (E2EE) to keep log data private. The server stores only encrypted data that the server cannot read.
 
-Built with FastAPI and SQLAlchemy, the backend handles device authorization, user configuration packs, encrypted log storage, alert status tracking, and key/session management.
+The platform uses a built-in SQLite database. You do not need to install an external database server.
+
+The backend uses FastAPI and SQLAlchemy. It manages device authorization, configuration packs, encrypted log storage, alert statuses, and user sessions.
 
 Features
 --------
 
-- **Device Management**: Create and enroll EDR agent devices, assign them to groups, and generate secure authorization tokens
-- **Configuration Packs**: Store and distribute YAML/binary endpoint detection policies and versions
-- **End-to-End Encrypted Log Storage**: All logs are encrypted on the device using ``age`` before transmission; the server stores only encrypted data it cannot read
-- **Team Collaboration**: Create teams, manage device group permissions, and receive email notifications for critical events
-- **Zero-Trust Architecture**: All data is encrypted client-side; the server never has access to your private keys or decrypted log contents
-- **Self-Contained Deployment**: Built-in SQLite database means no external database server required
-- **Agent Distribution**: Serve the Rustinel eBPF sensor and provide single-command installation for Linux and Windows
+- **Device Management**: Enroll agent devices, assign devices to groups, and generate authorization tokens.
+- **Configuration Packs**: Store and distribute detection policies and versions.
+- **End-to-End Encrypted Log Storage**: The agent encrypts logs with age before transmission. The server stores only encrypted data.
+- **Team Collaboration**: Create teams, configure group permissions, and receive email notifications for critical events.
+- **Zero-Trust Architecture**: The client encrypts all data locally. The server never accesses private keys or decrypted logs.
+- **Self-Contained Deployment**: The built-in SQLite database requires no external database server.
+- **Agent Distribution**: Distribute the Rustinel sensor and provide installation commands for Linux, Windows, and macOS.
 
 Deployment
 ----------
 
-The recommended way to run Radegast EDR in production is via the published container image.
+To run Radegast EDR in production, use the container image.
 
 Quick Start
 ~~~~~~~~~~~
 
 .. code-block:: bash
 
-   # Pull and start with podman-compose (reads podman-compose.yaml)
+   # Start with podman-compose (reads podman-compose.yaml)
    podman-compose up -d
 
-   # Or with plain podman / docker
-   podman run -d \\
-     --name radegast-edr \\
-     -p 8000:8000 \\
-     -e RADEGAST_SECRET_KEY=<your-secret> \\
-     -e RADEGAST_BASE_URL=https://your.domain \\
-     -e RADEGAST_CORS_ORIGINS=https://your.domain \\
-     -v radegast_db:/app/data/db \\
-     -v radegast_uploads:/app/data/uploads \\
-     -v radegast_releases:/app/data/releases \\
+   # Or start with podman or docker directly
+   podman run -d \
+     --name radegast-edr \
+     -p 8000:8000 \
+     -e RADEGAST_SECRET_KEY=<your-secret> \
+     -e RADEGAST_BASE_URL=https://your.domain \
+     -e RADEGAST_CORS_ORIGINS=https://your.domain \
+     -v radegast_db:/app/data/db \
+     -v radegast_uploads:/app/data/uploads \
+     -v radegast_releases:/app/data/releases \
      docker.io/radegastedr/console:latest
 
-For more details, see the `Deployment Guide <https://github.com/radegast-edr/radegast-console-backend#deployment-podman--docker>`_.
+For more details, refer to the `Deployment Guide <https://github.com/radegast-edr/radegast-console-backend#deployment-podman--docker>`_.
 
 Local Development
-------------------
+-----------------
 
 Prerequisites
 ~~~~~~~~~~~~~
 
-- Python 3.11+
+- Python 3.11 or later
 - ``uv`` (recommended) or standard ``pip``
 
 Installation
-~~~~~~~~~~~~~
+~~~~~~~~~~~~
 
-1. Install project dependencies:
+1. Install the project dependencies:
 
    .. code-block:: bash
 
       uv sync
 
-2. Install dev tools (test runner etc.):
+2. Install the development tools:
 
    .. code-block:: bash
 
       uv sync --dev
 
-Running the Backend
-~~~~~~~~~~~~~~~~~~~
+Start the Backend
+~~~~~~~~~~~~~~~~~
 
-Start the development server with hot-reload:
+Start the development server with automatic reload:
 
 .. code-block:: bash
 
    uv run uvicorn app.main:app --reload --port 8000
 
-The server runs on http://localhost:8000. Interactive Swagger docs are available at http://localhost:8000/docs.
+The server listens on http://localhost:8000. Interactive Swagger documentation is available at http://localhost:8000/docs.
 
 Configuration
 -------------
 
-All settings are controlled via environment variables prefixed with ``RADEGAST_`` (defined in ``app/config.py``).
+Environment variables with the ``RADEGAST_`` prefix control all settings. The settings are defined in ``app/config.py``.
 
-See the `Configuration Section in README <https://github.com/radegast-edr/radegast-console-backend#configuration>`_ for the full list of configuration options.
+Refer to the `Configuration Section in README <https://github.com/radegast-edr/radegast-console-backend#configuration>`_ for the complete list of options.

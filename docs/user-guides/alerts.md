@@ -1,167 +1,136 @@
 # Alerts Dashboard
 
-## Feature Overview
+## Overview
 
-The Alerts Dashboard is your central workspace for monitoring, investigating, and responding to security events from all your monitored endpoints. Here, you can view real-time security alerts, triage incidents, search through historical data, and manage alert resolutions.
+The Alerts Dashboard is the central workspace to monitor, investigate, and triage security incidents from monitored endpoints. You can view security alerts in real time, inspect decrypted execution trees, filter historical data, and record investigation resolutions.
 
-## What Value Does This Feature Add?
+## Capabilities
 
-- **Real-time Visibility**: See security events as they occur across all your endpoints
-- **Centralized Triage**: Manage all alerts from one unified interface
-- **Historical Investigation**: Search and filter through past events to identify patterns
-- **Team Collaboration**: Share alert visibility and resolution status with team members
-- **Customizable Views**: Filter alerts by severity, time, device, and other criteria
+- **Real-Time Alert Stream**: Receive security events as they occur across endpoints.
+- **Incident Triage**: Mark alerts as reviewed, assign triage decisions, and record notes.
+- **Investigation Details**: View decrypted process trees, command lines, parent PIDs, and MITRE ATT&CK techniques.
+- **Granular Filters**: Filter alerts by time range, severity, endpoint, and resolution status.
 
-## Step-by-Step Guide
+## View the Alerts Dashboard
 
-### Accessing the Alerts Dashboard
-
-1. Log in to your Radegast Console
-2. Click **"Alerts"** in the main navigation menu
-3. The dashboard will load showing recent alerts
-
-### Understanding the Dashboard Layout
-
-The Alerts page displays:
-
-- **Search Bar**: Enter keywords or JSONata expressions to search through alert content
-- **Time Range Filter**: Select a date/time range to view alerts from (defaults to last 4 days)
-- **Severity Filters**: Filter by alert severity (Critical, High, Medium, Low, Informational)
-- **Alert Table**: Lists all matching alerts with columns for:
-  - Timestamp
-  - Device name
-  - Severity level (color-coded)
-  - Rule ID (matched detection rule)
-  - Alert type/event
-  - Resolution status
-- **Alert Details Panel**: Click an alert to view full details including process execution trees, command lines, and triage actions
+1. Log in to the Radegast Console.
+2. Click **Alerts** in the main navigation menu.
+3. The dashboard loads recent security alerts.
 
 ![Threat Triage and Alert Details](../_static/screenshots/alerts-list.png)
 
-### Viewing Alert Details
+The alerts interface provides:
+- **Search Bar**: Query alert contents with keywords or JSONata expressions.
+- **Time Range Picker**: Select the date and time window (defaults to the last 4 days).
+- **Severity Filters**: Filter alerts by Critical, High, Medium, Low, or Informational.
+- **Alert Table**: Lists events with timestamp, device name, severity, rule ID, and resolution status.
+- **Details Panel**: Shows the decrypted process execution tree and triage controls.
 
-1. Click on any alert in the table to open the details view
-2. The panel shows:
-   - Full alert content and metadata
-   - Device information
-   - Timestamp
-   - Severity level
-   - Rule ID
-   - Current resolution status
-   - Any existing triage notes
-3. If the alert contains encrypted content, it will be automatically decrypted if you have the appropriate private key stored in your browser
+## View Alert Details
 
-### Triage Actions
+1. Click an alert row in the table.
+2. The details panel displays:
+   - Full event metadata and device information.
+   - Timestamp and severity level.
+   - Matched detection rule ID.
+   - Process tree, command line, parent process, and user account.
+   - Current resolution status and triage notes.
+3. The browser decrypts the event data automatically using your local age private key.
 
-#### Mark as Read
-1. Open an alert's details
-2. Click the **"Mark as Read"** button
-3. The alert will move from "Unread" to "Read" status
-4. The unread counter in your dashboard will decrement
+## Incident Triage Actions
 
-#### Set Resolution
-1. Open an alert's details
-2. Select a resolution from the dropdown:
-   - **None**: No action taken (default)
-   - **True Positive**: Confirmed security incident
-   - **False Positive**: Benign event, not a threat
-   - **Read**: Acknowledged and reviewed
-3. Add an optional note explaining your decision
-4. Click **"Save Resolution"**
+### Mark as Read
 
-#### Add Triage Notes
-1. Open an alert's details
-2. Type your notes in the text area
-3. Click **"Save"** to attach the note to the alert
-4. Notes are preserved for team collaboration
+1. Open an alert in the details panel.
+2. Click **Mark as Read**.
+3. The alert status changes to Read. The unread alert badge counter decreases.
 
-### Advanced Filtering
+### Set an Alert Resolution
 
-#### By Time Range
-1. Click the calendar icon or date field
-2. Select a predefined range (Today, Yesterday, Last 7 Days, etc.) or enter custom dates
-3. Click **"Apply"** to filter results
+1. Open an alert in the details panel.
+2. Select a resolution from the dropdown menu:
+   - **None**: No triage action recorded.
+   - **True Positive**: Confirmed malicious security incident.
+   - **False Positive**: Benign activity that does not represent a threat.
+   - **Read**: Acknowledged and reviewed.
+3. Enter an optional triage note explaining your decision.
+4. Click **Save Resolution**.
 
-#### By Severity
-1. Click the severity filter dropdown
-2. Select one or more severity levels
-3. Only alerts matching your selection will be shown
+:::{note}
+In Extended EDR mode, marking an alert as read does not remove it from active counts. You must set a formal resolution (such as True Positive or False Positive).
+:::
 
-#### By Search Query
-1. Type keywords in the search bar
-2. Press Enter or click the search icon
-3. The table will show only alerts containing your search terms
+### Add Triage Notes
 
-#### By Device/Group
-1. Use the group filter to show alerts from specific device groups
-2. Use the device filter to show alerts from specific endpoints
+1. Open an alert in the details panel.
+2. Enter your notes in the triage comments box.
+3. Click **Save**.
+4. The system attaches your notes to the alert record for team collaboration.
 
-### Bulk Actions
+## Filter Alerts
 
-#### Mark All as Seen
-1. Click the **"Mark All as Seen"** button at the top
-2. All visible alerts will be marked as seen
-3. This is useful after returning from time away or for clearing your unread count
+### By Time Range
 
-### Working with Encrypted Alerts
+1. Click the calendar icon.
+2. Select a preset range (such as Last 24 Hours or Last 7 Days), or enter custom start and end dates.
+3. Click **Apply**.
 
-**Tip**: Alerts are encrypted on the device before transmission. To view the content:
+### By Severity
 
-- You must have your private key stored in your browser
-- If you see "Encrypted content" instead of readable data:
-  1. Go to **Settings > Encryption Keys**
-  2. Verify you have a key listed
-  3. If not, you'll need to recover or transfer your key
+1. Click the severity dropdown filter.
+2. Select one or more severity levels (Critical, High, Medium, Low, Informational).
+3. The table updates to display only matching alerts.
 
-### Keyboard Shortcuts
+### By Keyword Search
 
-- **Escape**: Close the alert details panel
-- **Up/Down Arrow**: Navigate between alerts in the table
-- **Enter**: Open the selected alert's details
+1. Enter keywords in the search bar.
+2. Press Enter.
+3. The table filters alerts matching the search term across command lines, file paths, and process names.
 
-## Tips & Validations
+### By Device or Group
 
-- **Alert Retention**: Alerts are retained based on your system's configuration. Older alerts may be automatically archived.
-- **Severity Levels**: From highest to lowest priority: Critical, High, Medium, Low, Informational
-- **Auto-Refresh**: The alert count on the dashboard updates every 60 seconds
-- **Browser Notifications**: You can enable browser notifications for new critical alerts in your Settings
-- **Time Zone**: All timestamps are displayed in your local browser time zone
-- **Pagination**: Alerts are loaded in pages. Scroll to the bottom or click "Load More" to see older alerts
-- **Extended EDR Mode**: If enabled by your administrator, alerts remain "active" until explicitly resolved, regardless of read status
+1. Click the device or group dropdown filter.
+2. Select target devices or device groups.
+3. The table displays alerts from the selected endpoints.
 
-**Tip**: In Extended EDR mode, marking an alert as "read" doesn't close it. You must set a resolution (True Positive, False Positive, etc.) to remove it from active counts.
+## Bulk Actions
 
-**Tip**: Your notification level (set in User Settings) determines which severity alerts trigger email notifications. Alerts below this level are automatically marked as seen.
+To mark all visible alerts as reviewed:
+
+1. Click **Mark All as Seen** at the top of the table.
+2. The console updates all visible alerts to the seen state.
+
+## Decrypt Encrypted Alerts
+
+Endpoints encrypt event telemetry before transmission. To inspect alert details:
+
+1. Make sure your browser contains your age private key.
+2. If the console displays "Encrypted content":
+   - Go to **Settings > Encryption Keys**.
+   - Make sure an active key pair appears in the list.
+   - If missing, restore your private key with your recovery key or the key transfer feature.
+
+## Keyboard Shortcuts
+
+- **Escape**: Close the alert details panel.
+- **Up Arrow / Down Arrow**: Move between alert rows in the table.
+- **Enter**: Open details for the selected alert.
 
 ## Troubleshooting
 
-### I don't see any alerts
+### No Alerts Appear
 
-- **Check your time range**: Make sure you're not filtering out all alerts with too narrow a date range
-- **Verify device connectivity**: Ensure your devices are online and communicating with the server
-- **Check permissions**: Confirm you have log-read permissions on at least one team
-- **Check device group assignments**: Your user must be a member of a team that has access to device groups with devices
+- **Time Range**: Expand the date and time filter range.
+- **Device Connectivity**: Make sure your endpoints show an **Online** status on the Devices page.
+- **Permissions**: Make sure your team has `logs=read` permissions for the device groups.
 
-### Alerts show as encrypted
+### Alerts Display as Encrypted Text
 
-- **Private key missing**: You need to have your private key stored in this browser. Go to Settings > Encryption Keys
-- **Wrong key**: If you've generated multiple keys, ensure the correct one is active
-- **Key recovery needed**: If you've lost your key, use the Recovery or Transfer features in the Keys section
+- **Missing Key**: The browser local storage does not contain the matching age private key.
+- **Key Recovery**: Import your recovery key in **Keys > Recovery** to restore your private key.
 
-### Alerts aren't updating
+### Live Updates Stop
 
-- **Refresh the page**: Press F5 or click the refresh button
-- **Check network connectivity**: Ensure you have an active internet connection
-- **Clear browser cache**: Sometimes cached data can prevent updates
-
-### I can't see alerts from specific devices
-
-- **Verify team membership**: You must be a member of a team that has access to the device's group
-- **Check device group permissions**: Your team needs log-read permissions
-- **Confirm device assignment**: Verify the device is properly assigned to a group
-
-### Browser notifications aren't working
-
-- **Enable notifications**: In your browser settings, ensure notifications are allowed for this site
-- **Check notification settings**: In Radegast Settings > Notifications, ensure device log notifications are enabled
-- **Verify severity level**: Only alerts at or above your notification level will trigger notifications
+- **Network Connection**: Verify your internet connectivity.
+- **Refresh**: Press F5 to reload the console page.
+- **Browser Notifications**: Enable site notifications in your browser settings to receive desktop alerts.

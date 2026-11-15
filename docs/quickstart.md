@@ -2,145 +2,147 @@
 
 ## Overview
 
-At Radegast EDR, our goal is simple — make enterprise-grade endpoint security and threat detection straightforward and accessible to everyone. Whether you are managing production infrastructure, a small team, a home lab, or protecting family devices, getting started takes only a few minutes.
+Radegast EDR provides endpoint security and threat detection for your infrastructure, team, or personal lab.
 
-This quickstart walks you through creating your account, enrolling your first endpoint with a single command, enabling curated detection packs, and inspecting decrypted security alerts.
+This quickstart guides you through account creation, device enrollment, detection pack activation, and alert inspection.
 
 ---
 
-## Step 1 — Account Creation & Key Setup
+## Step 1 — Account Creation and Key Setup
 
-1. **Access the Console**: Navigate to your Radegast Console (for cloud users: [https://console.radegast.app/ui/login](https://console.radegast.app/ui/login), or your self-hosted console URL).
-2. **Register**: On the login page, click **Register** and provide your email address and a strong password.
-3. **Verify Your Email**: Check your inbox for the confirmation email and click the verification link.
-4. **Initialize Encryption Keys**: Upon first login, Radegast automatically generates an [age](https://github.com/FiloSottile/age) X25519 keypair inside your browser.
-   - Radegast features **end-to-end client-side encryption (E2EE)**. Your private encryption keys are stored locally in your browser and never transmitted to the backend.
-   - Save your 256-bit AES recovery key in your password manager. This allows you to restore your private key or transfer it to another browser.
+1. Open the Radegast Console in your browser. Use [https://console.radegast.app/ui/login](https://console.radegast.app/ui/login) or your self-hosted console URL.
+2. Click **Register** on the login page.
+3. Enter your email address and a strong password.
+4. Open the confirmation email in your inbox and click the verification link.
+5. Log in to the console. The browser automatically generates an [age](https://github.com/FiloSottile/age) X25519 key pair.
+   - Radegast uses end-to-end client-side encryption (E2EE).
+   - The browser stores your private encryption key locally and never sends it to the server.
+   - Save your 256-bit AES recovery key in a password manager. You need this key to restore or transfer your private key.
 
 :::{tip}
-For advanced account security, you can set up Two-Factor Authentication (OTP, WebAuthn, or FIDO2 hardware tokens like YubiKey). See the [Multi-Factor Authentication (MFA) Guide](user-guides/mfa.md), [Encryption Keys Guide](user-guides/encryption-keys.md), and [User Settings Guide](user-guides/settings.md).
+To configure Multi-Factor Authentication (OTP, WebAuthn, or FIDO2 security keys), refer to the [Multi-Factor Authentication (MFA) Guide](user-guides/mfa.md), [Encryption Keys Guide](user-guides/encryption-keys.md), and [User Settings Guide](user-guides/settings.md).
 :::
 
 ---
 
-## Step 2 — Enrolling Your First Device
+## Step 2 — Enroll a Device
 
-Once logged in, you can enroll Linux, Windows, or macOS endpoints in minutes.
+You can enroll Linux, Windows, or macOS endpoints.
 
-### 1. Create the Device in Console
+### 1. Create the Device in the Console
 
-1. Navigate to the **Devices** tab in the main sidebar.
-2. Click the **"Add Device"** button in the top-right corner.
+1. Click **Devices** in the main sidebar.
+2. Click **Add Device** in the top-right corner.
 
 ![Add Device](_static/screenshots/first-steps/add_device.png)
 
-3. In the modal, enter a friendly name for your endpoint (e.g., `srv-prod-01`, `laptop-alice`).
-4. Select a **Device Group**. For newly created accounts, a default group with your account name is automatically available.
+3. Enter a name for your endpoint (for example, `srv-prod-01` or `laptop-alice`).
+4. Select a **Device Group**. New accounts include a default group.
 5. Click **Create Device**.
 
 ![Name the Device](_static/screenshots/first-steps/name_device.png)
 
 ---
 
-### 2. Run the Single-Line Installation Command
+### 2. Run the Installation Command
 
-After creating the device, the console displays tailored installation instructions for your operating system:
+After you create the device, the console displays the installation command:
 
-1. Select your target operating system tab: **Linux**, **Windows**, or **macOS**.
-2. Copy the generated **single-line installation command**. This command includes a unique, one-time device authorization token.
+1. Select your operating system tab: **Linux**, **Windows**, or **macOS**.
+2. Copy the single-line installation command. The command includes a unique device authorization token.
 
 ![Install Agent Instructions](_static/screenshots/first-steps/installing_agent.png)
 
-3. Execute the command on your target machine:
-   - **Linux**: Run the `curl | bash` command as `root` (or with `sudo`).
-   - **Windows**: Open an elevated **PowerShell** prompt (Run as Administrator) and paste the command.
+3. Run the command on your target endpoint:
+   - **Linux**: Run the command as `root` or use `sudo`.
+   - **Windows**: Open an elevated **PowerShell** prompt (Run as Administrator) and run the command.
    - **macOS**: Run the installation script as `root` in Terminal.
 
-The installation script automatically:
-- Installs the isolated runtime dependencies.
-- Downloads the latest signed Radegast agent and Rustinel eBPF/audit engine.
+The installation script performs these tasks automatically:
+- Installs required dependencies.
+- Downloads the latest signed Radegast agent and Rustinel engine.
 - Configures the endpoint with your device token and public encryption key.
 - Registers and starts the background system service (`systemd` on Linux, Windows Service, or `launchd` on macOS).
 
 ---
 
-### 3. Verify Connection Status
+### 3. Check the Connection Status
 
-Once the agent completes its initial handshake, refresh the **Devices** list in the console. Your endpoint will appear with an **Online** and **Healthy** status badge:
+After the agent completes the initial handshake, refresh the **Devices** page. The endpoint displays an **Online** and **Healthy** status badge:
 
 ![Successful Installation](_static/screenshots/first-steps/successful_install.png)
 
 :::{note}
-For in-depth prerequisites, distribution packages, and troubleshooting, consult the [Device Installation Guide](user-guides/device-installation.md) and [Devices Management Guide](user-guides/devices.md).
+For prerequisites and troubleshooting, refer to the [Device Installation Guide](user-guides/device-installation.md) and [Devices Management Guide](user-guides/devices.md).
 :::
 
 ---
 
-## Step 3 — Enabling Detection Packs
+## Step 3 — Enable Detection Packs
 
-By default, an enrolled device transmits baseline telemetry. To activate real-time threat detection rules (Sigma rules, IOC matching, and YARA scanners), enable detection packs for your device group.
+An enrolled device transmits baseline telemetry. To enable real-time threat detection rules (Sigma rules, IOC matching, and YARA scanners), activate detection packs for your device group.
 
 ### 1. Open Device Group Management
 
-1. Navigate to the **Groups** tab from the main sidebar.
-2. Locate your device group (e.g., your default account group or custom group).
-3. Click the group name or **Manage** button to view its linked devices, teams, and active detection packs.
+1. Click **Groups** in the main sidebar.
+2. Find your device group.
+3. Click the group name or click **Manage** to view linked devices, teams, and active detection packs.
 
 ![Manage Group](_static/screenshots/first-steps/manage_group.png)
 
 ---
 
-### 2. Enable Matching Detection Packs
+### 2. Enable Detection Packs
 
-1. In the group details view, locate the **Enabled Packs** section and click **"Enable Pack"**.
-2. From the dropdown list, select the pack that matches your operating system and desired detection scope:
-   - **Essential** (e.g., `Radegast: Linux Essential`, `Rustinel: Windows Essential`): Core detection rules covering common living-off-the-land binaries (LOLBins), privilege escalation, and suspicious script executions with low false-positive rates.
+1. In the group details view, locate the **Enabled Packs** section and click **Enable Pack**.
+2. Select the pack that matches your operating system and monitoring requirements:
+   - **Essential** (for example, `Radegast: Linux Essential` or `Rustinel: Windows Essential`): Core rules that detect living-off-the-land binaries, privilege escalation, and suspicious script executions.
    - **Advanced**: Deep process injection detection, persistence mechanisms, and advanced MITRE ATT&CK techniques.
-   - **Hunting**: High-volume telemetry rules suited for proactive threat analysis and incident response.
+   - **Hunting**: High-volume telemetry rules for proactive threat analysis.
    - **Malware Domains**: Network threat intelligence matching suspicious C2 and phishing domains.
 
 ![Enable Pack](_static/screenshots/first-steps/enable_pack.png)
 
-3. Click **Enable Pack**. The agent pulls down the compiled rule packs on its next sync cycle (within seconds).
+3. Click **Enable Pack**. The agent downloads compiled rule packs during the next sync cycle.
 
 ---
 
-### 3. Browse and Filter Detection Packs
+### 3. Inspect Detection Packs
 
-You can explore all available detection rules, version history, and rule metadata by navigating to the **Packs** tab. Use the multi-select filters for **Status** (`stable`, `testing`), **OS** (`linux`, `windows`, `macos`), and **Level** to discover new packs.
+To view available detection rules, version history, and rule metadata, click **Packs** in the sidebar. Use the filters for **Status** (`stable`, `testing`), **OS** (`linux`, `windows`, `macos`), and **Level** to locate packs.
 
 ![Packs Catalog](_static/screenshots/first-steps/packs.png)
 
 :::{tip}
-Read the [Detection Packs Guide](user-guides/packs.md), [Device Groups Guide](user-guides/groups.md), and [Exclusions Guide](user-guides/exclusions.md) to learn how to customize rules and create JSONata exclusions for benign business processes.
+Refer to the [Detection Packs Guide](user-guides/packs.md), [Device Groups Guide](user-guides/groups.md), and [Exclusions Guide](user-guides/exclusions.md) to customize rules and create JSONata exclusions.
 :::
 
 ---
 
-## Step 4 — Triaging Alerts & Threat Hunting
+## Step 4 — Triage Alerts and Hunt Threats
 
-When a detection rule triggers on an endpoint, the agent encrypts the complete execution telemetry with your public key and transmits it to the console.
+When a detection rule triggers on an endpoint, the agent encrypts telemetry with your public key and sends it to the console.
 
-1. Navigate to the **Alerts** tab to review real-time security events.
-2. Select any alert to inspect decrypted process trees, command lines, parent PIDs, user accounts, and MITRE ATT&CK technique mappings.
-3. Mark alerts as **True Positive**, **False Positive**, or **Acknowledge**, and record triage notes for your team.
+1. Click **Alerts** in the sidebar to review security events.
+2. Select an alert to inspect decrypted process trees, command lines, parent PIDs, user accounts, and MITRE ATT&CK technique mappings.
+3. Set the alert status to **True Positive**, **False Positive**, or **Acknowledge**. Enter triage notes for your team.
 
 ![Threat Triage View](_static/screenshots/alerts-list.png)
 
-4. Use **Hunt Mode** (in the sidebar) to run interactive queries and search historical endpoint telemetry using JSONata expressions.
+4. Click **Hunt** in the sidebar to run interactive queries on historical endpoint telemetry with JSONata expressions.
 
 ---
 
-## Next Steps & Further Reading
+## Next Steps and Related Documentation
 
-Now that your first device is actively protected, explore the following guides to take full advantage of Radegast EDR:
+Refer to these guides to learn more about Radegast EDR:
 
 | Resource | Description |
 |---|---|
-| [**Platform Overview**](user-guides/platform-overview.md) | Architectural overview of the zero-trust E2EE model and components. |
-| [**Teams & RBAC**](user-guides/teams.md) | Organize users into teams with granular pack, invite, and log permissions. |
-| [**Exclusions & Tuning**](user-guides/exclusions.md) | Filter benign cron jobs and administrative scripts with hard and soft exclusions. |
-| [**Threat Triage & Alerts**](user-guides/alerts.md) | Detailed walkthrough of alert investigation and lifecycle management. |
-| [**Hunt Mode**](user-guides/hunts.md) | Interactive query syntax and historical threat hunting techniques. |
-| [**API Keys & Automation**](user-guides/api-keys.md) | Generate scoped API tokens for SIEM integration and CI/CD pipelines. |
-| [**Self-Hosting & Deployment**](README.rst) | Run your own private Radegast EDR backend using Docker or Podman. |
+| [**Platform Overview**](user-guides/platform-overview.md) | Architecture of the zero-trust E2EE model and platform components. |
+| [**Teams and RBAC**](user-guides/teams.md) | Manage user teams and configure pack, invite, and log permissions. |
+| [**Exclusions and Tuning**](user-guides/exclusions.md) | Filter benign scheduled tasks and administration scripts with exclusions. |
+| [**Threat Triage and Alerts**](user-guides/alerts.md) | Investigate alerts and manage alert resolution lifecycles. |
+| [**Hunt Mode**](user-guides/hunts.md) | Query syntax and historical threat hunting procedures. |
+| [**API Keys and Automation**](user-guides/api-keys.md) | Generate scoped API tokens for SIEM integration and automation pipelines. |
+| [**Self-Hosting and Deployment**](README.rst) | Deploy a private Radegast EDR backend with Docker or Podman. |

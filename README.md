@@ -1,27 +1,27 @@
 # Radegast EDR -- Backend
 
-Radegast EDR is a lightweight, privacy-focused Endpoint Detection and Response platform **perfect for smaller teams, home labbers, and families**. With complete end-to-end encryption (E2EE) using age encryption, your log data remains private and secure -- even from the server itself.
+Radegast EDR is an Endpoint Detection and Response (EDR) platform designed for small teams and independent labs. The platform uses age end-to-end encryption (E2EE) to keep all log data private. The server stores only encrypted data that the server cannot read.
 
 ### Quickstarts
 
 - **User Quickstart**: [First Steps with Radegast EDR](https://docs.radegast.app/quickstart#)
-- **Backend Quickstart**: [Deployment & Quick Start](#quick-start)
+- **Backend Quickstart**: [Deployment and Quick Start](#quick-start)
 
-Built with FastAPI and SQLAlchemy, the backend handles device authorization, user configuration packs, encrypted log storage, alert status tracking, and key/session management.
+The backend uses FastAPI and SQLAlchemy. It manages device authorization, configuration packs, encrypted log storage, alert statuses, and user sessions.
 
 ---
 
-## Deployment (Podman / Docker)
+## Deployment (Podman or Docker)
 
-The recommended way to run Radegast EDR in production is via the published container image.
+To run Radegast EDR in production, use the published container image.
 
-### Quick start
+### Quick Start
 
 ```bash
-# Pull and start with podman-compose (reads podman-compose.yaml)
+# Start with podman-compose (reads podman-compose.yaml)
 podman-compose up -d
 
-# Or with plain podman / docker
+# Or start with podman or docker directly
 podman run -d \
   --name radegast-edr \
   -p 8000:8000 \
@@ -42,25 +42,26 @@ Clone the repository and start all services with persistent named volumes:
 git clone https://github.com/radegast-edr/radegast-backend.git
 cd radegast-backend
 
-# Edit the environment section in podman-compose.yaml first, then:
+# Edit the environment section in podman-compose.yaml first, then run:
 podman-compose up -d
 ```
 
-Three named volumes are created automatically:
+The compose file creates three named volumes automatically:
 
-| Volume | Mount | Purpose |
+| Volume | Mount Path | Description |
 |---|---|---|
 | `radegast_database` | `/app/data/db` | SQLite database |
-| `radegast_uploads` | `/app/data/uploads` | Uploaded configuration packs |
+| `radegast_uploads` | `/app/data/uploads` | Uploaded detection packs |
 | `radegast_releases` | `/app/data/releases` | Rustinel agent release binaries |
 
-The API is available at [http://localhost:8000](http://localhost:8000) and the interactive docs at [http://localhost:8000/docs](http://localhost:8000/docs).
+The API listens on [http://localhost:8000](http://localhost:8000). Interactive Swagger documentation is available at [http://localhost:8000/docs](http://localhost:8000/docs).
 
 ### Using MySQL as Database
 
-By default, the application runs on SQLite. If you want to use MySQL or MariaDB:
-1. Ensure your MySQL database is created.
-2. Run the Docker container with `RADEGAST_DATABASE_URL` pointed to your database using the `mysql+aiomysql://` driver (the Docker image comes pre-installed with `mysql` extra/support):
+The application uses SQLite by default. To use MySQL or MariaDB:
+
+1. Create your MySQL database.
+2. Start the container with `RADEGAST_DATABASE_URL` using the `mysql+aiomysql://` driver:
    ```bash
    docker run -d \
      --name radegast-edr \
@@ -74,9 +75,9 @@ By default, the application runs on SQLite. If you want to use MySQL or MariaDB:
      docker.io/radegastedr/console:latest
    ```
 
-SSL/TLS parameters such as `?ssl_verify_cert=false` (for self-signed certs), `?ssl_ca=/path/to/ca.pem`, `?ssl_cert=...`, or `?ssl_mode=...` in the URL query string are automatically parsed into the appropriate TLS context for `aiomysql`.
+The `aiomysql` driver parses query parameters such as `?ssl_verify_cert=false`, `?ssl_ca=/path/to/ca.pem`, and `?ssl_cert=...` to configure TLS connections.
 
-To copy an existing SQLite database (e.g. `radegast.db`) to MySQL, use the migration utility script:
+To copy an existing SQLite database (for example, `radegast.db`) to MySQL, run the migration script:
 
 ```bash
 # Run migration (applies Alembic migrations to MySQL and copies all data)
@@ -85,16 +86,15 @@ uv run python migrate-to-mysql.py \
   --mysql-url "mysql+aiomysql://user:password@mysql-host:3306/db_name?ssl_ca=cert.pem"
 ```
 
-The script automatically runs Alembic migrations on MySQL, disables foreign key checks to handle circular dependencies, normalizes datetime formats, batches transactions to stay within MySQL's binlog limits, preserves auto-increment counters, and verifies matching row counts across all tables.
+The script runs Alembic migrations on MySQL, normalizes datetime formats, batches transactions, and verifies row counts across all tables.
 
 ---
-
 
 ## Local Development
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.11 or later
 - [`uv`](https://github.com/astral-sh/uv) (recommended) or standard `pip`
 
 ### Installation
@@ -102,7 +102,7 @@ The script automatically runs Alembic migrations on MySQL, disables foreign key 
 1. Install project dependencies:
    ```bash
    uv sync
-   # Or to install with MySQL support:
+   # Or install with MySQL support:
    # uv sync --group mysql
    
    # Or using standard pip with a virtual environment:
@@ -111,45 +111,46 @@ The script automatically runs Alembic migrations on MySQL, disables foreign key 
    # pip install .[mysql]
    ```
 
-2. Install dev tools (test runner etc.):
+2. Install development tools:
    ```bash
    uv sync --dev
    # Or:
    # pip install .[dev]
    ```
 
-### Running the Backend
+### Start the Backend
 
-Start the development server with hot-reload:
+Start the development server with automatic reload:
+
 ```bash
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-The server runs on [http://localhost:8000](http://localhost:8000). Interactive Swagger docs are available at [http://localhost:8000/docs](http://localhost:8000/docs).
+The server listens on [http://localhost:8000](http://localhost:8000). Interactive Swagger documentation is available at [http://localhost:8000/docs](http://localhost:8000/docs).
 
-### Running with the CLI
+### Run with the CLI
 
-You can run the application directly via the CLI interface. In development, use:
+You can start the application using the CLI:
 
 ```bash
 uv run radegast-console run --host=127.0.0.1 --port=8000 --workers=4
 ```
 
-Alternatively, you can install the tool globally using `uv`:
+Alternatively, install the tool globally with `uv`:
 
 ```bash
 uv tool install radegast-edr-console
 ```
 
-Once installed, start the console using:
+After installation, start the console:
 
 ```bash
 radegast-console run --host=127.0.0.1 --port=8000 --workers=4
 ```
 
-You can pass any configuration variable (e.g., `--database-url`, `--enable-email-worker`) to override defaults. Run `radegast-console run --help` to see a full list of options.
+Run `radegast-console run --help` to view all available CLI parameters.
 
-### Running Tests
+### Run Tests
 
 ```bash
 uv run pytest
@@ -159,51 +160,52 @@ uv run pytest
 
 ## Configuration
 
-All settings are controlled via environment variables prefixed with `RADEGAST_` (defined in [`app/config.py`](app/config.py)):
+Environment variables with the `RADEGAST_` prefix control all configuration settings (defined in [`app/config.py`](app/config.py)):
 
-| Environment Variable                     | Required | Default                             | Description                                                                                                                                        |
-|------------------------------------------|----------|-------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
-| `RADEGAST_ENVIRONMENT`                   | N        | `prod`                              | The deployment environment. Valid values: `dev`, `prod`. If `dev`, skips default secret key warning.                                               |
-| `RADEGAST_SECRET_KEY`                    | Y        | `change-me-in-production`           | Secret key used for session signing -- **must be changed in production**                                                                            |
-| `RADEGAST_DATABASE_URL`                  | N        | `sqlite+aiosqlite:///./radegast.db` | Async SQLAlchemy database URL                                                                                                                      |
-| `RADEGAST_CORS_ORIGINS`                  | N        | `http://localhost:5173,...`         | Comma-separated list of allowed CORS origins                                                                                                       |
-| `RADEGAST_BASE_URL`                      | N        | `http://localhost:8000`             | Public base URL of the API server (used in emails and install scripts)                                                                             |
-| `RADEGAST_UPLOAD_DIR`                    | N        | `uploads/packs`                     | Directory where uploaded configuration packs are stored                                                                                            |
-| `RADEGAST_RELEASES_DIR`                  | N        | `agent/releases`                    | Directory containing Rustinel agent release binaries                                                                                               |
-| `RADEGAST_SMTP_HOST`                     | N        | _(none)_                            | Outgoing SMTP mail server. If not set, emails are logged to stdout instead of being sent (useful for development).                                 |
-| `RADEGAST_SMTP_PORT`                     | N        | `587`                               | Outgoing SMTP server port                                                                                                                          |
-| `RADEGAST_SMTP_USER`                     | N        | _(empty)_                           | SMTP authentication username                                                                                                                       |
-| `RADEGAST_SMTP_PASSWORD`                 | N        | _(empty)_                           | SMTP authentication password                                                                                                                       |
-| `RADEGAST_SMTP_FROM`                     | N        | `noreply@radegast.local`            | Sender address for outgoing emails                                                                                                                 |
-| `RADEGAST_SMTP_STARTTLS`                 | N        | `true`                              | Enable or disable SMTP STARTTLS extension                                                                                                          |
-| `RADEGAST_SESSION_COOKIE_NAME`           | N        | `radegast_session`                  | Name of the session cookie                                                                                                                         |
-| `RADEGAST_SESSION_MAX_AGE`               | N        | `604800`                            | Session lifetime in seconds (default: 7 days)                                                                                                      |
-| `RADEGAST_WEB_UI_URL`                    | N        | _(empty)_                           | Optional URL of the web UI in case it is hosted elsewhere (used for WebAuthn origins and email links).                                             |
-| `RADEGAST_TURNSTILE_SITE_KEY`            | N        | _(empty)_                           | Cloudflare Turnstile Site Key for optional registration-protection                                                                                 |
-| `RADEGAST_TURNSTILE_SECRET_KEY`          | N        | _(empty)_                           | Cloudflare Turnstile Secret Key for verifying Turnstile responses                                                                                  |
-| `RADEGAST_REGISTRATION_MESSAGE`          | N        | _(empty)_                           | Optional banner message displayed to users on the registration page (supports multiline text)                                                      |
-| `RADEGAST_EMAIL_DEBOUNCE_SECONDS`        | N        | `180`                               | Email debounce limit in seconds before sending queued emails                                                                                       |
-| `RADEGAST_EMAIL_BULK_INTERVALS`          | N        | `3,3,6,16,37,62,122,193`            | Comma-separated list of bulk debounce intervals in minutes                                                                                         |
-| `RADEGAST_EMAIL_BULK_RESET_HOURS`        | N        | `24`                                | Time window in hours after which the email bulk sequence resets if no events occur                                                                 |
-| `RADEGAST_ENABLE_EMAIL_WORKER`           | N        | `true`                              | Boolean flag to enable background email sending worker loop                                                                                        |
-| `RADEGAST_ENABLE_SPACE_USAGE_WORKER`     | N        | `true`                              | Boolean flag to enable background space usage computation worker loop                                                                              |
-| `RADEGAST_SPACE_USAGE_INTERVAL_MINUTES`  | N        | `15`                                | Interval in minutes between background space usage calculation runs                                                                                |
-| `RADEGAST_ENABLE_DEVICE_DELETION_WORKER`    | N        | `true`                              | Boolean flag to enable background deleted device cleanup worker loop                                                                               |
-| `RADEGAST_DEVICE_DELETION_INTERVAL_MINUTES` | N        | `15`                                | Interval in minutes between background device deletion cleanup runs                                                                                |
-| `RADEGAST_WORKER_LOCK_PATH`              | N        | `/tmp/radegast-console.lock`        | Path to the shared file lock used by single-thread workers                                                                                         |
-| `RADEGAST_MFA_REQUIRED_LEVEL_ADMIN`      | N        | `hardware_token`                    | Required MFA level for Admin accounts (none, otp, hardware_token)                                                                                  |
-| `RADEGAST_MFA_REQUIRED_LEVEL_MAINTAINER` | N        | `none`                              | Required MFA level for Maintainer accounts (none, otp, hardware_token)                                                                             |
-| `RADEGAST_MFA_REQUIRED_LEVEL_USER`       | N        | `none`                              | Required MFA level for User accounts (none, otp, hardware_token)                                                                                   |
-| `RADEGAST_WEBAUTHN_RP_ID`                | N        | _(empty)_                           | Optional WebAuthn RP ID override. Set this to a shared parent domain (for example `radegast.app`) when API and Web UI run on different subdomains. |
-| `RADEGAST_WEBAUTHN_ORIGINS`              | N        | _(empty)_                           | Optional comma-separated extra WebAuthn origins allowed during verification (for example `https://console.radegast.app`).                          |
-| `RADEGAST_PACK_MAX_SIZE_MB`              | N        | _(none)_                            | General maximum pack zip size in MB. Applies to all roles unless a role-specific override is set. If unset, no size limit is enforced.             |
-| `RADEGAST_PACK_MAX_SIZE_MB_USER`         | N        | _(none)_                            | Maximum pack zip size in MB for regular users. Falls back to `RADEGAST_PACK_MAX_SIZE_MB` if unset.                                                 |
-| `RADEGAST_PACK_MAX_SIZE_MB_MAINTAINER`   | N        | _(none)_                            | Maximum pack zip size in MB for maintainer accounts. Falls back to `RADEGAST_PACK_MAX_SIZE_MB` if unset.                                           |
-| `RADEGAST_PACK_MAX_SIZE_MB_ADMIN`        | N        | _(none)_                            | Maximum pack zip size in MB for admin accounts. Falls back to `RADEGAST_PACK_MAX_SIZE_MB` if unset.                                                |
-| `RADEGAST_AGENT_PACKAGE`                 | N        | `radegast-edr-agent`                | Target package/source from which the agent should be installed via `uv` (e.g., package name or directory/git path)                                 |
-| `RADEGAST_ACCOUNT_DELETION_GRACE_DAYS`   | N        | `14`                                | Number of days after confirmation before an account is permanently deleted. Logging in during this period cancels the deletion.                    |
+| Environment Variable | Required | Default | Description |
+|---|---|---|---|
+| `RADEGAST_ENVIRONMENT` | N | `prod` | Deployment environment (`dev` or `prod`). If `dev`, skips secret key warning. |
+| `RADEGAST_SECRET_KEY` | Y | `change-me-in-production` | Secret key used for session signing. Must be changed in production. |
+| `RADEGAST_DATABASE_URL` | N | `sqlite+aiosqlite:///./radegast.db` | Async SQLAlchemy database connection URL. |
+| `RADEGAST_CORS_ORIGINS` | N | `http://localhost:5173,...` | Comma-separated list of allowed CORS origins. |
+| `RADEGAST_BASE_URL` | N | `http://localhost:8000` | Public base URL of the API server. |
+| `RADEGAST_UPLOAD_DIR` | N | `uploads/packs` | Directory where uploaded detection packs are stored. |
+| `RADEGAST_RELEASES_DIR` | N | `agent/releases` | Directory containing Rustinel agent release binaries. |
+| `RADEGAST_SMTP_HOST` | N | _(none)_ | Outgoing SMTP mail server. If unset, emails are printed to stdout. |
+| `RADEGAST_SMTP_PORT` | N | `587` | Outgoing SMTP server port. |
+| `RADEGAST_SMTP_USER` | N | _(empty)_ | SMTP authentication username. |
+| `RADEGAST_SMTP_PASSWORD` | N | _(empty)_ | SMTP authentication password. |
+| `RADEGAST_SMTP_FROM` | N | `noreply@radegast.local` | Sender email address for outgoing messages. |
+| `RADEGAST_SMTP_STARTTLS` | N | `true` | Enables or disables SMTP STARTTLS. |
+| `RADEGAST_SESSION_COOKIE_NAME` | N | `radegast_session` | Name of the session cookie. |
+| `RADEGAST_SESSION_MAX_AGE` | N | `604800` | Session lifetime in seconds (default: 7 days). |
+| `RADEGAST_WEB_UI_URL` | N | _(empty)_ | URL of the web UI if hosted on a separate domain. |
+| `RADEGAST_TURNSTILE_SITE_KEY` | N | _(empty)_ | Cloudflare Turnstile Site Key for registration protection. |
+| `RADEGAST_TURNSTILE_SECRET_KEY` | N | _(empty)_ | Cloudflare Turnstile Secret Key for verifying Turnstile responses. |
+| `RADEGAST_REGISTRATION_MESSAGE` | N | _(empty)_ | Optional message displayed on the registration page. |
+| `RADEGAST_EMAIL_DEBOUNCE_SECONDS` | N | `180` | Delay in seconds before sending queued emails. |
+| `RADEGAST_EMAIL_BULK_INTERVALS` | N | `3,3,6,16,37,62,122,193` | Comma-separated list of bulk debounce intervals in minutes. |
+| `RADEGAST_EMAIL_BULK_RESET_HOURS` | N | `24` | Hours after which the bulk notification sequence resets. |
+| `RADEGAST_ENABLE_EMAIL_WORKER` | N | `true` | Enables or disables the background email worker. |
+| `RADEGAST_ENABLE_SPACE_USAGE_WORKER` | N | `true` | Enables or disables the space usage computation worker. |
+| `RADEGAST_SPACE_USAGE_INTERVAL_MINUTES` | N | `15` | Minutes between periodic storage calculations. |
+| `RADEGAST_ENABLE_DEVICE_DELETION_WORKER` | N | `true` | Enables or disables the deleted device cleanup worker. |
+| `RADEGAST_DEVICE_DELETION_INTERVAL_MINUTES` | N | `15` | Minutes between device cleanup runs. |
+| `RADEGAST_WORKER_LOCK_PATH` | N | `/tmp/radegast-console.lock` | Path to the file lock used for single-instance worker execution. |
+| `RADEGAST_MFA_REQUIRED_LEVEL_ADMIN` | N | `hardware_token` | Required MFA level for Admin accounts (`none`, `otp`, `hardware_token`). |
+| `RADEGAST_MFA_REQUIRED_LEVEL_MAINTAINER` | N | `none` | Required MFA level for Maintainer accounts (`none`, `otp`, `hardware_token`). |
+| `RADEGAST_MFA_REQUIRED_LEVEL_USER` | N | `none` | Required MFA level for User accounts (`none`, `otp`, `hardware_token`). |
+| `RADEGAST_WEBAUTHN_RP_ID` | N | _(empty)_ | WebAuthn RP ID override for cross-subdomain deployments. |
+| `RADEGAST_WEBAUTHN_ORIGINS` | N | _(empty)_ | Comma-separated list of allowed WebAuthn origins. |
+| `RADEGAST_PACK_MAX_SIZE_MB` | N | _(none)_ | Maximum detection pack zip size in megabytes. |
+| `RADEGAST_PACK_MAX_SIZE_MB_USER` | N | _(none)_ | Maximum pack zip size for regular users in megabytes. |
+| `RADEGAST_PACK_MAX_SIZE_MB_MAINTAINER` | N | _(none)_ | Maximum pack zip size for maintainer accounts in megabytes. |
+| `RADEGAST_PACK_MAX_SIZE_MB_ADMIN` | N | _(none)_ | Maximum pack zip size for admin accounts in megabytes. |
+| `RADEGAST_AGENT_PACKAGE` | N | `radegast-edr-agent` | Agent package name or path for installation via `uv`. |
+| `RADEGAST_ACCOUNT_DELETION_GRACE_DAYS` | N | `14` | Grace period in days before account deletion completes. |
 
+---
 
 ## AI Usage Disclosure
 
-The code in this repository was heavily assisted by using GenAI tools. However, every commit is 100 % human made and reviewed. We know that this is a repository for security tool and for that reason we take the code security very seriously, including following all security best-practices during local development.
+The authors used GenAI tools to assist in writing code for this repository. Every commit is reviewed and verified by human maintainers.

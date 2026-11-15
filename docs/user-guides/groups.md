@@ -1,302 +1,203 @@
 # Device Groups
 
-## Feature Overview
+## Overview
 
-Device Groups are collections of endpoints that share common configuration, detection packs, and access controls. Groups allow you to organize your devices logically and apply policies consistently across multiple endpoints. This guide covers how to create, manage, and use device groups effectively.
+Device Groups collect endpoints that share detection policies, exclusions, and access permissions. You can organize endpoints logically and apply consistent rules across multiple systems. This guide describes how to create, configure, and manage device groups.
 
-## What Value Does This Feature Add?
+## Capabilities
 
-- **Logical Organization**: Group devices by function, location, department, or any other criteria
-- **Policy Application**: Apply detection packs and exclusions to groups of devices
-- **Access Control**: Control which teams can access which groups of devices
-- **Simplified Management**: Perform actions on groups rather than individual devices
-- **Permission Inheritance**: Teams that own groups can access all devices in those groups
+- **Logical Grouping**: Group endpoints by environment, function, operating system, or department.
+- **Policy Enforcement**: Apply detection packs and JSONata exclusions to collections of endpoints.
+- **Access Control**: Delegate group access to specific teams.
+- **Automated Prevention**: Configure Active Response process termination rules and Prevention Allowlists.
 
-## Step-by-Step Guide
+## View Device Groups
 
-### Accessing Device Groups
-
-1. Log in to your Radegast Console
-2. Click **"Groups"** in the main navigation menu
-3. The Groups page will display all device groups you have permission to view
-
-### Understanding the Groups List
-
-The Groups page shows:
-
-- **Group Name**: The name of the device group
-- **Device Count**: Number of devices in the group
-- **Team Count**: Number of teams that own/manage this group
-- **Exclusion Count**: Number of exclusions configured for this group
-- **Actions**: Buttons to view details, edit, or delete the group
+1. Log in to the Radegast Console.
+2. Click **Groups** in the main navigation menu.
+3. The page displays all device groups that you have permission to view.
 
 ![Device Groups Management](../_static/screenshots/groups-list.png)
 
-### Creating a New Device Group
+The groups table displays:
+- **Group Name**: Name of the group.
+- **Device Count**: Number of assigned endpoints.
+- **Team Count**: Number of teams that manage the group.
+- **Exclusion Count**: Number of active exclusions.
+- **Space Used**: Total database storage consumed by endpoints in this group.
+- **Actions**: Buttons to view details, edit, or delete the group.
 
-#### Steps
+## Create a Device Group
 
-1. On the Groups page, click **"Create Group"** or **"Add Group"**
-2. In the creation form:
-   - **Group Name**: Enter a descriptive name (e.g., "Web Servers", "Executive Laptops", "EU Region")
-   - **Teams**: Select which team(s) will own this group
-     - A group can be owned by multiple teams
-     - Teams that own a group can access all devices in that group
-3. Click **"Create Group"**
+1. Click **Create Group** on the Groups page.
+2. Enter a descriptive **Group Name** (for example, `Production Web Servers`).
+3. Select one or more **Teams** to own this group. Teams that own a group can access all devices in that group.
+4. Click **Create Group**.
 
-**Note**: You must be a member of at least one team with admin permissions to create a group.
+:::{note}
+You must belong to at least one team with administrative write permissions (`admin=write`) to create a group.
+:::
 
-### Viewing Group Details
+## View Group Details
+
+1. Click a group name in the list.
+2. The details page displays:
+   - Group name and creation date.
+   - **Teams**: Teams that own and manage the group.
+   - **Devices**: Endpoints assigned to the group.
+   - **Exclusions**: JSONata exclusions active on this group.
+   - **Detection Packs**: Packs enabled for devices in this group.
+   - **Active Response Settings**: Automated process termination configuration.
+   - **Prevention Allowlist**: Processes shielded from automated termination.
 
 ![Device Group Detail](../_static/screenshots/group-detail.png)
 
-1. Click on a group name in the Groups list
-2. The details panel shows:
-   - Basic information (name, ID, when created)
-   - **Teams**: All teams that own this group
-   - **Devices**: All endpoints in this group
-   - **Exclusions**: All exclusion rules applied to this group
-   - **Detection Packs**: Packs available to devices in this group (inherited from team permissions)
-   - **Actions**: Buttons to edit group, manage devices, manage teams, or delete
+## Manage Group Devices
 
-### Adding Devices to a Group
+### Add Devices to a Group
 
-#### During Device Creation
+1. Open the group details page.
+2. Locate the **Devices** section and click **Add Device**.
+3. Select the devices from the list.
+4. Click **Add**.
 
-1. When creating a new device, select the target group in the creation form
-2. The device will be automatically added to that group
+### Remove Devices from a Group
 
-#### Adding Existing Devices
-
-1. Click on the group
-2. In the Devices section, click **"Add Device"**
-3. Select the device(s) you want to add
-4. Click **"Add"**
-
-**Note**: You need admin permissions on both the source and target groups to move devices between groups.
-
-### Removing Devices from a Group
-
-1. Click on the group
-2. In the Devices section, find the device you want to remove
-3. Click the **"Remove"** or trash icon next to the device name
-4. Confirm the removal
-
-**Note**: A device must belong to at least one group. You cannot remove a device from its last group.
-
-### Managing Group Ownership (Teams)
-
-A group can be owned by multiple teams. This allows:
-- Different teams to access the same devices
-- Shared responsibility for monitoring and response
-- Flexible collaboration models
-
-#### Adding a Team to a Group
-
-1. Click on the group
-2. In the Teams section, click **"Add Team"**
-3. Select the team from the list
-4. Click **"Add"**
-
-**Note**: You need admin permissions on the group to add teams.
-
-#### Removing a Team from a Group
-
-1. Click on the group
-2. In the Teams section, find the team you want to remove
-3. Click the **"Remove"** or trash icon
-4. Confirm the removal
-
-**Warning**: You cannot remove the last team from a group. Every group must have at least one owning team.
-
-### Renaming a Group
-
-1. Click on the group
-2. Click **"Edit"** or the edit icon
-3. Enter the new name
-4. Click **"Save"**
-
-### Deleting a Group
-
-1. Click on the group
-2. Click the **"Delete"** button
-3. Confirm the deletion
-4. The group will be removed, but devices in the group will remain (they just won't be in this group anymore)
-
-**Warning**: Deleting a group cannot be undone. Devices will need to be added to other groups.
-
-**Note**: You cannot delete a group that still has devices assigned to it. Move all devices to other groups first.
-
-### Active Response Settings
-
-Active Response allows the agent to automatically terminate offending processes that trigger detection rules.
+1. Open the group details page.
+2. Locate the device in the **Devices** table.
+3. Click the **Remove** button.
+4. Confirm the removal.
 
 :::{note}
-Active Response controls are visible only if **Extended EDR Features** is enabled in your user [Settings](settings.md).
+An endpoint must belong to at least one group. You cannot remove an endpoint from its only group.
+:::
+
+## Manage Group Ownership
+
+Multiple teams can manage a group. This lets different operational teams share access to endpoints.
+
+### Add a Team to a Group
+
+1. Open the group details page.
+2. Locate the **Teams** section and click **Add Team**.
+3. Select the team from the dropdown list.
+4. Click **Add**.
+
+### Remove a Team from a Group
+
+1. Open the group details page.
+2. Locate the team in the **Teams** table.
+3. Click the **Remove** button.
+4. Confirm the removal.
+
+:::{caution}
+Every group must have at least one managing team. You cannot remove the last remaining team.
+:::
+
+## Delete a Device Group
+
+1. Remove or reassign all devices in the group to other groups.
+2. Open the group details page.
+3. Click **Delete Group**.
+4. Confirm the deletion.
+
+:::{caution}
+You cannot undo group deletion. You cannot delete a group that still contains devices.
+:::
+
+## Active Response Settings
+
+Active Response terminates processes that trigger high-severity detection rules automatically.
+
+:::{note}
+Active Response controls appear only when you enable **Extended EDR Features** in your user [Settings](settings.md).
 :::
 
 :::{caution}
-**Agent Version Requirement**: Active Response requires Radegast EDR Agent version **python 0.6.0** or higher. If a device in the group is running an older agent version (e.g. lower than 0.6.0 or unknown), a red warning alert will be displayed in the Group Detail page, and Active Response **will not apply or be enabled** for that device.
+Active Response requires Radegast EDR Agent version **0.6.0** or later. If an endpoint runs an older agent version, the console displays a warning alert and Active Response stays inactive for that endpoint.
 :::
 
-#### Steps to Configure
+### Configure Active Response
 
-1. Go to the **Settings** page and check **"Enable Extended EDR Features"**
-2. Go to **Groups**, and select your target group
-3. Scroll to **"Active Response Settings"**
-4. Check **"Enable Active Response"** to turn on process termination
-5. Select the **"Minimum severity level for termination"** (`Low`, `Medium`, `High`, `Critical`)
-6. A confirmation modal will appear highlighting potential disruption risks. Check that you do not have active false positives at the selected severity level before confirming.
+1. Go to **Settings** and enable **Extended EDR Features**.
+2. Go to **Groups** and select your target group.
+3. Locate **Active Response Settings**.
+4. Select the **Enable Active Response** checkbox.
+5. Select the **Minimum severity level for termination** (`Low`, `Medium`, `High`, or `Critical`).
+6. Review the warning dialog and confirm your choice. Make sure you have no active false positives at the selected severity level.
 
-#### Multi-Group Severity Resolution
-If a device belongs to multiple groups with Active Response enabled, the agent dynamically selects the **lowest severity level** of all the matching groups (mapping `Low` -> `Medium` -> `High` -> `Critical`) to ensure the maximum level of coverage and safety.
+### Multi-Group Severity Resolution
 
-### Prevention Allowlist
+If an endpoint belongs to multiple groups with Active Response enabled, the agent selects the lowest severity threshold among those groups. For example, if Group A specifies `Critical` and Group B specifies `High`, the agent terminates processes matching `High` and `Critical` events.
 
-Directly beneath Active Response Settings on the Group details page is the **Prevention Allowlist**. When automated process termination is active, the Prevention Allowlist defines explicit process image names and filesystem path prefixes that the agent is **strictly prohibited from terminating**, regardless of whether they trigger a detection rule.
+## Prevention Allowlist
 
-#### Why is the Prevention Allowlist Useful?
+The Prevention Allowlist defines processes and directory paths that the agent must never terminate, even if they trigger detection rules.
 
-Automated endpoint prevention is powerful, but without granular safeguards it introduces operational risk. The Prevention Allowlist addresses several critical operational requirements:
+### Purpose of the Prevention Allowlist
 
-1. **Prevents Severe Outages and Service Disruptions**:
-   Mission-critical infrastructure services—such as database engines (`postgres`, `mysqld`), web servers (`nginx`, `httpd`), container runtimes (`dockerd`, `containerd`), or orchestration daemons—frequently perform complex operations that can resemble attacker behavior. If a detection rule triggers a false positive against a primary database, an unshielded Active Response policy could kill the service. Allowlisting ensures vital infrastructure stays online.
+Automated process termination can disrupt critical infrastructure if a rule triggers on a legitimate service. The Prevention Allowlist protects critical operations:
 
-2. **Eliminates Administrator Lockout**:
-   Remote administration tools and daemons (such as `sshd`, remote desktop services, or IT management agents) execute high-privilege commands and spawn child shells. If automated response kills `sshd` on a remote server, administrators can be permanently locked out of the host. Adding `sshd` to the Prevention Allowlist guarantees remote connectivity is maintained.
+1. **Prevents Service Outages**: Protects critical daemons (such as `postgres`, `mysqld`, `nginx`, and `containerd`) from accidental termination.
+2. **Prevents Administrator Lockout**: Protects remote access daemons (`sshd`, remote management agents) so administrators maintain connectivity.
+3. **Preserves Threat Visibility**: Rules continue to trigger and generate alerts in the console. Only process termination is suppressed.
+4. **Group-Scoped Granularity**: Different groups enforce different allowlists based on their workload.
+5. **End-to-End Encryption**: The browser encrypts allowlist entries with the group's age public key before saving them to the backend.
 
-3. **Preserves Threat Visibility (Decoupling Response from Detection)**:
-   A common mistake in security operations is using detection exclusions to protect critical tools from being killed. However, doing so blinds the security team to actual attacks! 
-   With Prevention Allowlists:
-   - **Detection rules still trigger and fire alerts**: Security analysts retain 100% visibility into suspicious behavior or policy violations involving the process.
-   - **Alerts remain visible in the Threat Triage and Alerts dashboard**: Full telemetry, process lineage, and severity details are preserved for threat hunting and auditing.
-   - **Only the termination action is suppressed**: The process is spared from termination, giving analysts the opportunity to investigate manually without causing an immediate business outage.
+### Prevention Allowlists Compared to Detection Exclusions
 
-4. **Group-Scoped Policy Granularity**:
-   Different device groups serve different functions. A "Production Web Servers" group can protect `nginx` and internal reverse proxies, a "Database Clusters" group can protect database binaries and backup scripts, and a "Developer Workstations" group can protect compilers and debuggers without granting broad exemptions across the organization.
+| Attribute | Detection Exclusions | Prevention Allowlist |
+|:---|:---|:---|
+| **Primary Goal** | Filter false positive alerts | Exempt trusted processes from termination |
+| **Response Effect** | Suppresses alerts so no termination triggers | Bypasses termination directly |
+| **Console Visibility** | Suppressed (Hard) or downgraded (Soft) | Full visibility with original severity |
+| **Format** | JSONata query expression | Directory path prefix or process image name |
+| **Threat Hunting** | Hidden or deprioritized | Fully indexed and searchable in Hunt Mode |
+| **Best Used For** | Repetitive benign scripts | Critical daemons, databases, and administrative tools |
 
-5. **End-to-End Encryption (E2EE)**:
-   All allowlist entry paths, binary names, and descriptions are encrypted in the browser with the device group's AGE public key before transmission to the console backend. Only endpoints holding the group's private key and authorized team members can decrypt the entries.
+### Entry Types
 
-#### Prevention Allowlist vs. Detection Exclusions
-
-Radegast EDR provides two distinct mechanisms to customize endpoint behavior. Choose the right mechanism for your operational goal:
-
-| Attribute                  | Detection Exclusions                                                           | Prevention Allowlist                                                                          |
-|:---------------------------|:-------------------------------------------------------------------------------|:----------------------------------------------------------------------------------------------|
-| **Primary Objective**      | Filter out false positive alerts to reduce noise                               | Exempt trusted processes from automated termination                                           |
-| **Active Response Effect** | Prevents termination only because alert is silenced                            | Directly bypasses termination while rule match occurs                                         |
-| **Console Visibility**     | **Hard**: Alert never sent to console<br>**Soft**: Downgraded to informational | **Full Visibility**: Alert appears in console with original severity                          |
-| **Query Format**           | JSONata expressions matching alert event fields                                | Plain path prefix or process image name                                                       |
-| **Threat Hunting Value**   | Excluded events are hidden (Hard) or de-prioritized (Soft)                     | Events remain fully indexed, searchable, and reviewable in Hunt Mode                          |
-| **Best Used For**          | Known noisy scripts that create repetitive false alarms                        | Critical daemons, databases, or LOLBins where visibility is required but killing is hazardous |
-
-#### Supported Entry Types
-
-You can configure two types of prevention allowlist entries:
-
-- **Path Prefix (`path`)**: Processes whose executable binary path starts with the specified directory prefix will never be terminated.
-  - *Linux Examples*: `/usr/local/bin/`, `/opt/company-agent/`, `/usr/lib/systemd/`
-  - *Windows Examples*: `C:\Program Files\Datadog\`, `C:\Windows\System32\`
+- **Path Prefix (`path`)**: The agent does not terminate processes that execute from this directory path prefix.
+  - Linux examples: `/usr/local/bin/`, `/opt/company/`
+  - Windows examples: `C:\Program Files\Datadog\`, `C:\Windows\System32\`
   :::{tip}
-  Always ensure path prefixes end with a trailing slash (`/` on Linux/macOS, `\` on Windows) to prevent unintended substring matches against sibling directories.
+  End path prefixes with a trailing slash (`/` on Linux and macOS, `\` on Windows) to prevent partial name matches.
   :::
+- **Image Name (`image`)**: The agent does not terminate processes matching this exact binary name, regardless of path.
+  - Linux examples: `sshd`, `dockerd`, `systemd`
+  - Windows examples: `svchost.exe`, `lsass.exe`, `services.exe`
 
-- **Image Name (`image`)**: Processes matching the exact executable image name or binary basename will never be terminated, regardless of which directory they are launched from.
-  - *Linux Examples*: `sshd`, `systemd`, `dockerd`, `auditd`
-  - *Windows Examples*: `svchost.exe`, `lsass.exe`, `csrss.exe`, `services.exe`
+### Add an Allowlist Entry
 
-#### Managing Group Allowlist Entries
+1. Make sure you have **Pack Write** permissions on a team that owns the group.
+2. In the console, select the target group under **Groups**.
+3. Locate the **Prevention Allowlist** card.
+4. Click **Add Entry**.
+5. Select the entry type: **Path Prefix** or **Image Name**.
+6. Enter the value and an optional explanation.
+7. Click **Add Entry**. The browser encrypts the data before transmission.
 
-##### Prerequisites
-- **Extended EDR Features** enabled under user [Settings](settings.md).
-- **Pack Write** permissions on at least one team that owns the Device Group.
-- Endpoints running Radegast EDR Agent version **python 0.6.0** or higher.
+### Delete an Allowlist Entry
 
-##### Adding an Entry
-1. In the console, navigate to **"Groups"** and select the target Device Group.
-2. Scroll to the **"Prevention Allowlist"** card (located directly below Active Response Settings).
-3. Click the **"Add Entry"** button.
-4. Select the entry type:
-   - **Path Prefix**: Directory prefix where binaries are located (e.g., `/usr/local/bin/`).
-   - **Image Name**: Process binary basename (e.g., `sshd`).
-5. Enter the value and an optional descriptive justification (e.g., *"Critical SSH daemon for remote management"*).
-6. Click **"Add Entry"**. The browser encrypts the data using Age-WASM before saving.
+1. Locate the entry in the **Prevention Allowlist** table.
+2. Click the red trash icon.
+3. Confirm the deletion. The agent updates its policy during the next synchronization interval.
 
-##### Deleting an Entry
-1. Scroll to the **"Prevention Allowlist"** table on the Group details page.
-2. Find the entry you wish to remove and click the red trash icon.
-3. Confirm the deletion prompt. Endpoints will update their policies on their next sync cycle.
+### Multi-Group Resolution for Allowlists
 
-#### Multi-Group Resolution Rules
-When a device belongs to multiple groups:
-- **Union of All Entries**: The agent retrieves allowlists from **all** groups the device belongs to.
-- **Safe-by-Default**: If a process matches an allowlist entry from *any* of the device's assigned groups, it is shielded from termination.
-
-#### Best Practices
-- **Protect Remote Access First**: Before enabling Active Response on any server group, immediately add `sshd` (or your platform's remote management daemon) to the Prevention Allowlist.
-- **Avoid Overly Broad Exemptions**: Do not allowlist generic script interpreters (e.g. `/bin/bash`, `/usr/bin/python`, or `powershell.exe`) directly as image names. Attackers commonly execute malicious payloads through these interpreters.
-- **Document Audit Justifications**: Always provide a descriptive explanation in the Description field for auditing and compliance tracking.
-- **Combine with Soft Exclusions for Noisy Approved Tools**: If a trusted tool causes repeated alerts, combine a Prevention Allowlist entry (to protect it from termination) with a **Soft Detection Exclusion** (to downgrade its alerts to informational while preserving hunt visibility).
-
-## Tips & Validations
-
-- **Group Name**: Must be unique. Use clear, descriptive names.
-- **Device Membership**: A device can belong to multiple groups simultaneously.
-- **Team Access**: All teams that own a group can access all devices in that group.
-- **Exclusions**: Exclusions are applied at the group level and affect all devices in the group.
-- **Detection Packs**: Packs are typically assigned to teams, which then apply to all groups owned by those teams.
-
-**Tip**: Organize groups by purpose: "Web Servers", "Database Servers", "Workstations", "Cloud Instances"
-
-**Tip**: Use location-based groups: "US-East-1", "EU-West", "APAC"
-
-**Tip**: Combine function and location: "Web-Servers-US", "DB-Servers-EU"
-
-**Tip**: Consider security levels: "High-Security", "Standard", "Development"
-
-**Tip**: Remember that a device in multiple groups inherits the combined policies of all its groups.
+When an endpoint belongs to multiple groups, the agent combines allowlists from all assigned groups. If an entry matches an allowlist in any assigned group, the agent does not terminate the process.
 
 ## Troubleshooting
 
-### Can't create a group
+### Cannot Create a Group
 
-- **Permission denied**: You need admin permissions on at least one team
-- **Form validation**: All required fields (name, at least one team) must be filled
-- **Duplicate name**: A group with that name may already exist
+- **Permissions**: Make sure you have administrative write permissions on at least one team.
+- **Required Fields**: Enter a unique group name and select at least one managing team.
 
-### Can't see any groups
+### Cannot Remove an Endpoint
 
-- **No groups**: Your organization may not have any groups created yet
-- **Permission issue**: You need to be a member of a team that owns at least one group
-- **New setup**: If this is a new installation, you may need to create your first group
+- **Single Group Membership**: An endpoint must remain in at least one group. Assign a new group before removing the existing group.
 
-### Can't add a device to a group
+### Cannot Delete a Group
 
-- **Permission denied**: You need admin permissions on the group
-- **Device already in group**: The device may already be in this group
-- **No devices available**: You may not have any devices created yet, or they're all already in other groups
-
-### Can't remove a device from a group
-
-- **Permission denied**: You need admin permissions on the group
-- **Last group**: You cannot remove a device from its last group
-- **Device not found**: The device may have been deleted
-
-### Can't add a team to a group
-
-- **Permission denied**: You need admin permissions on the group
-- **Already a member**: The team may already own this group
-- **Invalid team**: The team may not exist or you may not have access to it
-
-### Can't delete a group
-
-- **Permission denied**: You need admin permissions on the group
-- **Has devices**: The group may still contain devices - move them first
-- **Last team**: You cannot remove the last team from a group
-
-### Group not showing up for team members
-
-- **Permission issue**: Team members may not have the correct permissions
-- **Logs permission**: The team may need logs=read to see alerts from devices in the group
-- **Caching**: Try refreshing the page or logging out and back in
+- **Assigned Endpoints**: Move all endpoints out of the group before deleting it.

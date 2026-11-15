@@ -1,246 +1,135 @@
 # Encryption Keys
 
-## Feature Overview
+## Overview
 
-Encryption Keys are the foundation of Radegast EDR's security model. All log data sent from devices to the backend is encrypted using age encryption, and only users with the corresponding private keys can decrypt and view the content. This ensures end-to-end encryption and protects your sensitive security data.
+Encryption Keys form the core of the privacy model in Radegast EDR. Agents encrypt all event logs with the age encryption format before transmission. Only users with the matching private key can decrypt and inspect telemetry. This architecture enforces end-to-end encryption across the platform.
 
-## What Value Does This Feature Add?
+## Cryptographic Model
 
-- **End-to-End Encryption**: Logs are encrypted on the device and can only be decrypted by authorized users
-- **Data Privacy**: Even if the backend database is compromised, your log data remains encrypted
-- **User-Specific Access**: Each user has their own key pair, controlling exactly who can see what
-- **Key Management**: Generate, store, and manage encryption keys securely
-- **Recovery Options**: Recover access to encrypted data if a key is lost
+Radegast EDR implements public-key cryptography using age (X25519 and ChaCha20-Poly1305):
 
-## Step-by-Step Guide
+- **Public Key**: The server stores your public key and distributes it to your enrolled devices. Devices use this key to encrypt log records.
+- **Private Key**: The browser generates and stores your private key in local storage. The browser never transmits private keys to the server.
+- **Recovery Key**: A 256-bit AES key used to encrypt a backup of your private key on the server.
+- **Encryption Workflow**:
+  1. The agent encrypts telemetry with your public key.
+  2. The agent sends encrypted records to the backend.
+  3. The browser fetches encrypted records and decrypts them locally using your private key.
 
-### Understanding the Encryption Model
+## View Encryption Keys
 
-Radegast EDR uses a public-key cryptography model:
+1. Log in to the Radegast Console.
+2. Go to **Settings > Encryption Keys**.
+3. The page displays all configured key pairs.
 
-1. **Public Key**: Stored on the server and shared with devices
-   - Used to encrypt log data
-   - Multiple users can share the same public key
+The keys table displays:
+- **Name**: Assigned name of the key pair.
+- **Public Key**: Full public key string.
+- **Created**: Generation timestamp.
+- **Active**: Indicates if this key encrypts logs for newly created devices.
+- **Default**: Indicates if the browser tries this key first for decryption.
+- **Actions**: Buttons to set active status, export, or delete the key.
 
-2. **Private Key**: Stored only in your browser's localStorage
-   - Used to decrypt log data
-   - Never transmitted to the server
-   - Unique to each user
+## Create an Encryption Key Pair
 
-3. **Encryption Flow**:
-   - Device encrypts logs with your public key
-   - Encrypted logs are sent to and stored by the backend
-   - You decrypt logs in your browser using your private key
+### Initial Setup for New Accounts
 
-### Accessing Encryption Keys
+When you log in to a new account, the console prompts you to initialize encryption keys:
 
-1. Log in to your Radegast Console
-2. Go to **Settings** > **Encryption Keys** or **Keys** section
-3. The Encryption Keys page shows all your public/private key pairs
+1. Go to **Settings > Encryption Keys**.
+2. Click **Generate Key Pair**.
+3. Enter a descriptive **Name** (for example, `Work Laptop Key`).
+4. Select the **Generate Recovery Key** checkbox.
+5. Click **Generate & Register**.
+6. The dialog displays your **256-bit AES Recovery Key** (64 hexadecimal characters).
+   - Copy this key and save it in a password manager immediately.
+   - The console does not display this recovery key again.
+7. Confirm that you saved the recovery key.
+8. Click **Done**.
 
-### Understanding the Keys List
+### Add an Additional Key Pair
 
-The Keys page shows:
+1. Go to **Settings > Encryption Keys**.
+2. Click **Add Key**.
+3. Enter a descriptive name.
+4. Choose whether to make this key the active key for new devices.
+5. Click **Create**.
 
-- **Name**: Descriptive name you assigned to the key pair
-- **Public Key**: The full public key (safe to share)
-- **Created**: When the key pair was generated
-- **Active**: Whether this is your currently active key for new devices
-- **Default**: Whether this is your default key for decryption
-- **Actions**: Buttons to manage the key
+## Manage Key States
 
-### Creating a New Key Pair
+### Set an Active Key
 
-#### First-Time Setup (New User)
+Only one key pair can be active at a time. The system assigns the active public key to newly enrolled devices:
 
-When you first log in, you may not have any keys:
+1. Select the key pair from the list.
+2. Click **Set as Active**.
+3. Confirm the action.
 
-1. Go to **Settings** > **Encryption Keys**
-2. You'll see a warning: "No encryption keys found"
-3. Click **"Generate Key Pair"** or **"Create New Key"**
-4. The system will:
-   - Generate a new public/private key pair using age encryption
-   - Store the private key securely in your browser
-   - Display the public key
-5. Enter a **name** for this key pair (e.g., "My Main Key", "Work Laptop")
-6. The key pair is created and becomes your default
+:::{note}
+Existing devices continue to use their previously assigned public key until reconfigured.
+:::
 
-#### Creating Additional Keys
+### Set a Default Decryption Key
 
-1. Go to **Settings** > **Encryption Keys**
-2. Click **"Generate Key Pair"** or **"Add Key"**
-3. The system will generate a new key pair
-4. Enter a **name** for this key
-5. Choose whether to make it the **active** key for new devices
-6. Click **"Create"**
+1. Select the key pair from the list.
+2. Click **Set as Default**.
+3. The browser tries this private key first when decrypting log records.
 
-**Tip**: You can have multiple key pairs. Each device uses one public key for encryption.
+## Key Recovery Options
 
-### Making a Key Active
+If you clear your browser storage or use a new device, use one of these recovery procedures:
 
-Only one key can be "active" at a time. The active key is used for:
-- New devices you create
-- New sessions
-
-1. Click on the key in the list
-2. Click **"Set as Active"**
-3. Confirm the action
-4. This key will now be used for new devices
-
-**Warning**: Changing your active key means new devices will use the new public key. Old devices continue using their original public key.
-
-### Setting a Default Key for Decryption
-
-You can have multiple key pairs stored, but only one is used as the default for automatic decryption:
-
-1. Click on the key in the list
-2. Click **"Set as Default"**
-3. This key will be tried first when decrypting logs
-
-### Viewing Key Details
-
-1. Click on a key in the list
-2. The details panel shows:
-   - Full public key
-   - Creation timestamp
-   - Whether it's active and/or default
-   - Associated devices (devices using this public key)
-
-### Deleting a Key Pair
-
-1. Click on the key in the list
-2. Click the **"Delete"** button
-3. You'll see a warning: **"Any logs encrypted using this key will become permanently unreadable unless you have a backup of the key. This action cannot be undone."**
-4. Confirm the deletion
-
-**Warning**: If you delete a key pair that's being used by devices, you will NOT be able to decrypt those devices' logs anymore (unless you have another copy of the private key).
-
-**Important**: You cannot delete your last key pair. Ensure you have at least one key before deleting another.
-
-### Key Recovery
-
-If you lose access to your private key (e.g., browser cleared, new device), you have two recovery options:
-
-#### Option 1: Using a Recovery Key
+### Option 1: Restore with a Recovery Key
 
 ![Key Recovery](../_static/screenshots/key-recovery.png)
 
-If you have a recovery key for the key pair:
+1. Click **Keys > Recovery** in the navigation menu.
+2. Enter your 64-character hexadecimal **Recovery Key**.
+3. Click **Restore Key**.
+4. The system decrypts the backup private key and stores it in your browser local storage.
 
-1. Go to **Keys** > **Recovery** in the navigation
-2. Enter your **Recovery Key** (the 64-character hex string)
-3. The system will decrypt your stored encrypted private key
-4. Your private key will be restored to browser storage
-
-**Note**: The recovery key is generated when you first create a key pair and choose the recovery option.
-
-#### Option 2: Key Transfer from Another Browser
+### Option 2: Transfer Key from Another Browser
 
 ![Key Transfer](../_static/screenshots/key-transfer.png)
 
-If you have your private key stored in another browser:
+If an existing browser session still holds your private key:
 
-1. Go to **Keys** > **Transfer** in the navigation
-2. On your source browser (where the key is stored), copy the **Key Transfer Token**
-   - This is found in Settings > Encryption Keys > Transfer tab
-3. On your target browser, paste the transfer token
-4. The private key will be securely transferred and stored
+1. In the source browser, go to **Settings > Encryption Keys > Transfer**.
+2. Click **Generate Transfer Token**.
+3. Copy the ephemeral transfer token.
+4. In the target browser, go to **Keys > Transfer**.
+5. Paste the transfer token.
+6. Click **Import Key**. The browser imports and stores the private key securely.
 
-**Security**: Transfer tokens are one-time-use and expire after a short period.
+:::{note}
+Transfer tokens expire within 10 minutes and work only once.
+:::
 
-### Generating a Recovery Key
+## Delete a Key Pair
 
-When creating a new key pair, you have the option to generate a recovery key:
+1. Select the key pair from the list.
+2. Click **Delete**.
+3. Review the warning prompt.
+4. Confirm the deletion.
 
-1. During key creation, check **"Generate Recovery Key"** or similar option
-2. The system will generate a **256-bit AES key** in hexadecimal format
-3. **IMPORTANT**: Copy this recovery key and store it securely
-   - This is the ONLY time you can see it
-   - Store it in a password manager or printed copy in a safe location
-   - Without this, you cannot recover your private key if lost
-4. The system will encrypt your private key with this AES key and store the encrypted version
-5. Your actual private key is still only stored in your browser
+:::{caution}
+Deleting a key pair is irreversible. You cannot decrypt logs encrypted with this key unless you have an offline backup. You cannot delete your only remaining key pair.
+:::
 
-**Tip**: The recovery key is separate from your private key. It's used to decrypt the encrypted backup of your private key.
+## Security Guidelines
 
-### Exporting a Private Key
-
-**Not Recommended**: Private keys should never leave your browser. However, if absolutely necessary:
-
-1. Go to **Settings** > **Encryption Keys**
-2. Click on the key you want to export
-3. Look for **"Export Private Key"** option (may be hidden or disabled)
-4. You'll see a warning about security implications
-5. Copy the private key to a secure location
-
-**Warning**: Exporting private keys significantly reduces security. Only do this if you have a compelling reason and proper security controls.
-
-## Tips & Validations
-
-- **Key Storage**: Private keys are stored in your browser's localStorage, which is per-browser and per-device
-- **Browser Sync**: Private keys do NOT sync across browsers or devices automatically
-- **No Server Storage**: Your private key never goes to the server - it stays in your browser
-- **age Encryption**: Radegast uses the age encryption standard, which is based on ChaCha20-Poly1305 and X25519
-- **Multiple Keys**: You can have many key pairs, each with its own public and private key
-- **Device-Specific**: Each device uses one public key, but you can change which key a device uses
-
-**Tip**: Generate a recovery key for each key pair and store it securely. This is your only backup option.
-
-**Tip**: Name your key pairs descriptively (e.g., "Main Work Laptop", "Backup Key", "Old Server Key")
-
-**Tip**: If you use multiple browsers or devices, use the Transfer feature to share keys between them.
-
-**Tip**: The recovery key is a 64-character hexadecimal string (256 bits). Store it securely.
-
-**Tip**: If you clear your browser data, you'll lose your private keys. Always have a recovery plan.
-
-**Tip**: You can have devices using different public keys. The system will try all your private keys when decrypting.
+- **Local Storage Isolation**: Private keys remain inside browser local storage. Private keys never sync automatically between different browsers.
+- **Recovery Key Storage**: Store your 64-character recovery key in a password manager. If you lose your recovery key, you cannot recover encrypted logs.
+- **Private Browsing**: Do not perform operational triage in incognito mode if your browser blocks local storage.
 
 ## Troubleshooting
 
-### No private key found / Can't decrypt logs
+### Private Key Not Found Error
 
-- **Browser cleared**: Your browser's localStorage may have been cleared
-- **New device**: You're using a new browser or device without the key
-- **Private browsing**: Private/incognito mode may not have access to stored keys
-- **Solution**: Use Key Recovery or Key Transfer to restore your key
+- **Cleared Storage**: Browser cache or local storage was cleared. Use your recovery key to restore the private key.
+- **New Browser**: Use the Key Transfer feature to copy keys from your primary browser.
 
-### "Private Key Not Found" warning on dashboard
+### Recovery Key Fails to Restore
 
-- **No keys**: You may not have any keys created
-- **Keys not loaded**: The system may not have loaded your keys yet
-- **Solution**: Go to Settings > Encryption Keys and create or recover a key
-
-### Recovery key doesn't work
-
-- **Wrong key**: You may be using the wrong recovery key
-- **Formatting**: Ensure the key is exactly 64 hexadecimal characters (0-9, a-f)
-- **Corrupted**: The encrypted private key backup may be corrupted
-- **Already used**: Recovery keys can typically be used multiple times
-
-### Transfer token doesn't work
-
-- **Expired**: Transfer tokens may expire after a short time (e.g., 5-10 minutes)
-- **Already used**: Transfer tokens are typically one-time-use
-- **Wrong browser**: Ensure you're copying from the source browser where the key is stored
-- **Network issues**: The transfer requires network connectivity
-
-### Can't create a key pair
-
-- **Browser issue**: Your browser may not support the required Web Crypto API
-- **Storage full**: localStorage may be full
-- **Private mode**: Some browsers block localStorage in private mode
-- **Solution**: Try a different browser or clear localStorage
-
-### Logs show as encrypted
-
-- **Missing key**: You may not have the private key corresponding to the public key used by the device
-- **Wrong user**: You may not be the user who created the device
-- **Key deleted**: The key pair may have been deleted
-- **Solution**: Ensure you have the correct private key, or ask the device creator to share their public key with you
-
-### Multiple keys causing confusion
-
-- **Too many keys**: Having many key pairs can make management difficult
-- **Decryption order**: The system tries keys in order (default first, then others)
-- **Solution**: Delete unused key pairs and consolidate to fewer keys
+- **Invalid Format**: Verify that the recovery key contains exactly 64 hexadecimal characters (`0-9`, `a-f`).
+- **Wrong Key**: Verify that the recovery key corresponds to the selected key pair.

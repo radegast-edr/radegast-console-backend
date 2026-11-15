@@ -1,159 +1,117 @@
 # Hunt Mode
 
-## Feature Overview
+## Overview
 
-Hunt Mode is an advanced feature in Radegast EDR that allows you to query encrypted raw telemetry across your entire fleet of devices. This powerful tool enables security analysts and investigators to search through historical data, identify patterns, and hunt for threats that may have gone unnoticed.
+Hunt Mode queries encrypted raw telemetry across your entire fleet of endpoints. Security analysts use Hunt Mode to investigate historical events, identify threat patterns, and find suspicious activity across devices.
 
-**Important**: Hunt Mode is only available when **Extended EDR mode** is enabled for your account.
+:::{note}
+Hunt Mode requires **Extended EDR mode** enabled in your user settings.
+:::
 
-## What Hunt Mode Provides
+## Capabilities
 
-- **Cross-device querying**: Search across all your devices' telemetry simultaneously
-- **JSONata queries**: Use the powerful JSONata query language to filter and transform data
-- **Raw telemetry access**: Query the encrypted raw event data
-- **Time-based filtering**: Search within specific date/time ranges
-- **Historical investigation**: Access past events for forensic analysis
+- **Fleet-Wide Queries**: Search telemetry across all monitored endpoints simultaneously.
+- **JSONata Syntax**: Filter and project structured event records using JSONata expressions.
+- **Raw Telemetry**: Query complete, unredacted security events stored in the backend.
+- **Time-Bounded Investigation**: Search historical event streams within custom date and time ranges.
 
 ## Prerequisites
 
-- Extended EDR mode must be enabled in your user settings
-- You must have your encryption keys properly configured to decrypt the results
-- You need appropriate permissions to access the device data
+Before you use Hunt Mode, make sure that:
+1. You enabled **Extended EDR mode** in your user settings.
+2. Your browser contains your age private key to decrypt telemetry.
+3. Your teams hold `logs=read` permissions for the target endpoints.
 
-## Step-by-Step Guide
+## Access Hunt Mode
 
-### Accessing Hunt Mode
-
-1. Log in to your Radegast Console
-2. Click **"Hunt"** in the main navigation menu
-3. If Extended EDR mode is not enabled, you'll be prompted to enable it in your settings
-
-### Understanding the Hunt Interface
-
-The Hunt Mode page includes:
-
-- **JSONata Text Query**: Input field for your search query
-- **Start Time**: Date/time picker for the beginning of your search range
-- **End Time**: Date/time picker for the end of your search range
-- **Search / Stop Button**: Execute your query or interrupt a search in progress
-- **Search Progress**: Displays dynamic progress including page number, events fetched, earliest fetched timestamp, and latest fetched timestamp
-- **Results Display**: Shows matching events as they are fetched and decrypted
+1. Log in to the Radegast Console.
+2. Click **Hunt** in the main navigation menu.
+3. If Extended EDR mode is disabled, the console prompts you to enable it in Settings.
 
 ![Hunt Mode Telemetry Querying](../_static/screenshots/hunts-view.png)
 
-### Creating a Basic Query
+The Hunt interface includes:
+- **JSONata Query Input**: Text field for your query expression.
+- **Start Time and End Time**: Date and time selectors to set your search window.
+- **Search and Stop Button**: Run a query or stop an active search.
+- **Search Progress**: Shows fetched pages, event count, and timestamp ranges.
+- **Results Table**: Displays matching events as the browser fetches and decrypts them.
 
-1. **Set your time range**:
-   - Click the calendar icons for Start Time and End Time
-   - Select the date range you want to search (default is typically the last 15 minutes)
+## Run a Hunt Query
 
-2. **Enter your JSONata query**:
-   ```
+1. **Set the Time Window**:
+   - Click the calendar selectors for **Start Time** and **End Time**.
+   - Select the target date and time range (default is the last 15 minutes).
+2. **Enter the JSONata Query**:
+   ```javascript
    meta.device = "laptop" and alert.event_type = "process"
    ```
-   This query finds all process-related alerts from devices with "laptop" in their name.
+   This query finds process events from devices containing "laptop" in their name.
+3. **Execute the Query**:
+   - Click **Search**.
+   - The browser streams and decrypts matching records dynamically.
+   - Click **Stop** to halt further fetching while keeping retrieved events.
 
-3. Click the **Search** button to execute the query. As pages of telemetry are fetched dynamically, matching results are shown immediately, and you can click **Stop** at any time to halt further queries while keeping all events fetched so far.
-
-### Common Query Examples
+## Common Query Examples
 
 | Query | Description |
-|-------|-------------|
-| `severity = "critical"` | Find all critical severity alerts |
-| `meta.device ~> /server/` | Find alerts from devices with "server" in the name (case-insensitive) |
-| `alert.event_type = "network"` | Find all network-related events |
-| `$exists(alert.file_name)` | Find alerts that have a file_name field |
-| `alert.pid > 1000` | Find alerts with process ID greater than 1000 |
-| `meta.device = "web-prod-01" and severity ~> /high|critical/` | Find high or critical alerts from a specific device |
+|:---|:---|
+| `severity = "critical"` | Find all critical events. |
+| `meta.device ~> /server/` | Find events from devices containing "server" in their name. |
+| `alert.event_type = "network"` | Find all network-related events. |
+| `$exists(alert.file_name)` | Find events that contain a `file_name` property. |
+| `alert.pid > 1000` | Find processes with a Process ID greater than 1000. |
+| `meta.device = "srv-01" and severity in ["high", "critical"]` | Find high or critical alerts on device `srv-01`. |
 
-### Viewing Results
+## View Query Results
 
-After executing a query:
+1. Inspect matching events in the results table.
+2. The results table displays:
+   - Event timestamp.
+   - Device name.
+   - Event summary and type.
+   - Severity level.
+3. Click an event row to inspect the complete decrypted JSON payload.
 
-1. Matching events are displayed in the results table
-2. Each result shows:
-   - Timestamp
-   - Device name
-   - Event details
-   - Severity (if available)
-3. Encrypted content is automatically decrypted if you have the appropriate private key
-4. Click on any result to view full details in JSON format
+## Decrypt Hunt Data
 
-### Working with Encrypted Data
+The agent encrypts telemetry client-side before transmission:
+- The browser decrypts matching events automatically using your local age private key.
+- If a private key is missing, the event displays as encrypted ciphertext.
+- To restore private keys, open **Settings > Encryption Keys** and import your recovery key.
 
-- **Automatic decryption**: If you have your private key stored in the browser, results will be automatically decrypted
-- **Missing keys**: If content cannot be decrypted, it will be shown as encrypted
-- **Key management**: Ensure you have all necessary keys imported in your Settings > Encryption Keys
+## JSONata Query Operators
 
-## Advanced Querying
+JSONata provides operators for complex filtering:
 
-### JSONata Query Language
+- **Comparison**: `=`, `!=`, `>`, `>=`, `<`, `<=`
+- **Logical**: `and`, `or`, `not`
+- **Regex Match**: `~>` (for example, `alert.process_name ~> /powershell|cmd|sh/`)
+- **Built-in Functions**:
+  - `$exists(field)`: Checks if a property exists.
+  - `$length(array_or_string)`: Returns string or array length.
+  - `$contains(string, substring)`: Checks for substring presence.
 
-JSONata is a powerful query and transformation language for JSON data. Some useful operators:
+### Complex Hunting Example
 
-- **`=`**: Equals
-- **`~=`**: Regular expression match
-- **`>`**, **`>=`**, **`<`**, **`<=`**: Comparison operators
-- **`and`**, **`or`**: Logical operators
-- **`$exists()`**: Check if a field exists
-- **`$length()`**: Get length of array or string
-- **`$contains()`**: Check if array contains value
+To detect suspicious script execution in temporary directories:
 
-### Example: Complex Threat Hunting
-
-Find suspicious process executions:
-```
+```javascript
 alert.event_type = "process" and (
   alert.process_name ~> /powershell|cmd|bash|sh/ or
-  alert.process_path ~> /temp|downloads|appdata/
+  alert.process_path ~> /temp|tmp|downloads/
 )
 ```
 
-### Example: Lateral Movement Detection
-
-Find network connections to unusual ports:
-```
-alert.event_type = "network" and alert.dest_port > 1024
-```
-
-## Tips
-
-- Start with simple queries and build complexity gradually
-- Use the time range filters to narrow down your search scope
-- JSONata queries are case-sensitive by default; use `~>` for case-insensitive matching
-- Test your queries on a small time range first before searching large datasets
-- Save useful queries for future reference
-- Combine multiple conditions with `and`/`or` for precise filtering
-
 ## Troubleshooting
 
-### No results returned
+### No Results Returned
 
-- **Query syntax error**: Check your JSONata syntax for errors
-- **No matching data**: Try broadening your query criteria or time range
-- **Case sensitivity**: Try using case-insensitive matching with `~=`
-- **Data availability**: Ensure devices were active and reporting during the selected time range
+- **Query Syntax**: Verify that the JSONata expression contains no syntax errors.
+- **Time Range**: Expand the time window to cover the period of suspected activity.
+- **Device Status**: Verify that the endpoints were online and reporting events during that period.
 
-### Hunt Mode not available
+### Results Display as Encrypted Ciphertext
 
-- **Extended EDR disabled**: You must enable Extended EDR mode in your Settings
-- **Permission issue**: Contact your administrator to verify your permissions
-- **Browser issue**: Try refreshing the page or clearing browser cache
-
-### Results are encrypted
-
-- **Missing private key**: Go to Settings > Encryption Keys and ensure you have the correct keys
-- **Wrong key**: You may need to recover or transfer your encryption keys
-- **Browser storage**: Try a different browser where you have your keys stored
-
-### Query is slow
-
-- **Large time range**: Narrow down your time range to improve performance
-- **Complex query**: Simplify your JSONata expression
-- **Many devices**: Consider filtering by specific devices first
-
-### JSONata syntax errors
-
-- **Invalid operators**: Review JSONata documentation for correct syntax
-- **Unclosed parentheses**: Ensure all parentheses are properly matched
-- **Field names**: Verify the field names match your actual data structure
+- **Missing Private Key**: Import your age private key in **Settings > Encryption Keys**.
+- **Browser Local Storage**: Ensure you are not in private browsing mode that blocks local storage.

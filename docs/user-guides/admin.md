@@ -1,225 +1,143 @@
 # User Administration (Admin)
 
-## Feature Overview
+## Overview
 
-The Admin panel provides global management capabilities for Radegast EDR administrators. Here, admin users can manage all users, devices, and packs across the entire system, regardless of team permissions. This is the central control point for system-wide operations.
+The Admin panel provides global administrative control over the Radegast EDR platform. Administrators can manage all users, endpoints, detection packs, and platform statistics across teams.
 
-## What Value Does This Feature Add?
+:::{note}
+Only users assigned the **Admin** role can access the Admin panel.
+:::
 
-- **Global User Management**: Add, edit, and remove users across the entire system
-- **System-Wide Device Control**: View and manage all devices, not just those in your teams
-- **Comprehensive Pack Management**: Access and control all detection packs
-- **Password Recovery**: Reset passwords for users who are locked out
-- **Emergency Access**: Admin-only actions for critical situations
+## Capabilities
 
-## Step-by-Step Guide
+- **Global User Management**: Create, inspect, modify, and delete platform user accounts.
+- **System-Wide Device Control**: Inspect and delete any registered endpoint in the system.
+- **Global Detection Pack Control**: Inspect, download, and delete all detection packs.
+- **Credential Recovery**: Reset passwords and clear MFA configurations for locked-out users.
+- **Platform Analytics**: Monitor alert distribution, device health, and telemetry volume.
+- **Broadcast Announcements**: Send platform announcements by email to all registered users.
 
-**Note**: Only users with the **Admin role** can access the Admin panel. If you don't see the Admin option in your navigation, you don't have admin privileges.
+## Access the Admin Panel
 
-### Accessing the Admin Panel
+1. Log in to the console with an administrator account.
+2. Click **Admin** in the main navigation menu.
+3. The console displays the administrative workspace.
 
-1. Log in to your Radegast Console with an admin account
-2. Click **"Admin"** in the main navigation menu
-3. The Admin panel will display with several tabs or sections
+## System Statistics (Stats)
 
-### Understanding the Admin Dashboard
-
-The Admin panel typically includes:
-
-- **Users**: List of all registered users
-- **Devices**: List of all registered devices
-- **Packs**: List of all detection packs
-- **Stats**: Global statistics including alert distribution by severity, resolution, rule ID, and rule type, as well as device stats covering agent version, Rustinel version, OS, health status, and online status distributions.
-
-### Viewing Admin Stats
-
-1. In the Admin panel, click **"Stats"**
-2. The page displays two main panels:
-   - **Alert Stats**: Displays alert distribution by severity, resolution, rule ID, and rule type. You can filter the statistics by selecting a custom **From** and **To** date-time range, as well as multi-select dropdown filters for **Severity**, **Rule Type**, and **Resolution**, and search by **Rule ID**.
-   - **Device Stats**: Shows endpoint distributions by **Agent Version**, **Rustinel Version**, **OS**, **Health Status**, and **Online Status**. You can filter the statistics with multi-select dropdown filters:
-     - **Online Status**: Filter by `Online` or `Offline` devices.
-     - **Health Status**: Filter by `Healthy`, `Unhealthy`, or `Unknown` device health.
-     - **Agent Version**: Filter by specific agent versions.
-     - **Rustinel Version**: Filter by specific Rustinel versions.
-     - **OS**: Filter by specific operating systems.
+1. In the Admin panel, click **Stats**.
+2. The page displays two primary metrics views:
+   - **Alert Stats**: Displays alert distribution by severity, resolution, rule ID, and rule type. You can filter by date range, severity level, rule type, and resolution status.
+   - **Device Stats**: Displays endpoint distributions by agent version, Rustinel version, operating system, health status, and online status.
 
 ![Admin System & Device Statistics](../_static/screenshots/admin-stats.png)
 
-### Managing Users
+## User Management
 
-#### Viewing All Users
+### View All Users
 
-1. In the Admin panel, click **"Users"**
-2. The Users list shows:
-   - User email
-   - Role (Admin, Maintainer, User)
-   - Verification status
-   - MFA setup status
-   - Extended EDR enabled flag
-   - API keys enabled flag
-   - Last login
-   - Actions available
+1. In the Admin panel, click **Users**.
+2. The table displays all registered users:
+   - Email address.
+   - Assigned role (`Admin`, `Maintainer`, or `User`).
+   - Email verification status.
+   - MFA setup state.
+   - Storage space used.
+   - Last login timestamp.
 
 ![Admin Users Management](../_static/screenshots/admin-users.png)
 
-#### Understanding User Roles
+### User Roles
 
-- **Admin**: Full access to all features and data. Can manage users, devices, and system settings.
-- **Maintainer**: Can create public packs and manage system-level configurations. Cannot manage users.
-- **User**: Regular user with access based on team permissions.
+- **Admin**: Full administrative privileges across all platform features, users, and data.
+- **Maintainer**: Can create public detection packs and manage system-level policies. Cannot manage users.
+- **User**: Standard user access governed by team memberships.
 
-#### Viewing User Details
+### Reset a User Password
 
-1. Click on a user in the list
-2. The details panel shows:
-   - Basic information (email, role, when created)
-   - Verification status
-   - MFA configuration status
-   - Number of public keys
-   - Has keys flag (encryption keys)
-   - MFA required level vs configured level
-   - Extended EDR status
-   - API keys enabled status
-   - Team memberships
-   - Device access
+If a user loses account access:
 
-#### Resetting a User's Password
+1. Select the user from the Users list.
+2. Click **Reset Password**.
+3. Confirm the action.
+4. The system executes these actions:
+   - Generates a secure temporary password.
+   - Clears existing MFA configurations (OTP keys and hardware tokens).
+   - Sends the temporary password to the user by email.
+   - Forces the user to create a new password and configure MFA on the next login.
 
-1. Click on the user in the list
-2. Click **"Reset Password"** or **"Change Password"**
-3. Confirm the action
-4. A new random password will be generated
-5. The user's MFA settings will be cleared (OTP and hardware tokens removed)
-6. An email with the new password will be sent to the user
-7. The user will be prompted to set up a new password and MFA on next login
+### Delete a User Account
 
-**Note**: This is useful for users who have lost access or when onboarding new users who can't complete registration.
+1. Select the user from the Users list.
+2. Click **Delete**.
+3. Confirm the deletion.
+4. The system removes the user account, settings, and personal access tokens.
 
-#### Deleting a User
+:::{caution}
+Deleting a user account is permanent. You cannot delete your own active administrator account.
+:::
 
-1. Click on the user in the list
-2. Click the **"Delete"** button
-3. Confirm the deletion
-4. The user and all their data (devices, keys, settings) will be removed
+## Device Management
 
-**Warning**: Deleting a user cannot be undone. Consider disabling their account instead if temporary.
+### View All Endpoints
 
-**Note**: You cannot delete yourself.
-
-### Managing All Devices
-
-#### Viewing All Devices
-
-1. In the Admin panel, click **"Devices"**
-2. The Devices list shows ALL devices in the system, not just those in your teams
-3. An overview summary indicates the total database space consumed across all registered devices.
-4. Each device shows:
-   - Device name
-   - Total database space used by its ingested alerts and telemetry logs
-   - Actions available (such as device deletion)
+1. In the Admin panel, click **Devices**.
+2. The list displays all endpoints enrolled in the platform across all teams.
+3. The page shows the total database space consumed by all devices.
 
 ![Admin Device Management](../_static/screenshots/admin-devices.png)
 
-#### Deleting a Device
+### Delete an Endpoint
 
-1. Click on the device in the list
-2. Click the **"Delete"** button
-3. Confirm the deletion
-4. The device will be removed from the system
+1. Select the device from the list.
+2. Click **Delete**.
+3. Confirm the deletion.
+4. The system removes the device record and telemetry data permanently.
 
-**Note**: This is a system-wide deletion. The device cannot be recovered.
+## Detection Pack Management
 
-### Managing All Packs
-
-#### Viewing All Packs
-
-1. In the Admin panel, click **"Packs"**
-2. The Packs list shows ALL detection packs in the system
-3. Each pack shows:
-   - Pack name and ID
-   - Creator
-   - Teams with access
-   - Versions
-   - Description
+1. In the Admin panel, click **Packs**.
+2. The table displays all global and team-scoped detection packs.
+3. To delete a pack, select the pack and click **Delete**.
 
 ![Admin Pack Management](../_static/screenshots/admin-packs.png)
 
-### Sending Broadcast Emails
+:::{caution}
+Deleting a detection pack removes rule files from the server. Endpoints assigned this pack stop receiving rule updates.
+:::
 
-Administrators can broadcast announcements and maintenance notices directly to all subscribed platform users from the **Broadcast** tab.
+## Send Broadcast Emails
+
+Administrators can send platform announcements and maintenance alerts to all users:
+
+1. In the Admin panel, click **Broadcast**.
+2. Enter the email **Subject**.
+3. Enter the message content in the **Body** field.
+4. Click **Send Broadcast**.
+5. The system queues and delivers the email to all active users.
 
 ![Admin Email Broadcast](../_static/screenshots/admin-broadcast.png)
 
-#### Deleting a Pack
+## User Multi-Factor Authentication Status
 
-1. Click on the pack in the list
-2. Click the **"Delete"** button
-3. Confirm the deletion
-4. The pack and all its versions will be removed from disk
+The Users table monitors user MFA compliance:
 
-**Note**: Deleting a pack may cause issues for devices that were using it. The pack files are also deleted from the server.
-
-### User MFA Status
-
-The Admin panel shows MFA setup status for each user:
-
-- **MFA Required Level**: What level of MFA the user's role requires (based on settings)
-- **MFA Configured Level**: What MFA the user actually has set up
-- **Setup Missing**: Indicates if the user's MFA setup doesn't meet requirements
-
-**Common Scenarios**:
-- Admin role requires hardware token, but user only has OTP configured
-- User role requires OTP, but user has no MFA configured
-- User has the required level configured (status is OK)
-
-## Tips & Validations
-
-- **Admin Access**: Admin role is required for all Admin panel actions. There's no "partial admin" - it's all or nothing.
-- **Audit Trail**: Admin actions are logged. Be mindful of the changes you make.
-- **System Impact**: Admin actions can affect the entire platform. Test changes in non-production first when possible.
-- **User Privacy**: Admin users can see all user information, including email addresses and MFA status.
-- **Emergency Recovery**: The password reset feature is powerful for recovering locked-out accounts.
-
-**Tip**: Regularly review the Users list to ensure only authorized users have access.
-
-**Tip**: Check MFA setup status to ensure all users meet security requirements.
-
-**Tip**: Use the Device list to identify offline or problematic endpoints across the entire system.
-
-**Tip**: The Packs list helps you understand what detection capabilities are deployed and by whom.
-
-**Tip**: Consider having at least two admin users for redundancy.
+- **MFA Required Level**: Security level mandated by the user role.
+- **MFA Configured Level**: Current factor configured by the user.
+- **Setup Missing**: Flags accounts that do not satisfy mandatory MFA policies.
 
 ## Troubleshooting
 
-### Can't access Admin panel
+### Admin Menu Option Is Missing
 
-- **Not an admin**: Your user role may not be Admin. Contact another admin.
-- **Permission issue**: There may be a system configuration issue
-- **URL issue**: Ensure you're using the correct URL path (/admin)
+- **Role Verification**: Verify that your account holds the Admin role. Regular users and Maintainers cannot access the Admin panel.
 
-### Can't see all users/devices/packs
+### Password Reset Email Does Not Arrive
 
-- **Filter active**: Check if there's a search or filter applied
-- **Pagination**: You may need to navigate to other pages to see all items
-- **Loading issue**: Try refreshing the page
+- **Mail Server Configuration**: Verify that `RADEGAST_SMTP_HOST` is configured on the backend.
+- **Console Logs**: If running in development mode, check server stdout for printed email bodies.
 
-### Can't reset user password
+### Cannot Delete a User or Device
 
-- **Permission denied**: You must be an admin
-- **Own account**: You cannot reset your own password through the Admin panel (security measure)
-- **Email issue**: The system may not be configured to send emails
-
-### Can't delete a user/device/pack
-
-- **Permission denied**: You must be an admin
-- **Dependencies**: The item may have dependencies that prevent deletion
-- **Self-deletion**: You cannot delete your own user account
-- **Already deleted**: The item may have already been removed
-
-### User can't log in after password reset
-
-- **Email not received**: Check spam folder or email configuration
-- **MFA cleared**: The user needs to set up MFA again after password reset
-- **Temporary password expired**: The reset password may have a time limit
-- **User not verifying**: The user may need to verify their email if it wasn't verified before
+- **Self-Deletion**: You cannot delete the account that is currently logged in.
+- **Database Locks**: If a worker process is calculating space usage, wait for the task to finish and retry.
